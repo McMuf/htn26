@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
   CANVAS_JOIN_RADIUS_M, GEOFENCE, PAINT_COST_PER_SEC, PAINT_EMPTY_THRESHOLD, PAINT_LOW_THRESHOLD, PAINT_MAX,
-  PAINT_REGEN_PER_SEC, SHAKE_DECAY_SECONDS, SHAKE_GAIN_PER_EVENT, SHAKE_MIN_TO_SPRAY,
+  PAINT_REGEN_PER_SEC, SHAKE_DECAY_SECONDS, SHAKE_GAIN_PER_EVENT, SHAKE_MIN_TO_SPRAY, SPRAY_RADIUS_M, STROKE_CAP,
 } from '../config';
 import { haversineM, wrap360 } from '../lib/geo';
 import { uuid } from '../lib/ids';
@@ -15,8 +15,6 @@ import type { ArStroke } from '../../modules/ar-paint';
 import type { Blocker } from './useSprayEngine';
 import { OPACITY, THICKNESS } from '../lib/economy';
 
-const CAP_RADIUS_M = { fat: 0.06, skinny: 0.026 } as const;
-
 /**
  * The spray simulation for the ARKit view. Native ARKit does the surface hit-testing and the
  * texture painting; this hook owns the game rules (can charge, paint economy, geofence), drives
@@ -25,7 +23,6 @@ const CAP_RADIUS_M = { fat: 0.06, skinny: 0.026 } as const;
  */
 export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeSaved?: (s: Stroke) => void }) {
   const held = useRef<Side | null>(null);
-  const lastSide = useRef<Side>('A'); // survives end(), for strokes flushed after release
   const blocker = useRef<Blocker>(null);
   const activeCanvas = useRef<Canvas | null>(null);
   const hit = useRef(false);
@@ -104,15 +101,14 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     const th = THICKNESS[st.settings.thickness]?.mult ?? 1;
     const op = OPACITY[st.settings.opacity]?.mult ?? 1;
     const mist = Math.max(0, Math.min(1, (dist.current - 0.5) / 1.2));
-    setNative({ spraying: true, color: opt.color, radius: CAP_RADIUS_M[opt.cap] * th * (0.8 + 0.9 * mist), flow: Math.max(0.05, flow * op * (1 - 0.45 * mist)) });
-    return { flow, opt, th };
+    setNative({ spraying: true, color: opt.color, radius: SPRAY_RADIUS_M * th * (0.8 + 0.9 * mist), flow: Math.max(0.05, flow * op * (1 - 0.45 * mist)) });
+    return { flow, th };
   };
 
   const start = (side: Side) => {
     if (held.current === side) return;
     if (held.current) end(held.current);
     held.current = side;
-    lastSide.current = side;
     const b = computeBlocker();
     blocker.current = b;
     const st = useStore.getState();
@@ -152,9 +148,9 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
         if (b === 'empty' && now - lastLowRattle.current > 1500 && st.settings.sound) { lastLowRattle.current = now; sfx.emptyRattle(); }
         return;
       }
-      const { flow, opt, th } = applyNativeProps(side);
+      const { flow, th } = applyNativeProps(side);
       if (!hit.current) { sfx.setHiss(false, 0, 0); return; } // aiming at nothing: no paint, no cost
-      const cost = PAINT_COST_PER_SEC[opt.cap] * dt * (0.6 + 0.4 * flow) * (0.7 + 0.3 * th); // fatter lines burn more paint
+      const cost = PAINT_COST_PER_SEC * dt * (0.6 + 0.4 * flow) * (0.7 + 0.3 * th); // fatter lines burn more paint
       strokePaint.current += cost;
       st.setPaint(side, Math.max(0, st.paint[side] - cost));
       if (st.settings.sound) sfx.setHiss(true, flow, 0.5);
@@ -174,11 +170,9 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     const st = useStore.getState();
     const canvas = activeCanvas.current;
     if (!canvas || a.points.length === 0) return;
-    const side = held.current ?? lastSide.current;
-    const opt = side === 'A' ? st.settings.optionA : st.settings.optionB;
     const s: Stroke = {
       id: a.id, canvas_id: canvas.id, author_id: st.painter?.id ?? null, author_name: st.painter?.name ?? 'anon',
-      color: a.color, cap: opt.cap, points: a.points as StrokePoint[], paint_used: Math.round(strokePaint.current * 100) / 100,
+      color: a.color, cap: STROKE_CAP, points: a.points as StrokePoint[], paint_used: Math.round(strokePaint.current * 100) / 100,
       created_at: new Date().toISOString(), anchor_id: a.anchorId, transform: a.transform, viewer: a.viewer ?? null,
     };
     strokePaint.current = 0;

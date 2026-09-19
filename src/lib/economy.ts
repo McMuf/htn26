@@ -25,11 +25,17 @@ export const MARKET_CANS: Item[] = [
   { id: 'c-toxic', name: 'Toxic Waste', price: 140, color: '#a6ff00', blurb: 'radioactive green' },
   { id: 'c-chrome', name: 'Chrome', price: 160, color: '#c9d3e6', blurb: 'polished steel' },
 ];
-export const SOON = ['Glitter', 'Metallic shimmer', 'Neon glow', 'Matte finish', 'Needle cap', 'Stencil pack', 'Sound packs'];
+export const SOON = ['Glitter', 'Metallic shimmer', 'Neon glow', 'Matte finish', 'Stencil pack', 'Sound packs'];
 /** Colour of the can body: the equipped paint by default, or a bought skin. */
 export const skinColor = (canSkin: string, paintColor: string) => MARKET_CANS.find((c) => c.id === canSkin)?.color ?? paintColor;
 /** Every colour the pickers offer: the base palette plus bought paints. */
 export const ownedPaints = (owned: string[]) => MARKET_PAINTS.filter((p) => owned.includes(p.id)).map((p) => p.color);
+const BASE_NAMES: Record<string, string> = {
+  '#ff2d95': 'Hot pink', '#19e6ff': 'Cyan', '#ffe600': 'Yellow', '#7cff3a': 'Lime',
+  '#ff5c1a': 'Orange', '#b26bff': 'Violet', '#ffffff': 'White', '#111111': 'Black',
+};
+/** Display name for a paint colour (base palette or a Market paint). */
+export const colorName = (hex: string) => BASE_NAMES[hex.toLowerCase()] ?? MARKET_PAINTS.find((p) => p.color === hex)?.name ?? hex;
 
 // ---- daily stats + missions ---------------------------------------------------------------
 export type DayStats = { strokes: number; pieces: number; paint: number; streak: number };

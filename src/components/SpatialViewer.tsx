@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, Modal, PanResponder, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Image, Linking, Modal, PanResponder, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Canvas, Group, Picture, Rect, Skia, type SkPicture } from '@shopify/react-native-skia';
 import { cancelAnimation, Easing, useDerivedValue, useSharedValue, withDecay, withRepeat, withTiming } from 'react-native-reanimated';
 import { Btn, IconBtn, Panel, T, Tile } from '../ui/kit';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
 import { layoutDabs, mosaic } from '../ui/StrokeThumb';
-import { C, F } from '../ui/theme';
+import { C, F, uiLabel } from '../ui/theme';
 import { mix } from '../ui/color';
 import { seededRng } from '../lib/ids';
 import { useStore } from '../store';
-import { fetchPreviewStrokes } from '../data/sync';
+import { fetchPreviewStrokes, reportCanvas } from '../data/sync';
 import { isMock } from '../data/mock';
 import { timeAgo } from './DiscoveryOverlay';
 import type { Canvas as CanvasT, Stroke } from '../types';
@@ -27,17 +27,23 @@ const SCENE_H = 400;
 /**
  * StreetView-style spatial viewer. The piece stands on its wall inside a 5 m circle; drag to
  * orbit the whole scene (yaw + tilt), buttons zoom, and a skyline panorama wraps 360° behind.
- * The surroundings are a stylised reconstruction seeded from the canvas id: real photographic
- * capture of the location is not recorded yet.
+ * The surroundings are a stylised reconstruction seeded from the canvas id; the one real picture
+ * is the painter's photo of the wall, shown below the scene when they took one.
  */
 export function PieceDetail({ canvas: c, onClose }: { canvas: CanvasT; onClose: () => void }) {
   const strokes = useStore((s) => s.strokes[c.id] ?? s.previewStrokes[c.id] ?? []);
   const discovered = useStore((s) => s.discovered[c.id]);
   const me = useStore((s) => s.painter);
+  const photo = useStore((s) => s.photos[c.id]); // the painter's own shot of this wall, if they took one
   useEffect(() => { if (!isMock(c.id)) fetchPreviewStrokes([c.id]).catch(() => {}); }, [c.id]);
   const paint = strokes.reduce((a, s) => a + s.paint_used, 0);
   const colors = [...new Set(strokes.map((s) => s.color))].slice(0, 8);
   const mapsUrl = `https://maps.apple.com/?ll=${c.lat},${c.lng}&q=${encodeURIComponent(c.title ?? 'Fresco piece')}`;
+  const canReport = !isMock(c.id) && c.author_id !== me?.id;
+  const report = () => Alert.alert('Report this piece?', 'Two reports hide a piece for everyone.', [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Report', style: 'destructive', onPress: () => { reportCanvas(c.id, me?.id ?? null, 'inappropriate'); onClose(); } },
+  ]);
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={styles.root}>
@@ -47,6 +53,11 @@ export function PieceDetail({ canvas: c, onClose }: { canvas: CanvasT; onClose: 
             <T v="h" numberOfLines={1}>{c.title ?? `${c.author_name}'s piece`}</T>
             <T v="small">by {c.author_name}{c.author_id === me?.id ? ' (you)' : ''} · {timeAgo(c.created_at)}{discovered ? ' · found by you' : ''}</T>
           </View>
+          {photo ? (
+            <View style={styles.photoFrame}>
+              <Image source={{ uri: photo }} style={styles.photo} resizeMode="cover" />
+            </View>
+          ) : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Tile n={c.views} label="views" /><Tile n={c.stroke_count} label="strokes" /><Tile n={Math.round(paint)} label="paint" /><Tile n={colors.length} label="colours" />
           </View>
@@ -61,6 +72,7 @@ export function PieceDetail({ canvas: c, onClose }: { canvas: CanvasT; onClose: 
           {colors.length > 0 && (
             <View style={{ flexDirection: 'row', gap: 6 }}>{colors.map((col) => <View key={col} style={{ width: 24, height: 24, backgroundColor: col, borderWidth: 3, borderColor: C.ink }} />)}</View>
           )}
+          {canReport && <Btn label="REPORT PIECE" icon="flag" tone="dark" size="sm" onPress={report} />}
         </ScrollView>
       </View>
     </Modal>
@@ -210,11 +222,13 @@ function skylinePicture(id: string) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#150a36' },
+  photoFrame: { borderWidth: 3, borderColor: C.ink },
+  photo: { width: '100%', height: 210 },
   sheet: { padding: 18, gap: 14, paddingBottom: 50 },
   topRow: { position: 'absolute', top: 56, left: 14, right: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   bottomRow: { position: 'absolute', bottom: 12, left: 14, right: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  chip: { fontFamily: F.labelBold, fontSize: 9, letterSpacing: 1, color: C.white },
+  chip: { ...uiLabel(11, 0.6), color: C.white },
   hint: { backgroundColor: '#0a062088', paddingHorizontal: 10, paddingVertical: 6 },
-  hintText: { fontFamily: F.labelBold, fontSize: 9, letterSpacing: 1.5, color: C.dim },
+  hintText: { ...uiLabel(10.5, 0.8), color: C.dim },
   mono: { fontFamily: F.mono, fontSize: 22, color: C.phosphor },
 });

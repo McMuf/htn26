@@ -1,3 +1,5 @@
+import type { TextStyle } from 'react-native';
+
 // Fresco "pixel arcade" look: Subway-Surfers chunky buttons x Kahoot purple/primary shapes x
 // early-2000s CRT / vaporwave pixel nostalgia. Flat colours, hard edges, hard shadows, no blur.
 export const C = {
@@ -58,6 +60,15 @@ export const BACKDROPS = {
 } as const;
 export type BackdropName = keyof typeof BACKDROPS;
 
+/**
+ * Legibility: the pixel faces (Pixelify Sans, Silkscreen, VT323) only read well big. Anything under
+ * ~16px — labels, captions, meta, HUD subtitles — uses the system face instead, so the arcade look
+ * comes from the boxes, colours and headings rather than from text nobody can read.
+ */
+export const ui = (size: number, weight: TextStyle['fontWeight'] = '600', letterSpacing = 0): TextStyle => ({ fontSize: size, fontWeight: weight, letterSpacing });
+/** All-caps section label / chip text. */
+export const uiLabel = (size = 11.5, letterSpacing = 0.9): TextStyle => ({ fontSize: size, fontWeight: '800', letterSpacing, textTransform: 'uppercase' });
+
 export const PX = 3; // one "pixel" of UI
 export const DOCK_H = 66;
 export const DOCK_PAD = 24; // home-indicator padding under the dock
@@ -65,10 +76,13 @@ export const DOCK_TOTAL = DOCK_H + DOCK_PAD;
 /** Space to leave under scrolling content so the dock never covers it. */
 export const DOCK_INSET = DOCK_TOTAL + 20;
 export const DOCK_BOTTOM = 0;
-/** Create-tab layout: the two HOLD buttons sit just above the dock; notices stack above them. */
+/** Create-tab layout: the hold buttons sit just above the dock; the tools tray opens above them. */
 export const HOLD_BOTTOM = DOCK_TOTAL + 10;
-export const HOLD_H = 64;
+export const HOLD_H = 60;
 export const HOLD_TOP = HOLD_BOTTOM + HOLD_H + 5; // top edge of the buttons, measured from the bottom of the screen
+/** Camera overlay plates: deliberately colourless (dark plate, white text), so the only colour over the camera is paint. */
+export const PLATE = '#120a2e';
+export const PLATE_HI = '#2a1c5c';
 
 /** Hard drop shadow for text, the Subway-Surfers "outlined" look without a stroke. */
 export const outline = (color: string = C.ink, px = 2) => ({

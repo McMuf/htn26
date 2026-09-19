@@ -13,3 +13,5 @@ export function mix(a: string, b: string, t: number) {
 }
 export const lighten = (c: string, t = 0.35) => mix(c, '#ffffff', t);
 export const darken = (c: string, t = 0.35) => mix(c, '#000000', t);
+/** True for colours light enough to need dark text/marks on top. */
+export const isLight = (hex: string) => { const [r, g, b] = rgb(hex); return 0.299 * r + 0.587 * g + 0.114 * b > 150; };

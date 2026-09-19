@@ -3,8 +3,8 @@ import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Btn, Header, Panel, Pill, Screen, T } from '../ui/kit';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
-import { StrokeThumb } from '../ui/StrokeThumb';
-import { C, F } from '../ui/theme';
+import { PieceImage } from '../ui/StrokeThumb';
+import { C, F, ui } from '../ui/theme';
 import { useStore } from '../store';
 import { fetchAllCanvases, fetchPreviewStrokes } from '../data/sync';
 import { timeAgo } from '../components/DiscoveryOverlay';
@@ -60,13 +60,13 @@ export function VaultScreen() {
           <Pressable key={c.id} onPress={() => setOpen(c)}>
             <PixelBox n={6} depth={5} fill="#0f2a22" hi="#1d4a3a" lo="#0a1c17" style={{ width: CELL }} contentStyle={{ padding: 8, gap: 8 }}>
               <View>
-                <StrokeThumb canvasId={c.id} width={CELL - 16} height={Math.round((CELL - 16) * 0.78)} />
+                <PieceImage canvasId={c.id} width={CELL - 16} height={Math.round((CELL - 16) * 0.78)} />
                 <View style={styles.badge}><PixelIcon name="cube" size={24} color={C.white} alt={C.phosphor} /></View>
               </View>
               <View style={{ gap: 2 }}>
                 <Text style={styles.title} numberOfLines={1}>{c.title ?? timeAgo(c.created_at)}</Text>
                 <Text style={styles.meta} numberOfLines={1}>{c.views} views · {c.stroke_count} strokes</Text>
-                {c.author_id !== me?.id && <T v="label" color={C.phosphor} style={{ fontSize: 8 }}>CONTRIBUTED</T>}
+                {c.author_id !== me?.id && <T v="label" color={C.phosphor} style={{ fontSize: 10.5 }}>CONTRIBUTED</T>}
               </View>
             </PixelBox>
           </Pressable>
@@ -80,6 +80,6 @@ export function VaultScreen() {
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   badge: { position: 'absolute', right: 4, bottom: 4, backgroundColor: '#0a0620cc', padding: 2 },
-  title: { fontFamily: F.display, fontSize: 15, color: '#fff' },
-  meta: { fontFamily: F.body, fontSize: 12, color: C.dim },
+  title: { fontFamily: F.display, fontSize: 17, color: '#fff' },
+  meta: { ...ui(12.5, '500'), color: C.dim },
 });

@@ -2,11 +2,11 @@ import React, { useMemo } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Canvas, Path, Skia } from '@shopify/react-native-skia';
-import { Btn, Header, Panel, Pill, Screen, T } from '../ui/kit';
+import { Btn, Header, IconBtn, Panel, Pill, Screen, T } from '../ui/kit';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
 import { PixelCan } from '../ui/PixelCan';
-import { C, F } from '../ui/theme';
+import { C, F, ui, uiLabel } from '../ui/theme';
 import { useStore } from '../store';
 import { MARKET_CANS, MARKET_PAINTS, PAINT_PER_COIN, SOON, coinsOf, type Item } from '../lib/economy';
 
@@ -17,19 +17,25 @@ export function MarketScreen() {
   const painter = useStore((s) => s.painter);
   const settings = useStore((s) => s.settings);
   const setSettings = useStore((s) => s.setSettings);
+  const setSheet = useStore((s) => s.setSheet);
   const coins = coinsOf(painter, settings);
   const buy = (it: Item) => {
     if (coins < it.price || settings.owned.includes(it.id)) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     setSettings({ owned: [...settings.owned, it.id], spent: settings.spent + it.price });
   };
-  const equip = (side: 'optionA' | 'optionB', it: Item) => setSettings({ [side]: { ...settings[side], color: it.color, name: `${it.name} · ${settings[side].cap} cap` } });
+  const equip = (side: 'optionA' | 'optionB', it: Item) => setSettings({ [side]: { color: it.color, name: it.name } });
 
   return (
-    <Screen tone="blue">
-      <Header title="MARKET" sub="spend coins on paints and cans" right={<Pill icon="coin" value={coins} iconColor={C.yellow} alt="#c48f00" />} />
+    <Screen tone="blue" sheet>
+      <Header title="MARKET" sub="spend coins on paints and cans" right={
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Pill icon="coin" value={coins} iconColor={C.yellow} alt="#c48f00" />
+          <IconBtn icon="x" onPress={() => setSheet(null)} />
+        </View>
+      } />
       <Panel title="HOW TO EARN">
-        <T v="body">Every {PAINT_PER_COIN} paint you spray earns 1 coin. Daily missions on Home pay bonus coins.</T>
+        <T v="body">Every {PAINT_PER_COIN} paint you spray earns 1 coin. Daily quests on Profile pay bonus coins.</T>
       </Panel>
 
       <T v="label">PAINTS</T>
@@ -41,8 +47,8 @@ export function MarketScreen() {
             <Card key={it.id} it={it} preview={<Blob color={it.color} />}>
               {owned ? (
                 <View style={{ flexDirection: 'row', gap: 6 }}>
-                  <Btn label="A" size="sm" tone={onA ? 'yellow' : 'dark'} style={{ flex: 1 }} onPress={() => equip('optionA', it)} />
-                  <Btn label="B" size="sm" tone={onB ? 'yellow' : 'dark'} style={{ flex: 1 }} onPress={() => equip('optionB', it)} />
+                  <Btn label="LEFT" size="sm" tone={onA ? 'yellow' : 'dark'} style={{ flex: 1 }} onPress={() => equip('optionA', it)} />
+                  <Btn label="RIGHT" size="sm" tone={onB ? 'yellow' : 'dark'} style={{ flex: 1 }} onPress={() => equip('optionB', it)} />
                 </View>
               ) : <BuyBtn it={it} coins={coins} onBuy={() => buy(it)} />}
             </Card>
@@ -128,9 +134,9 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   preview: { height: 116, alignItems: 'center', justifyContent: 'center', backgroundColor: '#152b66', borderWidth: 3, borderColor: C.ink },
   name: { fontFamily: F.display, fontSize: 16, color: '#fff' },
-  blurb: { fontFamily: F.body, fontSize: 12, color: '#bcd0ff' },
+  blurb: { ...ui(12.5, '500'), color: '#bcd0ff' },
   price: { fontFamily: F.display, fontSize: 18, color: C.yellow },
   soon: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   soonChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#150a36', paddingHorizontal: 8, height: 28 },
-  soonText: { fontFamily: F.labelBold, fontSize: 8, color: C.faint, letterSpacing: 1 },
+  soonText: { ...uiLabel(10.5, 0.6), color: C.faint },
 });

@@ -4,7 +4,7 @@ import { Canvas, Circle, Group, Path, Skia, BlurMask, RadialGradient, vec } from
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Backdrop } from '../ui/Backdrop';
-import { C, F, outline } from '../ui/theme';
+import { C, F, outline, uiLabel } from '../ui/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
 const R = Math.min(W, H) * 0.34;
@@ -115,5 +115,5 @@ const styles = StyleSheet.create({
   copy: { position: 'absolute', left: 0, right: 0, bottom: H * 0.14, alignItems: 'center', gap: 8 },
   brand: { color: '#fff', fontFamily: F.display, fontSize: 56, letterSpacing: 8, ...outline('#4a22b8', 4) },
   tag: { color: C.dim, fontFamily: F.body, fontSize: 16, letterSpacing: 1 },
-  cta: { color: C.yellow, fontFamily: F.labelBold, fontSize: 11, letterSpacing: 3, marginTop: 18, textTransform: 'uppercase' },
+  cta: { color: C.yellow, ...uiLabel(12, 2.5), marginTop: 18 },
 });

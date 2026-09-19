@@ -1,20 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
-import { Paths } from 'expo-file-system';
-import { ArPaintView, hasLidar, type ArHitEvent, type ArPaintViewRef, type ArStroke, type ArTrackingEvent, type HitKind } from '../../modules/ar-paint';
+import { File, Paths } from 'expo-file-system';
+import { ArPaintView, canSnapshot, canUndo, hasLidar, type ArHitEvent, type ArPaintViewRef, type ArStroke, type ArTrackingEvent, type HitKind } from '../../modules/ar-paint';
 import { usePose } from '../hooks/usePose';
 import { PaintLayer } from '../paint/PaintLayer';
 import { useArSpray } from '../hooks/useArSpray';
 import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
-import { BlockerBanner, CanMeter, DistanceChip, HoldButtons, PaintMeters, ToolsPanel, TopBar } from '../components/HUD';
-import { PixelBox } from '../ui/PixelBox';
-import { PixelIcon } from '../ui/PixelIcon';
-import { F, HOLD_TOP } from '../ui/theme';
-import { DiscoveryOverlay } from '../components/DiscoveryOverlay';
+import { BLOCKER_LINE, CreateHud, pullLine, type HudLine } from '../components/HUD';
+import { DiscoveryCues } from '../components/DiscoveryOverlay';
+import { PieceDetail } from '../components/SpatialViewer';
 import { useStore } from '../store';
-import { downloadWorldMap, incrementViews, onRemoteStroke, reportCanvas, uploadWorldMap } from '../data/sync';
+import { deleteStroke, downloadWorldMap, incrementViews, onRemoteStroke, uploadWorldMap } from '../data/sync';
 import { CANVAS_JOIN_RADIUS_M } from '../config';
 import { haversineM } from '../lib/geo';
 import type { Blocker } from '../hooks/useSprayEngine';
@@ -46,10 +45,8 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   useKeepAwake();
   const settings = useStore((s) => s.settings);
   const painter = useStore((s) => s.painter);
-  const online = useStore((s) => s.online);
   const location = useStore((s) => s.location);
   const canvases = useStore((s) => s.canvases);
-  const setTab = useStore((s) => s.setTab);
   const markDiscovered = useStore((s) => s.markDiscovered);
 
   const viewRef = useRef<ArPaintViewRef | null>(null);
@@ -65,8 +62,16 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const [justFound, setJustFound] = useState<Canvas | null>(null);
   const [mapState, setMapState] = useState<'none' | 'loading' | 'relocalizing' | 'resolved' | 'approx'>('none');
   const [hitInfo, setHitInfo] = useState<{ kind: HitKind; vertical: boolean; locked: boolean; dist: number }>({ kind: 'none', vertical: false, locked: false, dist: 1 });
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [hinted, setHinted] = useState(true); // first-run hint, hidden after the first spray
+  const [detail, setDetail] = useState<Canvas | null>(null);
+  const [mapNote, setMapNote] = useState<HudLine | null>(null);
+  const [pieceId, setPieceId] = useState<string | null>(null); // the wall you're painting on / standing at
+  const [flash, setFlash] = useState<HudLine | null>(null); // short-lived "that worked" line
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const captureTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const capturing = useRef(false);
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const relocTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scheduleMapSave = useCallback(() => {
@@ -82,7 +87,64 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     }, 5000);
   }, []);
 
-  const engine = useArSpray(pose, { onStrokeSaved: () => { paintedThisSession.current = true; scheduleMapSave(); } });
+  /**
+   * A photo of this wall for the Vault: the camera frame with the paint on it, kept on the phone
+   * (there's no bucket for it on the backend). Taken a few seconds after you stop spraying, and on
+   * demand from the camera button; the newest one replaces the last.
+   */
+  const captureWall = useCallback(async (): Promise<boolean> => {
+    const c = engineRef.current?.activeCanvas.current;
+    // a paused session (you left the tab) renders black, so never shoot one
+    if (!c || !canSnapshot || !viewRef.current || capturing.current || !activeRef.current) return false;
+    capturing.current = true;
+    try {
+      const path = `${Paths.document.uri.replace('file://', '')}/wall-${c.id}-${Date.now()}.jpg`;
+      await viewRef.current.snapshot(path);
+      const prev = useStore.getState().photos[c.id];
+      useStore.getState().setPhoto(c.id, `file://${path}`);
+      setPieceId(c.id);
+      if (prev) { try { new File(prev).delete(); } catch {} }
+      return true;
+    } catch (e) {
+      console.warn('wall photo failed', e);
+      return false;
+    } finally { capturing.current = false; }
+  }, []);
+
+  /** Take back your last stroke: the wall repaints without it and it leaves the shared canvas. */
+  const onUndo = useCallback(async () => {
+    let undone: { id: string } | null = null;
+    try { undone = (await viewRef.current?.undoLast()) ?? null; } catch (e) { console.warn('undo failed', e); }
+    if (undone) {
+      const st = useStore.getState();
+      const found = Object.entries(st.strokes).find(([, ss]) => ss.some((x) => x.id === undone!.id));
+      if (found) {
+        const [canvasId, ss] = found;
+        const gone = ss.find((x) => x.id === undone!.id)!;
+        st.removeStroke(canvasId, gone.id);
+        const p = st.painter;
+        if (p) st.setPainter({ ...p, strokes: Math.max(0, p.strokes - 1), paint_used: Math.max(0, p.paint_used - gone.paint_used) });
+      }
+      deleteStroke(undone.id);
+      if (settings.haptics) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => {});
+      // the wall photo now shows paint that isn't there any more
+      if (captureTimer.current) clearTimeout(captureTimer.current);
+      captureTimer.current = setTimeout(() => { captureWall(); }, 1500);
+    }
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlash(undone ? { title: 'LAST STROKE UNDONE', icon: 'undo' } : { title: 'NOTHING TO UNDO', sub: 'ONLY THE STROKES YOU PAINTED HERE', icon: 'undo' });
+    flashTimer.current = setTimeout(() => setFlash(null), 2200);
+  }, [captureWall, settings.haptics]);
+
+  useEffect(() => () => { [flashTimer, captureTimer].forEach((t) => t.current && clearTimeout(t.current)); }, []);
+
+  const engine = useArSpray(pose, { onStrokeSaved: (s) => {
+    paintedThisSession.current = true;
+    scheduleMapSave();
+    setPieceId(s.canvas_id);
+    if (captureTimer.current) clearTimeout(captureTimer.current);
+    captureTimer.current = setTimeout(() => { captureWall(); }, 4000);
+  } });
   engineRef.current = engine;
   // canvases with a world map resolve by relocalisation; web-made canvases (no map) resolve by proximity
   const discovery = useDiscovery(pose, (c) => !c.world_map_path);
@@ -106,6 +168,7 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     if (best) {
       mapCanvas.current = best;
       engine.activeCanvas.current = best;
+      setPieceId(best.id);
       setMapState('loading');
       downloadWorldMap(best).then((p) => { if (p) setWorldMapPath(p); else { const c = mapCanvas.current; mapCanvas.current = null; if (c) placeApprox(c); } });
     } else if (approx) placeApprox(approx);
@@ -126,6 +189,7 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const placeApprox = useCallback(async (c: Canvas) => {
     failedMaps.current.add(c.id);
     engine.activeCanvas.current = c;
+    setPieceId(c.id);
     try {
       await viewRef.current?.resetSession();
       setWorldMapPath(null);
@@ -172,7 +236,6 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const onHit = useCallback((e: { nativeEvent: ArHitEvent }) => {
     const ev = e.nativeEvent;
     engine.hit.current = ev.hit;
-    if (ev.drip) { if (useStore.getState().settings.sound) import('../audio/sfx').then(({ sfx }) => sfx.pool()); return; }
     const kind = ev.kind ?? (ev.hit ? 'estimated' : 'none');
     if (ev.hit && ev.distance > 0) engine.dist.current = ev.distance;
     setHitInfo((p) => (p.kind === kind && p.vertical === !!ev.vertical && p.locked === !!ev.locked && Math.abs(p.dist - (ev.distance ?? p.dist)) < 0.1 ? p
@@ -192,20 +255,27 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     return () => clearInterval(id);
   }, []);
 
-  const onReport = useCallback((id: string) => {
-    Alert.alert('Report this piece?', 'Two reports hide a piece for everyone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Report', style: 'destructive', onPress: () => reportCanvas(id, painter?.id ?? null, 'inappropriate') },
-    ]);
-  }, [painter]);
+  // sharing state of the wall you're standing at, as one short-lived notice
+  useEffect(() => {
+    setMapNote(mapState === 'loading' ? { title: 'LOADING THE WALL HERE' }
+      : mapState === 'relocalizing' ? { title: 'RESOLVING THE PIECE HERE', sub: 'LOOK AROUND SLOWLY' }
+      : mapState === 'approx' ? { title: 'PIECE PLACED FROM MEMORY', sub: 'WALK TO WHERE IT WAS PAINTED' }
+      : mapState === 'resolved' ? { title: 'PIECE RESOLVED' } : null);
+    if (mapState !== 'approx' && mapState !== 'resolved') return;
+    const id = setTimeout(() => setMapNote(null), 5000);
+    return () => clearTimeout(id);
+  }, [mapState]);
 
-  const trackingText = tracking.state === 'normal' ? 'TRACKING' : tracking.state === 'limited' ? `LIMITED ${(tracking.reason ?? '').toUpperCase()}` : tracking.state.toUpperCase();
-  const mapText = mapState === 'loading' ? 'LOADING PIECE' : mapState === 'relocalizing' ? 'LOOK AROUND' : mapState === 'resolved' ? 'PIECE RESOLVED' : mapState === 'approx' ? 'PLACED FROM MEMORY' : '';
-  const aimingAtNothing = engine.native.spraying && !engine.hit.current;
-  const lock = hitInfo.kind === 'none' ? { text: 'AIM AT A WALL OR FLOOR', locked: false }
-    : hitInfo.locked ? { text: `${hitInfo.vertical ? 'WALL' : 'FLOOR'} LOCKED${hitInfo.kind === 'extended' ? ' · EDGE' : hitInfo.kind === 'mesh' ? ' · LIDAR' : ''}`, locked: true }
-    : { text: 'FINDING SURFACE · MOVE SLOWLY', locked: false };
-  const noticeBusy = !!discovery.pull || !!discovery.focused || !!justFound || !!discovery.justFound;
+  const found = justFound ?? discovery.justFound;
+  const piece = (pieceId ? canvases[pieceId] : null) ?? (pieceId === engine.activeCanvas.current?.id ? engine.activeCanvas.current : null);
+  const notice: HudLine | null = ui.blocker ? BLOCKER_LINE[ui.blocker]
+    : flash ? flash
+    : found ? null
+    : discovery.pull ? pullLine(discovery.pull)
+    : mapNote ? mapNote
+    : discovery.focused ? { title: `${discovery.focused.author_name}'s piece`.toUpperCase(), sub: 'TAP TO VIEW', icon: 'eye', onPress: () => setDetail(discovery.focused) }
+    : hinted && (painter?.strokes ?? 0) < 5 ? { title: 'SHAKE TO CHARGE', sub: settings.volumeButtons ? 'THEN HOLD A COLOUR OR VOL+ / VOL−' : 'THEN HOLD A COLOUR TO SPRAY' }
+    : null;
 
   return (
     <View style={styles.root}>
@@ -225,53 +295,43 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
       />
       {/* strokes painted from the web app (compass-anchored) render as an overlay on top of the AR view */}
       <PaintLayer yawSV={yawSV} pitchSV={pitchSV} rollSV={rollSV} walls={discovery.walls} />
-      <PaintMeters />
-      <CanMeter />
-      <DiscoveryOverlay d={{ ...discovery, justFound: justFound ?? discovery.justFound, walls: [] }} onReport={onReport} />
-      <BlockerBanner blocker={ui.blocker} />
-      <DistanceChip meters={hitInfo.dist} hit={hitInfo.kind !== 'none'} />
-      <View style={styles.lock} pointerEvents="none">
-        <PixelBox fill="#120a2e" hi="#2a1c5c" depth={4} contentStyle={styles.lockIn}>
-          {lock.locked ? <PixelIcon name="lock" size={24} color="#fff" /> : null}
-          <Text style={styles.lockText}>{lock.text}</Text>
-        </PixelBox>
-      </View>
-      {aimingAtNothing && !ui.blocker && (
-        <View style={styles.banner} pointerEvents="none">
-          <PixelBox fill="#120a2e" hi="#2a1c5c" depth={4} contentStyle={{ paddingHorizontal: 14, paddingVertical: 8 }}><Text style={styles.bannerText}>Aim at a wall or floor and move slowly so it finds the surface</Text></PixelBox>
-        </View>
-      )}
-      {toolsOpen && <ToolsPanel />}
-      <HoldButtons onStart={engine.start} onEnd={engine.end} />
-      {hinted && !noticeBusy && (
-        <View style={styles.hint} pointerEvents="none">
-          <PixelBox fill="#120a2e" hi="#2a1c5c" depth={3} contentStyle={{ paddingHorizontal: 12, height: 30, justifyContent: 'center' }}>
-            <Text style={styles.hintText}>{settings.volumeButtons ? 'HOLD THE BUTTONS OR VOL+ / VOL− · SHAKE TO CHARGE' : 'HOLD THE BUTTONS · SHAKE TO CHARGE'}</Text>
-          </PixelBox>
-        </View>
-      )}
-      <TopBar status={`${(painter?.name ?? '—').toUpperCase()} · ${online ? 'LIVE' : 'OFFLINE'} · ${trackingText}${mapText ? ` · ${mapText}` : ''}`}
-        toolsOn={toolsOpen} onTools={() => setToolsOpen((v) => !v)} onSettings={() => setTab('settings')} />
-      {settings.debugHud && (
-        <View style={styles.debug} pointerEvents="none">
-          <Text style={styles.debugText}>
-            planes {tracking.planes ?? 0} · quads {surfaces} · {hasLidar ? 'lidar' : 'no lidar'} · hit {hitInfo.kind} · held {ui.held} · block {ui.blocker ?? '-'} · gps {location ? `±${Math.round(location.accuracy)}m` : '…'} · map {tracking.mapping || '-'}
-          </Text>
-        </View>
-      )}
+      <DiscoveryCues d={{ ...discovery, justFound: found }} />
+      <CreateHud
+        status={surfaceLine(tracking, hitInfo, engine.native.spraying)}
+        found={found}
+        onOpenFound={() => found && setDetail(found)}
+        notice={notice}
+        debug={settings.debugHud ? `planes ${tracking.planes ?? 0} · quads ${surfaces} · ${hasLidar ? 'lidar' : 'no lidar'} · hit ${hitInfo.kind} · held ${ui.held} · block ${ui.blocker ?? '-'} · gps ${location ? `±${Math.round(location.accuracy)}m` : '…'} · map ${tracking.mapping || '-'}` : null}
+        onStart={engine.start}
+        onEnd={engine.end}
+        onUndo={canUndo ? onUndo : null}
+        pieceId={pieceId}
+        onOpenPiece={() => piece && setDetail(piece)}
+      />
+      {detail && <PieceDetail canvas={detail} onClose={() => setDetail(null)} />}
     </View>
   );
 }
 
+/**
+ * What the reticle is on, only while it matters: until a wall or floor locks (the hint disappears
+ * once it does), and while spraying close or far enough to change the spray (focus / mist).
+ */
+function surfaceLine(tracking: ArTrackingEvent, hit: { kind: HitKind; locked: boolean; dist: number }, spraying: boolean): HudLine | null {
+  if (hit.locked) {
+    if (!spraying) return null;
+    const mode = hit.dist < 0.8 ? 'FOCUS' : hit.dist > 1.5 ? 'MIST' : null;
+    return mode ? { title: mode, sub: `${hit.dist.toFixed(1)} M FROM THE SURFACE` } : null;
+  }
+  if (tracking.state !== 'normal' && tracking.reason !== 'relocalizing' && hit.kind === 'none') {
+    if (tracking.reason === 'excessiveMotion') return { title: 'SLOW DOWN', sub: 'MOVE THE PHONE GENTLY' };
+    if (tracking.reason === 'insufficientFeatures') return { title: 'NOT ENOUGH DETAIL', sub: 'MORE LIGHT OR A TEXTURED WALL' };
+    return { title: 'STARTING CAMERA', sub: 'MOVE THE PHONE SLOWLY' };
+  }
+  if (hit.kind === 'none') return { title: 'AIM AT A WALL OR FLOOR' };
+  return { title: 'FINDING SURFACE', sub: 'MOVE SLOWLY' };
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  banner: { position: 'absolute', top: '58%', alignSelf: 'center', maxWidth: '85%' },
-  bannerText: { fontFamily: F.body, fontSize: 13, color: '#fff', textAlign: 'center' },
-  lock: { position: 'absolute', top: '36%', alignSelf: 'center' },
-  lockIn: { height: 36, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
-  lockText: { fontFamily: F.labelBold, fontSize: 10, color: '#fff', letterSpacing: 1 },
-  hint: { position: 'absolute', bottom: HOLD_TOP + 8, alignSelf: 'center' },
-  hintText: { fontFamily: F.labelBold, fontSize: 8, color: '#ffffffcc', letterSpacing: 0.6 },
-  debug: { position: 'absolute', top: 108, left: 12, right: 12, alignItems: 'center' },
-  debugText: { fontFamily: F.mono, fontSize: 14, color: '#ffffffcc', textAlign: 'center', backgroundColor: '#000a' },
 });

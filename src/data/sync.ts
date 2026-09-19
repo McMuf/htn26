@@ -196,6 +196,24 @@ export async function fetchAllCanvases(): Promise<Canvas[]> {
   return data as Canvas[];
 }
 
+/**
+ * Take a stroke off the shared wall (undo). The app has already dropped it locally and remembers
+ * the id, because `strokes` has no delete policy yet: until Hamza adds one this call is refused and
+ * the stroke stays on other phones. Also drops it from the retry queue if it never made it up.
+ */
+export async function deleteStroke(id: string) {
+  try {
+    const q: { id: string }[] = JSON.parse((await AsyncStorage.getItem(PENDING)) ?? '[]');
+    const left = q.filter((r) => r.id !== id);
+    if (left.length !== q.length) await AsyncStorage.setItem(PENDING, JSON.stringify(left));
+  } catch {}
+  if (!hasBackend) return;
+  try {
+    const { error } = await supabase.from('strokes').delete().eq('id', id);
+    if (error) throw error;
+  } catch (e) { console.warn('deleteStroke failed (strokes needs an RLS delete policy)', e); }
+}
+
 /** Strokes for canvases that aren't nearby, for thumbnails only (no raster replay). */
 export async function fetchPreviewStrokes(ids: string[]) {
   if (!hasBackend || !ids.length) return;

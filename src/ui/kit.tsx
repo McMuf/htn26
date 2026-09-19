@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { Backdrop } from './Backdrop';
 import { PixelBox } from './PixelBox';
 import { PixelIcon, type IconName } from './PixelIcon';
-import { BACKDROPS, C, DOCK_INSET, F, outline, TONES, type BackdropName, type Tone } from './theme';
+import { BACKDROPS, C, DOCK_INSET, F, outline, TONES, ui, uiLabel, type BackdropName, type Tone } from './theme';
 import { useStore } from '../store';
 
 export function hapticTap() {
@@ -16,26 +16,28 @@ type V = 'title' | 'h' | 'sub' | 'body' | 'small' | 'label' | 'num' | 'mono';
 const TEXT: Record<V, TextStyle> = {
   title: { fontFamily: F.display, fontSize: 32, letterSpacing: 1, color: C.white, ...outline() },
   h: { fontFamily: F.display, fontSize: 20, color: C.white, ...outline() },
-  sub: { fontFamily: F.body, fontSize: 14, color: C.dim },
-  body: { fontFamily: F.body, fontSize: 15, color: C.white },
-  small: { fontFamily: F.body, fontSize: 12, color: C.dim },
-  label: { fontFamily: F.labelBold, fontSize: 10, letterSpacing: 1.5, color: C.yellow, textTransform: 'uppercase' },
+  sub: { ...ui(14, '500'), color: C.dim },
+  body: { ...ui(15, '500'), color: C.white },
+  small: { ...ui(13, '500'), color: C.dim },
+  label: { ...uiLabel(11.5, 1.1), color: C.yellow },
   num: { fontFamily: F.display, fontSize: 30, color: C.white, ...outline() },
-  mono: { fontFamily: F.mono, fontSize: 20, color: C.phosphor },
+  mono: { fontFamily: F.mono, fontSize: 22, color: C.phosphor },
 };
 export function T({ v = 'body', color, style, ...rest }: TextProps & { v?: V; color?: string }) {
   return <Text {...rest} style={[TEXT[v], color ? { color } : null, style]} />;
 }
 
 // ---- screen scaffolding ---------------------------------------------------------------------
-export function Screen({ tone = 'purple', children, scroll = true, loading, onRefresh, contentStyle }: {
+export function Screen({ tone = 'purple', children, scroll = true, loading, onRefresh, contentStyle, sheet }: {
   tone?: BackdropName; children?: React.ReactNode; scroll?: boolean; loading?: boolean; onRefresh?: () => void; contentStyle?: StyleProp<ViewStyle>;
+  /** Presented as a page sheet (Market, Settings): no status bar or dock to clear. */
+  sheet?: boolean;
 }) {
   return (
     <View style={{ flex: 1, backgroundColor: BACKDROPS[tone].bottom }}>
       <Backdrop tone={tone} />
       {scroll ? (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, contentStyle]}
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, sheet && styles.sheetScroll, contentStyle]}
           refreshControl={onRefresh ? <RefreshControl refreshing={!!loading} onRefresh={onRefresh} tintColor="#fff" /> : undefined}>
           {children}
         </ScrollView>
@@ -75,7 +77,7 @@ export function Panel({ title, tone = 'panel', right, children, style, pad = 14 
 }
 
 // ---- controls -------------------------------------------------------------------------------
-const SIZES = { lg: { h: 58, font: 22, icon: 24, n: 6, px: 22 }, md: { h: 48, font: 17, icon: 24, n: 3, px: 16 }, sm: { h: 38, font: 14, icon: 24, n: 3, px: 12 } };
+const SIZES = { lg: { h: 58, font: 22, icon: 24, n: 6, px: 22 }, md: { h: 48, font: 18, icon: 24, n: 3, px: 16 }, sm: { h: 40, font: 16, icon: 24, n: 3, px: 12 } };
 /** Chunky 3D button (Subway Surfers "RESUME"): thick slab underneath that squashes when pressed. */
 export function Btn({ label, onPress, onPressIn, onPressOut, tone = 'green', icon, size = 'md', style, disabled }: {
   label?: string; onPress?: () => void; onPressIn?: () => void; onPressOut?: () => void; tone?: Tone; icon?: IconName;
@@ -116,7 +118,7 @@ export function Chip({ label, on, onPress, icon }: { label: string; on?: boolean
     <Pressable onPress={() => { hapticTap(); onPress?.(); }}>
       <PixelBox fill={t.fill} hi={t.hi} lo={t.lo} depth={3} contentStyle={{ height: 34, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         {icon ? <PixelIcon name={icon} size={12} color={on ? '#2a1a00' : C.white} /> : null}
-        <Text style={{ fontFamily: F.labelBold, fontSize: 10, letterSpacing: 1, color: on ? '#2a1a00' : C.dim }}>{label.toUpperCase()}</Text>
+        <Text style={{ ...uiLabel(11, 0.8), color: on ? '#2a1a00' : C.dim }}>{label}</Text>
       </PixelBox>
     </Pressable>
   );
@@ -132,7 +134,7 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
         <PixelBox fill="#fff" hi="#fff" lo="#c8bdea" depth={0} bw={3} n={3} style={{ width: 24, height: 24 }}><View style={{ height: 24 }} /></PixelBox>
       </View>
       <View style={[styles.onOff, on ? { left: 9 } : { right: 9 }]} pointerEvents="none">
-        <Text style={{ fontFamily: F.labelBold, fontSize: 8, color: on ? '#fff' : C.faint }}>{on ? 'ON' : 'OFF'}</Text>
+        <Text style={{ ...uiLabel(9.5, 0.4), color: on ? '#fff' : C.faint }}>{on ? 'ON' : 'OFF'}</Text>
       </View>
     </Pressable>
   );
@@ -158,7 +160,7 @@ export function Tile({ n, label, style, big }: { n: string | number; label: stri
   return (
     <PixelBox fill="#2b2059" hi="#3a2d78" lo="#1c1440" depth={3} style={[{ flex: 1 }, style]} contentStyle={{ paddingVertical: 12, paddingHorizontal: 8, alignItems: 'center', gap: 2 }}>
       <Text style={{ fontFamily: F.display, fontSize: big ? 34 : 26, color: '#fff', ...outline() }} numberOfLines={1} adjustsFontSizeToFit>{n}</Text>
-      <Text style={{ fontFamily: F.body, fontSize: 12, color: C.dim }} numberOfLines={1}>{label}</Text>
+      <Text style={{ ...ui(12.5, '600'), color: C.dim }} numberOfLines={1}>{label}</Text>
     </PixelBox>
   );
 }
@@ -197,6 +199,7 @@ export function Divider() {
 
 const styles = StyleSheet.create({
   scroll: { padding: 18, paddingTop: 62, paddingBottom: DOCK_INSET, gap: 16 },
+  sheetScroll: { paddingTop: 26, paddingBottom: 48 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 },
   panelHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   knob: { position: 'absolute', top: 5 },

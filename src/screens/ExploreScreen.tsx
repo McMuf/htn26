@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Btn, Chip, Header, IconBtn, Panel, Pill, Rank, Screen, T } from '../ui/kit';
 import { PixelBox } from '../ui/PixelBox';
-import { StrokeThumb } from '../ui/StrokeThumb';
-import { C, F } from '../ui/theme';
+import { PieceImage } from '../ui/StrokeThumb';
+import { C, F, ui } from '../ui/theme';
 import { useStore } from '../store';
 import { fetchAllCanvases, fetchPreviewStrokes } from '../data/sync';
 import { MOCK_CANVASES, isMock } from '../data/mock';
@@ -75,7 +75,7 @@ export function ExploreScreen() {
             <Pressable key={c.id} onPress={() => setOpen(c)}>
               <PixelBox n={6} depth={5} fill="#0f2a22" hi="#1d4a3a" lo="#0a1c17" style={{ width: 188 }} contentStyle={{ padding: 8, gap: 8 }}>
                 <View>
-                  <StrokeThumb canvasId={c.id} width={172} height={124} />
+                  <PieceImage canvasId={c.id} width={172} height={124} />
                   <View style={styles.rank}><Rank n={i + 1} /></View>
                 </View>
                 <View>
@@ -98,14 +98,14 @@ export function ExploreScreen() {
       {nearby.map(({ c, d }) => (
         <Pressable key={c.id} onPress={() => setOpen(c)}>
           <PixelBox n={6} depth={4} fill="#0f2a22" hi="#1d4a3a" lo="#0a1c17" contentStyle={styles.row}>
-            <StrokeThumb canvasId={c.id} width={64} height={64} />
+            <PieceImage canvasId={c.id} width={64} height={64} cell={2} />
             <View style={{ flex: 1 }}>
               <Text style={styles.title} numberOfLines={1}>{c.title ?? `${c.author_name}'s piece`}</Text>
               <Text style={styles.meta} numberOfLines={1}>{c.author_name} · {timeAgo(c.updated_at)} · {c.stroke_count} strokes</Text>
             </View>
             <View style={{ alignItems: 'flex-end', gap: 2 }}>
               <Text style={styles.dist}>{d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`}</Text>
-              <T v="label" color={discovered[c.id] ? C.greenHi : isMock(c.id) ? C.faint : C.yellow} style={{ fontSize: 8 }}>{discovered[c.id] ? 'FOUND' : isMock(c.id) ? 'SAMPLE' : 'UNDISCOVERED'}</T>
+              <T v="label" color={discovered[c.id] ? C.greenHi : isMock(c.id) ? C.faint : C.yellow} style={{ fontSize: 10.5 }}>{discovered[c.id] ? 'FOUND' : isMock(c.id) ? 'SAMPLE' : 'UNDISCOVERED'}</T>
             </View>
           </PixelBox>
         </Pressable>
@@ -129,8 +129,8 @@ function score(c: Canvas) { const age = (Date.now() - new Date(c.updated_at).get
 const styles = StyleSheet.create({
   bleed: { marginHorizontal: -18, paddingHorizontal: 18, flexGrow: 0 },
   rank: { position: 'absolute', left: 4, top: 4 },
-  title: { fontFamily: F.display, fontSize: 15, color: '#fff' },
-  meta: { fontFamily: F.body, fontSize: 12, color: C.dim },
+  title: { fontFamily: F.display, fontSize: 17, color: '#fff' },
+  meta: { ...ui(12.5, '500'), color: C.dim },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 8 },
   dist: { fontFamily: F.display, fontSize: 16, color: '#fff' },
   mapFrame: { borderWidth: 3, borderColor: C.ink },

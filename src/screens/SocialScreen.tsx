@@ -7,17 +7,16 @@ import { File, Paths } from 'expo-file-system';
 import { Avatar, Btn, Chip, Header, Panel, Pill, Rank, Screen, T, Tile } from '../ui/kit';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
-import { StrokeThumb } from '../ui/StrokeThumb';
-import { C, F, TONES, outline } from '../ui/theme';
+import { PieceImage } from '../ui/StrokeThumb';
+import { C, F, TONES, outline, ui } from '../ui/theme';
 import { useStore } from '../store';
 import { MOCK_ACTIVITY, MOCK_FRIENDS } from '../data/mock';
 import { fetchLeaderboard } from '../data/sync';
-import { CREWS, coinsOf, dayStats } from '../lib/economy';
+import { CREWS, colorName, dayStats } from '../lib/economy';
 import { PALETTE } from '../config';
 import type { Painter } from '../types';
 
 const CARD_W = Dimensions.get('window').width - 36;
-const COLOR_NAMES: Record<string, string> = { '#ff2d95': 'hot pink', '#19e6ff': 'cyan', '#ffe600': 'yellow', '#7cff3a': 'lime', '#ff5c1a': 'orange', '#b26bff': 'violet', '#ffffff': 'white', '#111111': 'black' };
 const hueOf = (name: string) => PALETTE[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % (PALETTE.length - 1)];
 
 /** Share card (Airbuds layout, real numbers), a live leaderboard, your crew, and sample friends. */
@@ -66,7 +65,7 @@ export function SocialScreen() {
 
   return (
     <Screen tone="magenta" loading={loading} onRefresh={loadBoard}>
-      <Header title="SOCIAL" right={<Pill icon="coin" value={coinsOf(painter, settings)} iconColor={C.yellow} alt="#c48f00" />} />
+      <Header title="SOCIAL" right={<Pill icon="flame" value={stats.streak} iconColor={C.orange} alt="#ffd21f" />} />
 
       {/* the shareable card: this exact view is snapshotted to a PNG */}
       <View style={styles.cardShadow}>
@@ -81,7 +80,7 @@ export function SocialScreen() {
               return (
                 <View key={i} style={{ flex: 1, alignItems: 'center', gap: 6 }}>
                   <View style={styles.pill}>
-                    {w ? <StrokeThumb canvasId={w[0]} width={PILL_W} height={PILL_H} radius={PILL_W / 2} bg="#241046" /> : <View style={styles.pillEmpty}><Text style={styles.q}>?</Text></View>}
+                    {w ? <PieceImage canvasId={w[0]} width={PILL_W} height={PILL_H} radius={PILL_W / 2} /> : <View style={styles.pillEmpty}><Text style={styles.q}>?</Text></View>}
                     <View style={styles.badge}><Text style={styles.badgeText}>{i + 1}</Text></View>
                   </View>
                   <Text style={styles.cap} numberOfLines={1}>{w ? (c?.title ?? 'a wall') : 'paint more'}</Text>
@@ -98,7 +97,7 @@ export function SocialScreen() {
                 <View key={i} style={{ flex: 1, alignItems: 'center', gap: 6 }}>
                   <View style={[styles.sq, { backgroundColor: col ? col[0] : '#2b2059' }]}>{!col && <Text style={styles.q}>?</Text>}</View>
                   <View style={styles.times}><Text style={styles.timesText}>{col ? `${col[1]} times` : '—'}</Text></View>
-                  <Text style={styles.cap} numberOfLines={1}>{col ? (COLOR_NAMES[col[0]] ?? col[0]) : 'no colour'}</Text>
+                  <Text style={styles.cap} numberOfLines={1}>{col ? colorName(col[0]).toLowerCase() : 'no colour'}</Text>
                 </View>
               );
             })}
@@ -142,7 +141,7 @@ export function SocialScreen() {
           <View key={f.id} style={styles.friend}>
             <Avatar name={f.name} color={f.color} size={38} />
             <View style={{ flex: 1 }}>
-              <T v="body" style={{ fontFamily: F.display }}>{f.name}</T>
+              <T v="body" style={{ fontWeight: '700' }}>{f.name}</T>
               <T v="small">{f.status}</T>
             </View>
             <T v="label" color={f.online ? C.greenHi : C.faint}>{f.online ? 'ONLINE' : 'AWAY'}</T>
@@ -153,12 +152,12 @@ export function SocialScreen() {
       <Panel title="ACTIVITY" right={<T v="label" color={C.faint}>SAMPLE DATA</T>}>
         {MOCK_ACTIVITY.map((a) => (
           <View key={a.id} style={styles.friend}>
-            <T v="small" style={{ flex: 1 }}><Text style={{ fontFamily: F.display, color: '#fff' }}>{a.who}</Text> {a.what}</T>
+            <T v="small" style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: '#fff' }}>{a.who}</Text> {a.what}</T>
             <T v="small">{a.when}</T>
           </View>
         ))}
       </Panel>
-      <T v="small" style={{ textAlign: 'center' }}>{stats.streak} day streak · friends and crews will sync once the backend supports them</T>
+      <T v="small" style={{ textAlign: 'center' }}>friends and crews will sync once the backend supports them</T>
     </Screen>
   );
 }
@@ -193,7 +192,7 @@ function Podium({ rows, me }: { rows: Painter[]; me?: string }) {
           {rows.slice(3, 10).map((p, i) => (
             <View key={p.id} style={[styles.friend, p.id === me && { backgroundColor: '#ffffff18' }]}>
               <Rank n={i + 4} />
-              <T v="body" style={{ flex: 1, fontFamily: F.display }} numberOfLines={1}>{p.name}</T>
+              <T v="body" style={{ flex: 1, fontWeight: '700' }} numberOfLines={1}>{p.name}</T>
               <T v="small">{Math.round(p.paint_used)} paint</T>
             </View>
           ))}
@@ -216,18 +215,18 @@ const styles = StyleSheet.create({
   q: { fontFamily: F.display, fontSize: 30, color: '#6a5aa8' },
   badge: { position: 'absolute', right: -2, bottom: 6, width: 28, height: 28, borderRadius: 14, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontFamily: F.display, fontSize: 16, color: '#1c0f42' },
-  cap: { fontFamily: F.body, fontSize: 13, color: '#e6dcff', maxWidth: PILL_W + 12, textAlign: 'center' },
+  cap: { ...ui(13, '600'), color: '#e6dcff', maxWidth: PILL_W + 12, textAlign: 'center' },
   sq: { width: PILL_W, height: PILL_W, alignItems: 'center', justifyContent: 'center' },
   times: { backgroundColor: '#ffffff26', paddingHorizontal: 10, paddingVertical: 4 },
-  timesText: { fontFamily: F.display, fontSize: 13, color: '#fff' },
+  timesText: { ...ui(12.5, '700'), color: '#fff' },
   tiles: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   foot: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   footName: { fontFamily: F.display, fontSize: 18, color: '#fff', ...outline('#150626') },
-  footSub: { fontFamily: F.body, fontSize: 12, color: '#bdaee8' },
+  footSub: { ...ui(12.5, '600'), color: '#bdaee8' },
   footBrand: { fontFamily: F.display, fontSize: 22, color: '#fff' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   friend: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
-  streak: { fontFamily: F.display, fontSize: 14, color: '#fff' },
-  pName: { fontFamily: F.display, fontSize: 13, color: '#fff', maxWidth: 96 },
-  pPaint: { fontFamily: F.mono, fontSize: 20, color: C.phosphor },
+  streak: { ...ui(14, '700'), color: '#fff' },
+  pName: { ...ui(13, '700'), color: '#fff', maxWidth: 96 },
+  pPaint: { fontFamily: F.mono, fontSize: 22, color: C.phosphor },
 });
