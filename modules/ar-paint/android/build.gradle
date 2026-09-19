@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.arpaint'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.arpaint"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+dependencies {
+  // ARCore: planes, depth hit tests, anchors, Cloud Anchors
+  implementation 'com.google.ar:core:1.56.0'
+}

@@ -11,6 +11,7 @@ import { BlockerBanner, CanMeter, HoldButtons, PaintMeters, Reticle } from '../c
 import { DiscoveryOverlay } from '../components/DiscoveryOverlay';
 import { useStore } from '../store';
 import { reportCanvas } from '../data/sync';
+import { DOCK_TOP } from '../ui/theme';
 
 /**
  * AR APPROACH — geo-anchored canvases (rung 2 of the fallback ladder), chosen deliberately:
@@ -123,6 +124,6 @@ const styles = StyleSheet.create({
   gearText: { color: '#fff', fontSize: 18 },
   debug: { position: 'absolute', top: 92, left: 12, right: 12, alignItems: 'center' },
   debugText: { color: '#ffffff99', fontSize: 9, textAlign: 'center' },
-  hint: { position: 'absolute', bottom: 194, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
+  hint: { position: 'absolute', bottom: DOCK_TOP + 94, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
   hintText: { color: '#ffffffcc', fontSize: 11 },
 });

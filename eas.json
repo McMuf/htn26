@@ -5,12 +5,13 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": { "simulator": false },
+      "android": { "buildType": "apk" },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://ixvaouernepkbkoyjbjh.supabase.co",
         "EXPO_PUBLIC_SUPABASE_KEY": "sb_publishable_RtZ9GocXATRGMzh9wcB8tQ_WbFzDogl"
       }
     },
-    "preview": { "distribution": "internal" },
+    "preview": { "distribution": "internal", "android": { "buildType": "apk" } },
     "production": {}
   }
 }

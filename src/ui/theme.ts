@@ -1,4 +1,7 @@
 // Fresco look: near-black base, neon spray accents, VisionOS-style glass panels.
+import { Platform } from 'react-native';
+import { initialWindowMetrics } from 'react-native-safe-area-context';
+
 export const C = {
   bg: '#07070c',
   bg2: '#0f0f17',
@@ -14,6 +17,10 @@ export const C = {
   line: '#ffffff1a',
 };
 export const DOCK_H = 74;
-export const DOCK_BOTTOM = 26;
+// iPhone: the dock floats over the home indicator on purpose. Android: keep it clear of the
+// navigation bar (3-button nav is ~48 dp; gesture nav ~20 dp).
+export const DOCK_BOTTOM = Platform.OS === 'android' ? Math.max(26, (initialWindowMetrics?.insets.bottom ?? 0) + 10) : 26;
+/** Top edge of the dock, for HUD pieces stacked above it. */
+export const DOCK_TOP = DOCK_BOTTOM + DOCK_H;
 /** Space to leave under scrolling content so the floating dock never covers it. */
 export const DOCK_INSET = DOCK_H + DOCK_BOTTOM + 16;

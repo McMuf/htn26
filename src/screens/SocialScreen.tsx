@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { makeImageFromView } from '@shopify/react-native-skia';
 import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { Glass } from '../ui/Glass';
 import { C, DOCK_INSET } from '../ui/theme';
 import { useStore } from '../store';
@@ -11,7 +12,8 @@ import { MOCK_ACTIVITY, MOCK_FRIENDS } from '../data/mock';
 
 /**
  * Friends + activity are stubs (src/data/mock.ts). The stat card is real: it snapshots the
- * card view to a PNG and hands it to the iOS share sheet.
+ * card view to a PNG and hands it to the share sheet (React Native's Share can't attach files on
+ * Android, so there it goes through expo-sharing).
  */
 export function SocialScreen() {
   const painter = useStore((s) => s.painter);
@@ -33,7 +35,8 @@ export function SocialScreen() {
       if (!img) throw new Error('snapshot failed');
       const f = new File(Paths.cache, 'fresco-card.png');
       f.write(img.encodeToBytes());
-      await Share.share({ url: f.uri, message: `My Fresco week — ${painter?.name ?? 'anon'} · ${Math.round(painter?.paint_used ?? 0)} paint sprayed` });
+      if (Platform.OS === 'android') await Sharing.shareAsync(f.uri, { mimeType: 'image/png', dialogTitle: 'Share your Fresco card' });
+      else await Share.share({ url: f.uri, message: `My Fresco week — ${painter?.name ?? 'anon'} · ${Math.round(painter?.paint_used ?? 0)} paint sprayed` });
     } catch (e) {
       await Share.share({ message: `My Fresco week — ${painter?.name ?? 'anon'} · ${painter?.strokes ?? 0} strokes · ${Math.round(painter?.paint_used ?? 0)} paint · ${found} pieces found` }).catch(() => {});
     }

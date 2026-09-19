@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
 import { DeviceMotion, Magnetometer } from 'expo-sensors';
 import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { wrap360, wrapDiff } from '../lib/geo';
@@ -79,7 +80,9 @@ export function usePose(onShake?: (magnitudeG: number) => void) {
       // from above = decreasing compass heading.
       const rr = d.rotationRate;
       if (rr && yaw != null && dt > 0) {
-        const wUp = rr.gamma * up[0] + rr.beta * up[1] + rr.alpha * up[2]; // deg/s (gamma=x, beta=y, alpha=z)
+        // expo-sensors orders the gyro axes differently per platform: iOS gamma=x, beta=y, alpha=z; Android alpha=x, beta=y, gamma=z
+        const [wx, wy, wz] = Platform.OS === 'android' ? [rr.alpha, rr.beta, rr.gamma] : [rr.gamma, rr.beta, rr.alpha];
+        const wUp = wx * up[0] + wy * up[1] + wz * up[2]; // deg/s
         yaw = wrap360(yaw - wUp * dt);
       }
       if (magYaw != null) {

@@ -1,0 +1,938 @@
+package expo.modules.arpaint
+
+import android.Manifest
+import android.app.Activity
+import android.app.Application
+import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.Color
+import android.opengl.GLES20
+import android.opengl.GLSurfaceView
+import android.opengl.Matrix
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
+import android.view.Surface
+import android.view.View
+import com.google.ar.core.Anchor
+import com.google.ar.core.ArCoreApk
+import com.google.ar.core.Camera
+import com.google.ar.core.Config
+import com.google.ar.core.DepthPoint
+import com.google.ar.core.Frame
+import com.google.ar.core.Plane
+import com.google.ar.core.Point
+import com.google.ar.core.ResolveCloudAnchorFuture
+import com.google.ar.core.Session
+import com.google.ar.core.TrackingFailureReason
+import com.google.ar.core.TrackingState
+import com.google.ar.core.exceptions.CameraNotAvailableException
+import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException
+import expo.modules.kotlin.AppContext
+import expo.modules.kotlin.Promise
+import expo.modules.kotlin.viewevent.EventDispatcher
+import expo.modules.kotlin.views.ExpoView
+import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.opengles.GL10
+import kotlin.math.abs
+import kotlin.math.acos
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
+
+/**
+ * ARCore twin of ArPaintView.swift — same props, events and functions, so the JS screen is shared.
+ *
+ * DETECTION: horizontal + vertical plane finding, plus ARCore's Depth API (depth-from-motion on
+ * phones without a depth sensor, e.g. Galaxy S25) so blank walls are hit-testable before a plane is
+ * found. The reticle hit-tests detected plane polygons first, then a plane's extension within
+ * 0.9 m of what has been seen, then depth points / oriented feature points.
+ *
+ * ANCHORING: every quad rides an ARCore anchor (attached to its plane when it has one), is snapped
+ * onto a real plane when one appears (< 15 cm, < 14°) and re-snapped as ARCore refines it.
+ *
+ * FRAME: ARCore's yaw is arbitrary; [HeadingEstimator] recovers the north-aligned frame the iPhone
+ * uses, and everything crossing to JS (stroke transforms, viewer positions) is expressed in it.
+ *
+ * PERSISTENCE: ARCore has no exportable world map. saveWorldMap hosts each quad as a Cloud Anchor
+ * (needs an ARCore API key) and writes their ids to a small JSON "map"; loading resolves them, and
+ * the first one to resolve aligns every other quad. Without a key, JS falls back to the
+ * placed-from-memory path, exactly as the iPhone does when relocalisation fails.
+ */
+class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, appContext), GLSurfaceView.Renderer {
+  private companion object {
+    const val TAG = "ArPaint"
+    const val HOST_TTL_DAYS = 1 // the maximum with API-key auth
+    const val SAVE_TIMEOUT_MS = 30_000L
+  }
+
+  private val onTracking by EventDispatcher()
+  private val onHit by EventDispatcher()
+  private val onStrokeEnd by EventDispatcher()
+  private val onSurface by EventDispatcher()
+
+  override val shouldUseAndroidLayout = true
+
+  private val main = Handler(Looper.getMainLooper())
+  private val glView = GLSurfaceView(context)
+  private val heading = HeadingEstimator(context)
+
+  // ---- props (written on the main thread) ------------------------------------------------
+  @Volatile var radius = 0.05f
+  @Volatile var flow = 1f
+  @Volatile var showPlanes = true
+  @Volatile private var colorInt = Color.rgb(255, 46, 148)
+  @Volatile private var colorHex = "#ff2e94"
+
+  // ---- session lifecycle (main thread) ---------------------------------------------------
+  @Volatile private var session: Session? = null
+  @Volatile private var running = false
+  private var installRequested = false
+  private var activityResumed = true
+  private var destroyed = false
+  private var retryPosted = false
+  @Volatile private var cloudEnabled = false
+  @Volatile private var depthEnabled = false
+  @Volatile private var displayRotation = Surface.ROTATION_0
+
+  // ---- work queued for the GL thread -----------------------------------------------------
+  /** Returns true when done; false to retry next frame. Stale ops (from before a reset) are dropped. */
+  private class Op(val gen: Int, val needsTracking: Boolean, val block: () -> Boolean)
+  private val ops = ConcurrentLinkedQueue<Op>()
+  private val pendingSaves = ConcurrentLinkedQueue<Promise>() // settled even if the view goes away first
+  private val generation = AtomicInteger(0)
+  private var activeGeneration = 0
+
+  // ---- GL thread state -------------------------------------------------------------------
+  private val background = CameraBackground()
+  private val planeRenderer = PlaneRenderer()
+  private val quadRenderer = QuadRenderer()
+  private var viewportW = 0
+  private var viewportH = 0
+  private var displayChanged = true
+  private var cameraTextureSet = false
+  private val viewM = FloatArray(16)
+  private val projM = FloatArray(16)
+  private val viewProj = FloatArray(16)
+
+  private val quads = LinkedHashMap<String, PaintQuad>()
+  private val planes = LinkedHashMap<Plane, Long>() // plane → first seen (fade-in)
+  private var aimedPlane: Plane? = null
+  private var cameraPos = V3.ZERO
+  private var tracking = false
+  private var lastHitEvent = 0L
+  private var lastTrackingEvent = 0L
+  private var lastTrackingKey = ""
+
+  private enum class HitKind(val js: String) { PLANE("plane"), EXTENDED("extended"), MESH("mesh"), ESTIMATED("estimated") }
+  private class Hit(val transform: M4, val plane: Plane?, val kind: HitKind, val vertical: Boolean)
+
+  // current stroke
+  private class StrokeRec(val id: String, val quadId: String, val points: MutableList<List<Double>>, val rng: SplitMix, val color: String, val viewer: List<Double>)
+  private var spraying = false
+  private var stroke: StrokeRec? = null
+  private var lastDabU = 0f
+  private var lastDabV = 0f
+  private var hasLastDab = false
+  private var dwellSince = 0L
+  private var lastTick = 0L
+
+  // loaded Cloud-Anchor map
+  private enum class MapState { NONE, RESOLVING, RESOLVED, FAILED }
+  private var mapState = MapState.NONE
+  private var mapAlignment: M4? = null // saving session's north frame → this session's ARCore world
+  private var pendingResolves = 0
+  private val resolveFutures = mutableListOf<ResolveCloudAnchorFuture>()
+
+  // ---- setup -----------------------------------------------------------------------------
+
+  init {
+    glView.preserveEGLContextOnPause = true
+    glView.setEGLContextClientVersion(2)
+    glView.setEGLConfigChooser(8, 8, 8, 8, 16, 0)
+    glView.setRenderer(this)
+    glView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+    addView(glView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+  }
+
+  private val lifecycle = object : Application.ActivityLifecycleCallbacks {
+    override fun onActivityResumed(a: Activity) { if (a === appContext.currentActivity) { activityResumed = true; updateRunning() } }
+    override fun onActivityPaused(a: Activity) { if (a === appContext.currentActivity) { activityResumed = false; updateRunning() } }
+    override fun onActivityCreated(a: Activity, b: Bundle?) {}
+    override fun onActivityStarted(a: Activity) {}
+    override fun onActivityStopped(a: Activity) {}
+    override fun onActivitySaveInstanceState(a: Activity, b: Bundle) {}
+    override fun onActivityDestroyed(a: Activity) {}
+  }
+
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    appContext.currentActivity?.application?.registerActivityLifecycleCallbacks(lifecycle)
+    updateRunning()
+  }
+
+  override fun onDetachedFromWindow() {
+    appContext.currentActivity?.application?.unregisterActivityLifecycleCallbacks(lifecycle)
+    updateRunning()
+    super.onDetachedFromWindow()
+  }
+
+  // React Native sizes this view but never measures native children: fill it with the GL surface.
+  override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+    glView.measure(MeasureSpec.makeMeasureSpec(r - l, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(b - t, MeasureSpec.EXACTLY))
+    glView.layout(0, 0, r - l, b - t)
+  }
+
+  override fun onWindowVisibilityChanged(visibility: Int) { super.onWindowVisibilityChanged(visibility); updateRunning() }
+  override fun onVisibilityChanged(changedView: View, visibility: Int) { super.onVisibilityChanged(changedView, visibility); updateRunning() }
+  override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+    super.onSizeChanged(w, h, oldw, oldh)
+    displayRotation = display?.rotation ?: Surface.ROTATION_0
+    updateRunning()
+  }
+
+  /**
+   * Leaving the Create tab (hidden / zero size / detached) or backgrounding the app pauses the
+   * session; coming back RESUMES the same session, so every anchor keeps its place.
+   */
+  private fun updateRunning() {
+    if (destroyed) return
+    val want = isAttachedToWindow && windowVisibility == View.VISIBLE && isShown && width > 0 && height > 0 && activityResumed
+    if (want) start() else stop()
+  }
+
+  private fun start() {
+    if (running) return
+    val activity = appContext.currentActivity ?: return retryLater()
+    if (context.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+      emitTracking(mapOf("state" to "notAvailable", "reason" to "cameraPermission"))
+      return retryLater()
+    }
+    if (session == null) {
+      try {
+        if (ArCoreApk.getInstance().requestInstall(activity, !installRequested) == ArCoreApk.InstallStatus.INSTALL_REQUESTED) {
+          installRequested = true // Play Services for AR is installing; we resume via onActivityResumed
+          return
+        }
+        session = Session(activity).also { configure(it) }
+      } catch (e: UnavailableUserDeclinedInstallationException) {
+        emitTracking(mapOf("state" to "notAvailable", "reason" to "arcoreDeclined"))
+        return
+      } catch (e: Exception) {
+        Log.w(TAG, "ARCore session failed", e)
+        emitTracking(mapOf("state" to "notAvailable", "reason" to (e.javaClass.simpleName ?: "error")))
+        return
+      }
+    }
+    try {
+      session!!.resume()
+    } catch (e: CameraNotAvailableException) {
+      emitTracking(mapOf("state" to "notAvailable", "reason" to "cameraUnavailable"))
+      return retryLater()
+    } catch (e: Exception) {
+      Log.w(TAG, "resume failed", e)
+      return retryLater()
+    }
+    glView.onResume()
+    heading.start()
+    running = true
+  }
+
+  private fun stop() {
+    if (!running) return
+    running = false
+    glView.queueEvent { if (spraying) { spraying = false; flushStroke() } }
+    glView.onPause()
+    session?.pause()
+    heading.stop()
+  }
+
+  private fun retryLater() {
+    if (retryPosted || destroyed) return
+    retryPosted = true
+    main.postDelayed({ retryPosted = false; updateRunning() }, 1000)
+  }
+
+  private fun configure(s: Session) {
+    val cfg = Config(s)
+    cfg.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
+    cfg.focusMode = Config.FocusMode.AUTO
+    cfg.lightEstimationMode = Config.LightEstimationMode.DISABLED
+    cfg.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
+    cfg.instantPlacementMode = Config.InstantPlacementMode.DISABLED
+    // Depth-from-motion (or a ToF sensor where present) makes untextured walls hit-testable.
+    depthEnabled = s.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
+    cfg.depthMode = if (depthEnabled) Config.DepthMode.AUTOMATIC else Config.DepthMode.DISABLED
+    cloudEnabled = ArSupport.hasCloudAnchorKey(context)
+    cfg.cloudAnchorMode = if (cloudEnabled) Config.CloudAnchorMode.ENABLED else Config.CloudAnchorMode.DISABLED
+    s.configure(cfg)
+  }
+
+  fun destroy() {
+    destroyed = true
+    stop()
+    main.removeCallbacksAndMessages(null)
+    ops.clear()
+    while (true) (pendingSaves.poll() ?: break).reject("E_WORLDMAP", "AR view closed before the map was saved", null)
+    glView.queueEvent { for (q in quads.values) q.release(); quads.clear() }
+    session?.close()
+    session = null
+  }
+
+  // ---- props / functions from JS ----------------------------------------------------------
+
+  fun setSpraying(value: Boolean) {
+    glView.queueEvent {
+      if (value == spraying) return@queueEvent
+      spraying = value
+      if (value) beginStroke() else flushStroke()
+    }
+  }
+
+  fun setPaintColor(hex: String) {
+    var s = hex.trim().removePrefix("#")
+    val c = if (s.length == 6) s.toLongOrNull(16)?.let { Color.rgb(((it shr 16) and 0xff).toInt(), ((it shr 8) and 0xff).toInt(), (it and 0xff).toInt()) } else null
+    if (c == null) s = "ff00ff"
+    colorInt = c ?: Color.rgb(255, 0, 255)
+    colorHex = "#" + s.lowercase()
+  }
+
+  private fun enqueue(needsTracking: Boolean = true, gen: Int = generation.get(), block: () -> Boolean) {
+    ops.add(Op(gen, needsTracking, block))
+  }
+
+  fun clearAll() {
+    enqueue(needsTracking = false) { for (q in quads.values) q.release(); quads.clear(); stroke = null; true }
+  }
+
+  /** A fresh start for placed-from-memory: drop all paint and any loaded map. Keeps ARCore's planes and the heading lock. */
+  fun resetSession() {
+    val g = generation.incrementAndGet()
+    enqueue(needsTracking = false, gen = g) { resetState(); activeGeneration = g; true }
+  }
+
+  private fun resetState() {
+    stroke = null
+    for (f in resolveFutures) f.cancel()
+    resolveFutures.clear()
+    for (q in quads.values) q.release()
+    quads.clear()
+    mapState = MapState.NONE
+    mapAlignment = null
+    pendingResolves = 0
+    aimedPlane = null
+  }
+
+  fun setWorldMapPath(path: String?) {
+    if (path.isNullOrEmpty()) return
+    Thread {
+      val entries = WorldMapFile.read(path)
+      if (entries == null) { emitTracking(mapOf("state" to "mapLoadFailed")); return@Thread }
+      val g = generation.incrementAndGet()
+      enqueue(needsTracking = true, gen = g) { loadMap(entries, g); activeGeneration = g; true }
+    }.start()
+  }
+
+  fun saveWorldMap(path: String, promise: Promise) {
+    if (session == null) return promise.reject("E_WORLDMAP", "AR session not running", null)
+    if (!cloudEnabled) return promise.reject("E_WORLDMAP", "Cloud Anchors not configured (no ARCore API key)", null)
+    val deadline = SystemClock.elapsedRealtime() + SAVE_TIMEOUT_MS
+    var started = false
+    pendingSaves.add(promise)
+    enqueue(needsTracking = false) {
+      val now = SystemClock.elapsedRealtime()
+      if (!started) {
+        if (!tracking && now < deadline) return@enqueue false
+        started = true
+        if (tracking) hostUnhostedQuads()
+      }
+      if (quads.values.any { it.hosting != null } && now < deadline) return@enqueue false
+      pendingSaves.remove(promise)
+      finishSave(path, promise)
+      true
+    }
+  }
+
+  /** Strokes from other phones / previous sessions: [{id, anchorId, transform:[16], color, points:[[u,v,r,a,kind]], viewer:[3]}]. */
+  fun addRemoteStrokes(raw: List<Map<String, Any?>>, mode: String) {
+    val strokes = raw.mapNotNull { parseStroke(it) }
+    if (strokes.isEmpty()) return
+    val enqueuedAt = SystemClock.elapsedRealtime()
+    enqueue(needsTracking = true) {
+      // relative placement is only meaningful in the north-aligned frame: give the compass a moment
+      if (mode == "relative" && !heading.locked && SystemClock.elapsedRealtime() - enqueuedAt < 5000) return@enqueue false
+      placeRemote(strokes, mode)
+      true
+    }
+  }
+
+  // ---- GLSurfaceView.Renderer --------------------------------------------------------------
+
+  override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+    GLES20.glClearColor(0f, 0f, 0f, 1f)
+    background.create()
+    planeRenderer.create()
+    quadRenderer.create()
+    cameraTextureSet = false
+    for (q in quads.values) q.onContextLost()
+  }
+
+  override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+    GLES20.glViewport(0, 0, width, height)
+    viewportW = width
+    viewportH = height
+    displayChanged = true
+  }
+
+  override fun onDrawFrame(gl: GL10?) {
+    GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
+    val s = session ?: return
+    if (!running) return
+    if (displayChanged && viewportW > 0) { s.setDisplayGeometry(displayRotation, viewportW, viewportH); displayChanged = false }
+    if (!cameraTextureSet) { s.setCameraTextureName(background.textureId); cameraTextureSet = true }
+    val frame = try { s.update() } catch (e: Exception) { return }
+    background.draw(frame)
+
+    val camera = frame.camera
+    val now = SystemClock.elapsedRealtime()
+    tracking = camera.trackingState == TrackingState.TRACKING
+    cameraPos = M.pos(M.fromPose(camera.pose))
+    drainOps()
+
+    if (!tracking) {
+      if (now - lastHitEvent > 100) { lastHitEvent = now; emitHit(mapOf("hit" to false, "distance" to 0.0, "kind" to "none", "locked" to false)) }
+      emitTrackingIfDue(camera, now)
+      return
+    }
+
+    camera.getViewMatrix(viewM, 0)
+    camera.getProjectionMatrix(projM, 0, 0.05f, 100f)
+    Matrix.multiplyMM(viewProj, 0, projM, 0, viewM, 0)
+    heading.addFrame(-M.col(M.fromPose(camera.displayOrientedPose), 2))
+
+    updatePlanes(frame, now)
+    updateQuadPoses()
+
+    val hit = raycastCenter(frame)
+    if (hit != null) {
+      val locked = hit.kind != HitKind.ESTIMATED
+      val dist = cameraPos.distance(M.pos(hit.transform))
+      aimedPlane = hit.plane
+      if (now - lastHitEvent > 100) {
+        lastHitEvent = now
+        emitHit(mapOf("hit" to true, "distance" to dist.toDouble(), "kind" to hit.kind.js, "vertical" to hit.vertical, "locked" to locked))
+      }
+      if (spraying && now - lastTick >= 33) { lastTick = now; paintAt(hit, now) }
+    } else {
+      aimedPlane = null
+      if (now - lastHitEvent > 100) { lastHitEvent = now; emitHit(mapOf("hit" to false, "distance" to 0.0, "kind" to "none", "locked" to false)) }
+    }
+
+    for (q in quads.values) q.upload(now)
+    drawScene(hit, now)
+    emitTrackingIfDue(camera, now)
+  }
+
+  private fun drainOps() {
+    repeat(ops.size) {
+      val op = ops.poll() ?: return
+      if (op.gen < activeGeneration) return@repeat
+      if (op.needsTracking && !tracking) { ops.add(op); return@repeat }
+      val done = try { op.block() } catch (e: Exception) { Log.w(TAG, "op failed", e); true }
+      if (!done) ops.add(op)
+    }
+  }
+
+  private fun drawScene(hit: Hit?, now: Long) {
+    if (showPlanes) {
+      planeRenderer.begin()
+      for ((p, seen) in planes) {
+        if (p.trackingState != TrackingState.TRACKING || p.subsumedBy != null) continue
+        val fade = min(1f, (now - seen) / 350f)
+        val opacity = (if (p == aimedPlane) 0.55f else 0.16f) * fade
+        planeRenderer.draw(viewProj, M.fromPose(p.centerPose), p.polygon, p.type == Plane.Type.VERTICAL, opacity)
+      }
+    }
+    quadRenderer.beginPaint()
+    for (q in quads.values) if (q.placed) quadRenderer.drawPaint(viewProj, q)
+    if (hit != null) {
+      val t = hit.transform
+      val n = M.col(t, 1).normalized()
+      val scale = max(0.5f, min(3f, cameraPos.distance(M.pos(t)) / 0.8f))
+      val m = M.withPos(t, M.pos(t) + n * 0.006f)
+      for (i in 0..10) if (i % 4 != 3) m[i] *= scale
+      quadRenderer.drawReticle(viewProj, m, hit.kind != HitKind.ESTIMATED)
+    }
+  }
+
+  // ---- planes + anchors --------------------------------------------------------------------
+
+  private fun planeNormal(p: Plane) = M.col(M.fromPose(p.centerPose), 1).normalized()
+  private fun planeCenter(p: Plane) = M.pos(M.fromPose(p.centerPose))
+
+  private fun updatePlanes(frame: Frame, now: Long) {
+    for (p in frame.getUpdatedTrackables(Plane::class.java)) {
+      if (p.subsumedBy != null || p.trackingState == TrackingState.STOPPED) {
+        // merged into another plane: quads go back to "unbound" and re-adopt the survivor
+        if (planes.remove(p) != null) {
+          if (aimedPlane == p) aimedPlane = null
+          for (q in quads.values) if (q.plane == p) { q.plane = null; attachLooseToNearbyPlane(q) }
+        }
+        continue
+      }
+      if (p.trackingState != TrackingState.TRACKING) continue
+      val isNew = !planes.containsKey(p)
+      if (isNew) planes[p] = now
+      // ARCore refines a plane's depth/tilt for a while after it appears: keep our quads on it
+      for (q in quads.values) {
+        if (!q.placed) continue
+        if (q.plane == p) { if (!isNew) snap(q, p, now) } else tryAdopt(q, p, now)
+      }
+    }
+  }
+
+  private fun updateQuadPoses() {
+    for (q in quads.values) {
+      val a = q.anchor ?: continue
+      when (a.trackingState) {
+        TrackingState.TRACKING -> {
+          val m = M.fromPose(a.pose)
+          q.transform = q.anchorOffset?.let { M.mul(m, it) } ?: m
+        }
+        TrackingState.STOPPED -> { q.anchor = null }
+        else -> {}
+      }
+    }
+  }
+
+  /** (Re)anchor a quad at its current transform, on its plane when it has one. */
+  private fun anchorQuad(q: PaintQuad) {
+    val s = session ?: return
+    val pose = M.toPose(q.transform)
+    val old = q.anchor
+    q.anchor = try {
+      q.plane?.takeIf { it.trackingState == TrackingState.TRACKING }?.createAnchor(pose) ?: s.createAnchor(pose)
+    } catch (e: Exception) {
+      Log.w(TAG, "createAnchor failed", e); null
+    }
+    q.anchorOffset = null
+    if (old != null && old !== q.hostAnchor) old.detach()
+  }
+
+  /**
+   * A right-handed quad frame: Y = surface normal, X horizontal along the surface, −Z "up the wall"
+   * (so drips run down) or north for floors. Built from the normal alone, so a quad keeps its
+   * orientation when it snaps onto a plane (ARCore's in-plane plane axes are arbitrary).
+   */
+  private fun quadFrame(p: V3, normalIn: V3): M4 {
+    var y = normalIn.normalized()
+    var x: V3
+    var z: V3
+    if (abs(y.y) > 0.7f) { // floor / table: X = east
+      if (y.y < 0) y = -y
+      val east = heading.east()
+      x = (east - y * (y dot east)).normalized()
+      z = x cross y
+    } else {
+      x = (V3.UP cross y).normalized()
+      z = x cross y // points down for a wall normal → −Z is up
+      if (z.y > 0) { x = -x; z = -z }
+    }
+    return M.fromAxes(x, y, z, p)
+  }
+
+  /** Bind an estimated quad to a real plane and pull it onto that plane. */
+  private fun adopt(q: PaintQuad, plane: Plane, now: Long) {
+    q.plane = plane
+    q.loose = false
+    snap(q, plane, now, force = true)
+  }
+
+  /** Move a quad onto its plane (position projected along the normal, orientation from the plane's normal). Debounced. */
+  private fun snap(q: PaintQuad, plane: Plane, now: Long, force: Boolean = false) {
+    if (!force && now - q.lastSnap < 700) return
+    val pn = planeNormal(plane)
+    val pc = planeCenter(plane)
+    val c = q.center
+    val off = (c - pc) dot pn
+    val angle = acos((pn dot q.normal).coerceIn(-1f, 1f))
+    if (!force && abs(off) <= 0.012f && angle <= Math.toRadians(2.0).toFloat()) return
+    q.lastSnap = now
+    q.transform = quadFrame(c - pn * off, pn)
+    anchorQuad(q)
+  }
+
+  /** Quads without a real plane (estimated hits, or placed from memory) adopt a close, parallel plane. Loose quads accept a wider gap. */
+  private fun tryAdopt(q: PaintQuad, plane: Plane, now: Long): Boolean {
+    if (q.plane != null || !q.placed) return false
+    val pn = planeNormal(plane)
+    if ((pn dot q.normal) <= (if (q.loose) 0.94f else 0.97f)) return false // ~20° / ~14°
+    val pc = planeCenter(plane)
+    if (abs((q.center - pc) dot pn) >= (if (q.loose) 0.6f else 0.15f)) return false
+    // and the quad must overlap the plane's known extent (in-plane distance)
+    val l = M.transformPoint(M.invert(M.fromPose(plane.centerPose)), q.center)
+    val dx = max(0f, abs(l.x) - plane.extentX / 2)
+    val dz = max(0f, abs(l.z) - plane.extentZ / 2)
+    if (hypot(dx, dz) >= PaintQuad.SIZE_M / 2) return false
+    adopt(q, plane, now)
+    return true
+  }
+
+  private fun attachLooseToNearbyPlane(q: PaintQuad) {
+    val now = SystemClock.elapsedRealtime()
+    for (p in planes.keys) {
+      if (p.trackingState != TrackingState.TRACKING || p.subsumedBy != null) continue
+      if (tryAdopt(q, p, now)) return
+    }
+  }
+
+  // ---- hit testing -----------------------------------------------------------------------
+
+  /** Detected plane polygon first, then the extension of a known plane (so a whole wall is paintable once any patch is found), then depth / feature points. */
+  private fun raycastCenter(frame: Frame): Hit? {
+    if (viewportW == 0) return null
+    val hits = try { frame.hitTest(viewportW / 2f, viewportH / 2f) } catch (e: Exception) { return null }
+    fun usable(p: Plane, hitPos: V3) =
+      p.trackingState == TrackingState.TRACKING && p.subsumedBy == null && ((cameraPos - hitPos) dot planeNormal(p)) > 0f
+
+    for (h in hits) {
+      val p = h.trackable as? Plane ?: continue
+      val t = M.fromPose(h.hitPose)
+      if (usable(p, M.pos(t)) && p.isPoseInPolygon(h.hitPose)) return Hit(t, p, HitKind.PLANE, p.type == Plane.Type.VERTICAL || M.isVertical(t))
+    }
+    for (h in hits) {
+      val p = h.trackable as? Plane ?: continue
+      val t = M.fromPose(h.hitPose)
+      if (!usable(p, M.pos(t))) continue
+      // only trust the extension close to the part of the plane ARCore has actually seen
+      val l = M.transformPoint(M.invert(M.fromPose(p.centerPose)), M.pos(t))
+      val dx = max(0f, abs(l.x) - p.extentX / 2)
+      val dz = max(0f, abs(l.z) - p.extentZ / 2)
+      if (hypot(dx, dz) < 0.9f) return Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL)
+    }
+    for (h in hits) {
+      val tr = h.trackable
+      if (tr is DepthPoint) {
+        val t = M.fromPose(h.hitPose)
+        return Hit(t, null, HitKind.MESH, M.isVertical(t))
+      }
+      if (tr is Point && tr.orientationMode == Point.OrientationMode.ESTIMATED_SURFACE_NORMAL) {
+        val t = M.fromPose(h.hitPose)
+        return Hit(t, null, HitKind.ESTIMATED, M.isVertical(t))
+      }
+    }
+    return null
+  }
+
+  // ---- paint loop --------------------------------------------------------------------------
+
+  private fun beginStroke() {
+    lastTick = 0
+    hasLastDab = false
+    dwellSince = SystemClock.elapsedRealtime()
+    stroke = null // created lazily on first hit so the anchor is the surface we actually hit
+  }
+
+  private fun flushStroke() {
+    val s = stroke ?: return
+    stroke = null
+    val q = quads[s.quadId] ?: return
+    if (s.points.isEmpty()) return
+    q.upload(SystemClock.elapsedRealtime(), force = true)
+    emitStrokeEnd(mapOf(
+      "id" to s.id,
+      "anchorId" to q.id,
+      "transform" to M.flatten(M.mul(heading.toNorth(), q.transform)),
+      "color" to s.color,
+      "points" to s.points.toList(),
+      "viewer" to s.viewer,
+    ))
+  }
+
+  /** Pick the quad for a hit: one on the same plane containing the point, else any coplanar one, else a new one. */
+  private fun quadFor(hit: Hit, now: Long): PaintQuad {
+    val p = M.pos(hit.transform)
+    val n = M.col(hit.transform, 1).normalized()
+    hit.plane?.let { plane ->
+      for (q in quads.values) {
+        if (!q.placed || q.plane != plane) continue
+        val l = q.local(p)
+        if (q.contains(l.u, l.v)) return q
+      }
+    }
+    for (q in quads.values) {
+      if (!q.placed) continue
+      val l = q.local(p)
+      if (l.d < 0.08f && q.contains(l.u, l.v) && (n dot q.normal) > 0.95f) {
+        if (q.plane == null && hit.plane != null) adopt(q, hit.plane, now) // estimated quad meets its real wall
+        return q
+      }
+    }
+    // "paint-a-" marks quads made on Android, so each platform knows whose saved map a stroke belongs to
+    val id = "paint-a-" + UUID.randomUUID().toString().lowercase()
+    val q = PaintQuad(id, quadFrame(p, hit.plane?.let { planeNormal(it) } ?: n))
+    q.plane = hit.plane
+    quads[id] = q
+    anchorQuad(q)
+    emitSurface(mapOf("id" to id, "count" to quads.size, "kind" to hit.kind.js))
+    return q
+  }
+
+  private fun paintAt(hit: Hit, now: Long) {
+    val q = quadFor(hit, now)
+    var s = stroke
+    if (s == null || s.quadId != q.id) {
+      flushStroke()
+      val id = UUID.randomUUID().toString().lowercase()
+      val viewer = M.transformPoint(heading.toNorth(), cameraPos)
+      s = StrokeRec(id, q.id, mutableListOf(), SplitMix(id), colorHex, viewer.toList())
+      stroke = s
+    }
+    val l = q.local(M.pos(hit.transform))
+    val f = flow
+    val r = radius * (0.85f + 0.3f * f)
+    val a = 0.16f * f
+    q.dab(l.u, l.v, r, a, colorInt, s.rng)
+    s.points.add(listOf(l.u.toDouble(), l.v.toDouble(), r.toDouble(), a.toDouble(), 0.0))
+
+    // dwell → pooling drip
+    if (hasLastDab && hypot(l.u - lastDabU, l.v - lastDabV) < 0.02f) {
+      if (now - dwellSince > 1100) {
+        dwellSince = now
+        val len = (0.05 + s.rng.next() * 0.12).toFloat()
+        val dv = l.v - r * 0.3f
+        q.drip(l.u, dv, len, 0.6f * f, colorInt, s.rng)
+        s.points.add(listOf(l.u.toDouble(), dv.toDouble(), len.toDouble(), (0.6f * f).toDouble(), 1.0))
+        emitHit(mapOf("hit" to true, "distance" to 0.0, "drip" to true))
+      }
+    } else {
+      dwellSince = now
+    }
+    lastDabU = l.u; lastDabV = l.v; hasLastDab = true
+  }
+
+  // ---- remote strokes ----------------------------------------------------------------------
+
+  private class RemoteStroke(val id: String, val anchorId: String, val transform: M4, val color: Int, val points: List<FloatArray>, val viewer: V3?)
+
+  private fun parseStroke(m: Map<String, Any?>): RemoteStroke? {
+    val id = m["id"] as? String ?: return null
+    val anchorId = m["anchorId"] as? String ?: return null
+    val tf = M.unflatten(m["transform"]) ?: return null
+    val hex = (m["color"] as? String)?.trim()?.removePrefix("#") ?: return null
+    val color = hex.takeIf { it.length == 6 }?.toLongOrNull(16)?.let { Color.rgb(((it shr 16) and 0xff).toInt(), ((it shr 8) and 0xff).toInt(), (it and 0xff).toInt()) } ?: Color.rgb(255, 0, 255)
+    val pts = (m["points"] as? List<*>)?.mapNotNull { p -> (p as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }?.toFloatArray()?.takeIf { it.size >= 4 } } ?: return null
+    val viewer = (m["viewer"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }?.takeIf { it.size == 3 }?.let { V3(it[0], it[1], it[2]) }
+    return RemoteStroke(id, anchorId, tf, color, pts, viewer)
+  }
+
+  /**
+   * mode "absolute": transforms are in the frame of the loaded map (aligned once one of its anchors
+   * resolves) or, with no map, this session's own north frame. mode "relative": no shared map —
+   * place each quad at its offset from where the painter stood, relative to the camera now (valid
+   * because both frames are north-aligned); real planes then pull it in.
+   */
+  private fun placeRemote(strokes: List<RemoteStroke>, mode: String) {
+    val now = SystemClock.elapsedRealtime()
+    val fromNorth = heading.fromNorth()
+    val camNorth = M.transformPoint(heading.toNorth(), cameraPos)
+    for (s in strokes) {
+      var q = quads[s.anchorId]
+      if (q == null) {
+        when {
+          mode == "relative" -> {
+            val viewer = s.viewer ?: continue
+            val placedNorth = M.withPos(s.transform, camNorth + (M.pos(s.transform) - viewer))
+            q = PaintQuad(s.anchorId, M.mul(fromNorth, placedNorth)).also { it.loose = true }
+          }
+          mapState == MapState.RESOLVING && mapAlignment == null -> {
+            // part of the piece being resolved, but not in the saved map: place it when the map aligns
+            q = PaintQuad(s.anchorId, M.identity()).also { it.placed = false; it.savedNorth = s.transform }
+          }
+          mapAlignment != null -> q = PaintQuad(s.anchorId, M.mul(mapAlignment!!, s.transform)).also { it.loose = true }
+          else -> q = PaintQuad(s.anchorId, M.mul(fromNorth, s.transform))
+        }
+        quads[s.anchorId] = q
+        if (q.placed) { anchorQuad(q); if (q.loose) attachLooseToNearbyPlane(q) }
+      }
+      val rng = SplitMix(s.id)
+      for (p in s.points) {
+        val kind = if (p.size > 4) p[4] else 0f
+        if (kind == 1f) { rng.next(); q.drip(p[0], p[1], p[2], p[3], s.color, rng) } else q.dab(p[0], p[1], p[2], p[3], s.color, rng)
+      }
+      q.upload(now, force = true)
+    }
+  }
+
+  // ---- Cloud Anchor "world map" ------------------------------------------------------------
+
+  private fun loadMap(entries: List<WorldMapFile.Entry>, g: Int) {
+    resetState()
+    val s = session ?: return
+    for (e in entries) {
+      val q = PaintQuad(e.id, M.identity())
+      q.placed = false
+      q.savedNorth = e.north
+      q.savedOffset = e.offset
+      q.cloudId = e.cloudId
+      quads[e.id] = q
+      val cloudId = e.cloudId ?: continue
+      if (!cloudEnabled) continue
+      try {
+        pendingResolves++
+        resolveFutures.add(s.resolveCloudAnchorAsync(cloudId) { anchor, state ->
+          enqueue(needsTracking = false, gen = g) { onResolved(e.id, anchor, state == Anchor.CloudAnchorState.SUCCESS); true }
+        })
+      } catch (ex: Exception) {
+        pendingResolves--
+        Log.w(TAG, "resolve failed to start", ex)
+      }
+    }
+    if (pendingResolves == 0) {
+      mapState = MapState.FAILED
+      emitTracking(mapOf("state" to "mapLoadFailed"))
+      return
+    }
+    mapState = MapState.RESOLVING
+    emitTracking(mapOf("state" to "mapLoaded", "anchors" to entries.size))
+  }
+
+  private fun onResolved(id: String, anchor: Anchor?, ok: Boolean) {
+    pendingResolves--
+    val q = quads[id]
+    if (ok && anchor != null && q != null) {
+      if (q.anchor != null && q.anchor !== q.hostAnchor) q.anchor?.detach() // provisional placement
+      q.hostAnchor = anchor
+      q.anchor = anchor
+      q.anchorOffset = q.savedOffset ?: M.identity()
+      q.transform = M.mul(M.fromPose(anchor.pose), q.anchorOffset!!)
+      q.loose = false
+      q.placed = true
+      val saved = q.savedNorth
+      if (mapAlignment == null && saved != null) {
+        mapAlignment = M.mul(q.transform, M.invert(saved))
+        placePendingWithAlignment()
+      }
+      mapState = MapState.RESOLVED
+      attachLooseToNearbyPlane(q)
+      emitSurface(mapOf("id" to id, "count" to quads.size, "restored" to true))
+    } else {
+      anchor?.detach()
+    }
+    if (pendingResolves <= 0 && mapState == MapState.RESOLVING) {
+      mapState = MapState.FAILED
+      emitTracking(mapOf("state" to "mapLoadFailed"))
+    }
+  }
+
+  /** The first resolved anchor tells us how the saved frame sits in ours: place everything still waiting. */
+  private fun placePendingWithAlignment() {
+    val align = mapAlignment ?: return
+    for (q in quads.values) {
+      val saved = q.savedNorth ?: continue
+      if (q.placed) continue
+      q.transform = M.mul(align, saved)
+      q.placed = true
+      q.loose = true
+      anchorQuad(q)
+      attachLooseToNearbyPlane(q)
+    }
+  }
+
+  private fun hostUnhostedQuads() {
+    val s = session ?: return
+    val g = generation.get()
+    for (q in quads.values) {
+      if (!q.placed || q.cloudId != null || q.hosting != null) continue
+      try {
+        val host = s.createAnchor(M.toPose(q.transform))
+        if (q.hostAnchor != null && q.hostAnchor !== q.anchor) q.hostAnchor?.detach()
+        q.hostAnchor = host
+        q.hosting = s.hostCloudAnchorAsync(host, HOST_TTL_DAYS) { cloudId, state ->
+          enqueue(needsTracking = false, gen = g) {
+            q.hosting = null
+            if (state == Anchor.CloudAnchorState.SUCCESS && cloudId != null) q.cloudId = cloudId
+            else { Log.w(TAG, "hosting ${q.id} failed: $state"); if (q.hostAnchor !== q.anchor) q.hostAnchor?.detach(); q.hostAnchor = null }
+            true
+          }
+        }
+      } catch (e: Exception) {
+        Log.w(TAG, "hosting ${q.id} failed to start", e)
+      }
+    }
+  }
+
+  private fun finishSave(path: String, promise: Promise) {
+    val toNorth = heading.toNorth()
+    val entries = quads.values.filter { it.placed }.map { q ->
+      val host = q.hostAnchor
+      val offset = if (q.cloudId != null && host != null && host.trackingState == TrackingState.TRACKING) {
+        M.mul(M.invert(M.fromPose(host.pose)), q.transform)
+      } else if (q.cloudId != null) q.anchorOffset ?: q.savedOffset else null
+      WorldMapFile.Entry(q.id, if (offset != null) q.cloudId else null, offset, M.mul(toNorth, q.transform))
+    }
+    val hosted = entries.count { it.cloudId != null }
+    if (hosted == 0) return promise.reject("E_WORLDMAP", "No Cloud Anchors could be hosted (scan the wall a little longer)", null)
+    Thread {
+      try {
+        val bytes = WorldMapFile.write(path, entries)
+        promise.resolve(mapOf("bytes" to bytes, "anchors" to hosted))
+      } catch (e: Exception) {
+        promise.reject("E_WORLDMAP", e.message ?: "write failed", e)
+      }
+    }.start()
+  }
+
+  // ---- events ------------------------------------------------------------------------------
+
+  private fun emitTrackingIfDue(camera: Camera, now: Long) {
+    if (now - lastTrackingEvent < 500) return
+    var state = "normal"
+    var reason = ""
+    when (camera.trackingState) {
+      TrackingState.STOPPED -> state = "notAvailable"
+      TrackingState.PAUSED -> {
+        state = "limited"
+        reason = when (camera.trackingFailureReason) {
+          TrackingFailureReason.NONE -> "initializing"
+          TrackingFailureReason.EXCESSIVE_MOTION -> "excessiveMotion"
+          TrackingFailureReason.INSUFFICIENT_FEATURES -> "insufficientFeatures"
+          TrackingFailureReason.INSUFFICIENT_LIGHT -> "insufficientLight"
+          TrackingFailureReason.CAMERA_UNAVAILABLE -> "cameraUnavailable"
+          else -> "unknown"
+        }
+      }
+      else -> if (mapState == MapState.RESOLVING) { state = "limited"; reason = "relocalizing" }
+    }
+    var mapping = ""
+    if (cloudEnabled && camera.trackingState == TrackingState.TRACKING) {
+      mapping = try {
+        when (session?.estimateFeatureMapQualityForHosting(camera.pose)) {
+          Session.FeatureMapQuality.GOOD -> "mapped"
+          Session.FeatureMapQuality.SUFFICIENT -> "extending"
+          Session.FeatureMapQuality.INSUFFICIENT -> "limited"
+          else -> "unknown"
+        }
+      } catch (_: Exception) { "" }
+    }
+    val key = state + reason + mapping
+    if (key == lastTrackingKey && now - lastTrackingEvent < 2000) return
+    lastTrackingKey = key
+    lastTrackingEvent = now
+    val planeCount = planes.keys.count { it.trackingState == TrackingState.TRACKING && it.subsumedBy == null }
+    emitTracking(mapOf(
+      "state" to state, "reason" to reason, "mapping" to mapping, "planes" to planeCount, "surfaces" to quads.size,
+      "lidar" to false, "depth" to depthEnabled, "heading" to if (heading.locked) "ready" else "calibrating",
+    ))
+  }
+
+  private fun emitTracking(body: Map<String, Any>) = main.post { if (!destroyed) onTracking(body) }
+  private fun emitHit(body: Map<String, Any>) = main.post { if (!destroyed) onHit(body) }
+  private fun emitStrokeEnd(body: Map<String, Any>) = main.post { if (!destroyed) onStrokeEnd(body) }
+  private fun emitSurface(body: Map<String, Any>) = main.post { if (!destroyed) onSurface(body) }
+}

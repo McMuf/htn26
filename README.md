@@ -2,11 +2,14 @@
 
 Aim your phone like a spray can, **hold to spray** (on-screen buttons or the volume rocker), and
 your paint stays on that spot for everyone who walks up to it later. Built for Hack the North
-(36h MVP), Expo SDK 57, iOS dev build. Bundle id / package names still say `tagged`.
+(36h MVP), Expo SDK 57, iOS dev build, with an Android build on the same codebase. Bundle id /
+package names still say `tagged`.
 
 ## Three surfaces, one wall
 
 - **iPhone app** (this repo root): ARKit surface painting, glass dock shell, widget.
+- **Android app** (same code): ARCore surface painting — see [Android](#android-galaxy-s25) and
+  `deploy.md`. No widget.
 - **Companion site** (`web/`, live at **https://tagged-web.vercel.app**): judge-facing, read-only.
   `/` landing + globe, `/world` live map of Waterloo with every canvas's paint rendered as its
   marker (realtime), `/gallery` trending pieces + leaderboard. Same Supabase project.
@@ -36,8 +39,9 @@ Cut this pass: Market tab, social auth, 360° viewer, friends backend, a texture
 ```sh
 npm install
 # 1) backend: paste supabase/schema.sql, then supabase/seed.sql, into the Supabase SQL editor
-# 2) native build onto your iPhone (once; later changes are JS-only):
+# 2) native build onto your phone (once; later changes are JS-only):
 npx expo run:ios --device          # or: eas build --profile development --platform ios
+npx expo run:android --device      # Android: no paid account, no Mac — see deploy.md
 # 3) dev server (any port; the dev client asks for the URL / scans the QR):
 npx expo start --dev-client
 ```
@@ -60,6 +64,25 @@ across a wall (hiss + haptics, paint meter drains) → hold **VOL−** for the s
 dwell on one spot to pool and drip → paint runs low (hollow rattle) → walk toward a seeded
 piece near E7 → shimmer/edge arrow pulls you in → it resolves from a smear into a piece →
 "YOU FOUND A PIECE by …", views tick up → BOARD tab shows the leaderboard.
+
+## Android (Galaxy S25)
+
+`modules/ar-paint` has an ARCore implementation (Kotlin + GLES) behind the same module interface,
+so every screen, the spray model and the stroke format are shared. Per-platform differences:
+
+| | iPhone | Android |
+|---|---|---|
+| surfaces | ARKit planes (+ LiDAR mesh on Pro) | ARCore planes + Depth API (depth-from-motion on the S25) |
+| world frame | ARKit `gravityAndHeading` gives true north | recovered by averaging the compass against ARCore's yaw for ~2 s, then locked (a few degrees of error) |
+| saved piece | `ARWorldMap` in Supabase Storage | Cloud Anchors + a JSON index (`<canvas>.arcore.json`), needs an ARCore API key; without one, pieces come back "placed from memory" |
+| volume trigger | inferred from volume changes (~0.4 s release lag) | real key events, swallowed while painting (no volume panel) |
+| widgets | WidgetKit | — |
+| glass panels | live blur | denser tint (expo-blur needs a blur target on Android) |
+
+Each platform relocalises only against its own saved maps and places the other platform's strokes
+from the painter's viewpoint, so paint is shared between an iPhone and an S25 at metres-then-snap
+accuracy rather than exactly. Android quads are named `paint-a-…` so both clients can tell whose
+frame a stroke belongs to. Setup steps (phone, API key, EAS) are in `deploy.md`.
 
 ## AR approach: real surfaces with ARKit (and a compass fallback)
 

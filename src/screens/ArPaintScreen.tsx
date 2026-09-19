@@ -1,8 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useKeepAwake } from 'expo-keep-awake';
+import { useCameraPermissions } from 'expo-camera';
 import { Paths } from 'expo-file-system';
-import { ArPaintView, hasLidar, type ArHitEvent, type ArPaintViewRef, type ArStroke, type ArTrackingEvent, type HitKind } from '../../modules/ar-paint';
+import {
+  ArPaintView, arPlatform, hasCloudAnchors, hasLidar, strokePlatform, worldMapExtension,
+  type ArHitEvent, type ArPaintViewRef, type ArStroke, type ArTrackingEvent, type HitKind,
+} from '../../modules/ar-paint';
 import { usePose } from '../hooks/usePose';
 import { PaintLayer } from '../paint/PaintLayer';
 import { useArSpray } from '../hooks/useArSpray';
@@ -11,11 +15,12 @@ import { useDiscovery } from '../hooks/useDiscovery';
 import { BlockerBanner, CanMeter, HoldButtons, PaintMeters } from '../components/HUD';
 import { DiscoveryOverlay } from '../components/DiscoveryOverlay';
 import { useStore } from '../store';
-import { downloadWorldMap, incrementViews, onRemoteStroke, reportCanvas, uploadWorldMap } from '../data/sync';
+import { downloadWorldMap, incrementViews, onRemoteStroke, reportCanvas, uploadWorldMap, worldMapUsable } from '../data/sync';
 import { CANVAS_JOIN_RADIUS_M } from '../config';
 import { haversineM } from '../lib/geo';
 import type { Blocker } from '../hooks/useSprayEngine';
 import type { Canvas, Stroke } from '../types';
+import { DOCK_TOP } from '../ui/theme';
 
 /**
  * AR APPROACH — real surfaces via ARKit (rung 1 of the ladder), in a small custom Expo module
@@ -36,6 +41,9 @@ import type { Canvas, Stroke } from '../types';
  * across tabs and resumes (not resets) the session, so paint keeps its world pose. Restart: the
  * saved ARWorldMap relocalises the anchors; if that fails within RELOC_TIMEOUT_MS, strokes are
  * placed from where the painter stood relative to the camera now, then snapped to detected planes.
+ * ANDROID: the same screen drives an ARCore twin of the view (modules/ar-paint/android). Its saved
+ * "map" is a list of Cloud Anchors rather than an ARWorldMap; each platform only relocalises
+ * against its own maps and places the other platform's strokes from the painter's viewpoint.
  */
 const RELOC_TIMEOUT_MS = 15000;
 
@@ -63,14 +71,24 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const [mapState, setMapState] = useState<'none' | 'loading' | 'relocalizing' | 'resolved' | 'approx'>('none');
   const [hitInfo, setHitInfo] = useState<{ kind: HitKind; vertical: boolean; locked: boolean }>({ kind: 'none', vertical: false, locked: false });
   const relocTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const otherPlatformStrokes = useRef<ArStroke[]>([]); // placed from memory once the loaded map resolves
+
+  // ARKit prompts for the camera itself; ARCore needs the permission before the session can start.
+  const [camPerm, requestCam] = useCameraPermissions();
+  useEffect(() => {
+    if (Platform.OS === 'android' && active && camPerm && !camPerm.granted && camPerm.canAskAgain) requestCam();
+  }, [active, camPerm?.granted]);
 
   const scheduleMapSave = useCallback(() => {
+    // Android without an ARCore API key has no Cloud Anchors: strokes alone (placed from memory) it is
+    if (arPlatform === 'arcore' && !hasCloudAnchors) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       const c = engineRef.current?.activeCanvas.current;
       if (!c || !viewRef.current) return;
+      if (c.world_map_path && !worldMapUsable(c)) return; // the other platform's map owns this canvas
       try {
-        const path = `${Paths.cache.uri.replace('file://', '')}/${c.id}.arworldmap`;
+        const path = `${Paths.cache.uri.replace('file://', '')}/${c.id}${worldMapExtension}`;
         await viewRef.current.saveWorldMap(path);
         await uploadWorldMap(c.id, path);
       } catch (e) { console.warn('world map save failed', e); }
@@ -79,8 +97,8 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
 
   const engine = useArSpray(pose, { onStrokeSaved: () => { paintedThisSession.current = true; scheduleMapSave(); } });
   engineRef.current = engine;
-  // canvases with a world map resolve by relocalisation; web-made canvases (no map) resolve by proximity
-  const discovery = useDiscovery(pose, (c) => !c.world_map_path);
+  // canvases with a world map we can use resolve by relocalisation; the rest (web-made, or the other platform's map) by proximity
+  const discovery = useDiscovery(pose, (c) => !worldMapUsable(c));
 
   useVolumeTrigger(settings.volumeButtons && active, { onHoldStart: engine.start, onHoldEnd: engine.end });
   useEffect(() => { if (!active && engine.held.current) engine.end(engine.held.current); }, [active]);
@@ -95,7 +113,7 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
       if (c.flagged || failedMaps.current.has(c.id)) continue;
       const d = haversineM(location.lat, location.lng, c.lat, c.lng);
       if (d >= CANVAS_JOIN_RADIUS_M) continue;
-      if (c.world_map_path) { if (d < bestD) { best = c; bestD = d; } }
+      if (worldMapUsable(c)) { if (d < bestD) { best = c; bestD = d; } }
       else if ((st.strokes[c.id] ?? []).some((s) => s.anchor_id && s.viewer) && d < approxD) { approx = c; approxD = d; }
     }
     if (best) {
@@ -111,7 +129,10 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     const c = engine.activeCanvas.current;
     if (!c || s.canvas_id !== c.id || !s.anchor_id || !s.transform) return;
     if (s.author_id && s.author_id === painter?.id) return;
-    viewRef.current?.addStrokes([{ id: s.id, anchorId: s.anchor_id, transform: s.transform, color: s.color, points: s.points as number[][] }]).catch(() => {});
+    const stroke = { id: s.id, anchorId: s.anchor_id, transform: s.transform, color: s.color, points: s.points as number[][], viewer: s.viewer ?? undefined };
+    // a stroke from the other platform is in a frame we can't share: place it from the painter's viewpoint
+    if (strokePlatform(s.anchor_id) !== arPlatform) { if (s.viewer) viewRef.current?.addStrokes([stroke], 'relative').catch(() => {}); return; }
+    viewRef.current?.addStrokes([stroke]).catch(() => {});
   }), [painter?.id]);
 
   const arStrokes = (c: Canvas | null) => (c ? (useStore.getState().strokes[c.id] ?? []).filter((s) => s.anchor_id && s.transform) : [])
@@ -140,7 +161,9 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     const ev = e.nativeEvent;
     if (ev.state === 'mapLoaded') {
       setMapState('relocalizing');
-      const strokes = arStrokes(mapCanvas.current);
+      const all = arStrokes(mapCanvas.current);
+      const strokes = all.filter((s) => strokePlatform(s.anchorId) === arPlatform);
+      otherPlatformStrokes.current = all.filter((s) => strokePlatform(s.anchorId) !== arPlatform && s.viewer);
       if (strokes.length) viewRef.current?.addStrokes(strokes, 'absolute').catch(() => {});
       if (relocTimer.current) clearTimeout(relocTimer.current);
       relocTimer.current = setTimeout(() => {
@@ -154,6 +177,10 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     if (ev.state === 'normal' && mapCanvas.current && mapState === 'relocalizing') {
       if (relocTimer.current) { clearTimeout(relocTimer.current); relocTimer.current = null; }
       setMapState('resolved');
+      if (otherPlatformStrokes.current.length) {
+        viewRef.current?.addStrokes(otherPlatformStrokes.current, 'relative').catch(() => {});
+        otherPlatformStrokes.current = [];
+      }
       const c = mapCanvas.current;
       const st = useStore.getState();
       if (!st.discovered[c.id] && c.author_id !== st.painter?.id) {
@@ -195,7 +222,7 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const mapText = mapState === 'loading' ? 'loading piece…' : mapState === 'relocalizing' ? 'look around to resolve the piece' : mapState === 'resolved' ? 'piece resolved' : mapState === 'approx' ? 'piece placed from memory · walk to where it was painted' : '';
   const aimingAtNothing = engine.native.spraying && !engine.hit.current;
   const lock = hitInfo.kind === 'none' ? { text: 'AIM AT A WALL OR FLOOR', color: '#ff5c1a' }
-    : hitInfo.locked ? { text: `${hitInfo.vertical ? 'WALL' : 'FLOOR'} LOCKED${hitInfo.kind === 'extended' ? ' · edge' : hitInfo.kind === 'mesh' ? ' · lidar' : ''}`, color: hitInfo.vertical ? '#19e6ff' : '#7cff3a' }
+    : hitInfo.locked ? { text: `${hitInfo.vertical ? 'WALL' : 'FLOOR'} LOCKED${hitInfo.kind === 'extended' ? ' · edge' : hitInfo.kind === 'mesh' ? (arPlatform === 'arcore' ? ' · depth' : ' · lidar') : ''}`, color: hitInfo.vertical ? '#19e6ff' : '#7cff3a' }
     : { text: 'FINDING SURFACE… move the phone slowly', color: '#ffe600' };
 
   return (
@@ -239,7 +266,7 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
       </View>
       <View style={styles.debug} pointerEvents="none">
         <Text style={styles.debugText}>
-          planes {tracking.planes ?? 0} · quads {surfaces} · {hasLidar ? 'lidar' : 'no lidar'} · hit {hitInfo.kind} · held {ui.held} · block {ui.blocker ?? '-'} · gps {location ? `±${Math.round(location.accuracy)}m` : '…'} · map {tracking.mapping || '-'}
+          planes {tracking.planes ?? 0} · quads {surfaces} · {arPlatform === 'arcore' ? `${tracking.depth ? 'depth' : 'no depth'} · compass ${tracking.heading ?? '…'}` : hasLidar ? 'lidar' : 'no lidar'} · hit {hitInfo.kind} · held {ui.held} · block {ui.blocker ?? '-'} · gps {location ? `±${Math.round(location.accuracy)}m` : '…'} · map {tracking.mapping || '-'}
         </Text>
       </View>
     </View>
@@ -260,6 +287,6 @@ const styles = StyleSheet.create({
   lock: { position: 'absolute', top: '36%', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#000a', borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
   lockDot: { width: 8, height: 8, borderRadius: 4 },
   lockText: { fontWeight: '900', fontSize: 11, letterSpacing: 1.5 },
-  hint: { position: 'absolute', bottom: 194, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
+  hint: { position: 'absolute', bottom: DOCK_TOP + 94, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
   hintText: { color: '#ffffffcc', fontSize: 11 },
 });

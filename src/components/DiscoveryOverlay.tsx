@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import type { Discovery } from '../hooks/useDiscovery';
 import { useStore } from '../store';
+import { DOCK_TOP } from '../ui/theme';
 
 /**
  * The reveal. A shimmer pulls your eye toward an undiscovered piece (edge arrow when it's off
@@ -104,10 +105,10 @@ const styles = StyleSheet.create({
   edgeText: { color: '#fff', fontSize: 30, fontWeight: '900', marginTop: -4 },
   pullChip: { position: 'absolute', top: 70, alignSelf: 'center', backgroundColor: '#000a', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16 },
   pullText: { color: '#ffe600', fontWeight: '700', fontSize: 12 },
-  focusChip: { position: 'absolute', bottom: 190, alignSelf: 'center', backgroundColor: '#000a', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, flexDirection: 'row', gap: 12, alignItems: 'center' },
+  focusChip: { position: 'absolute', bottom: DOCK_TOP + 90, alignSelf: 'center', backgroundColor: '#000a', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, flexDirection: 'row', gap: 12, alignItems: 'center' },
   focusText: { color: '#fff', fontWeight: '600', fontSize: 12 },
   report: { color: '#ff5c1a', fontSize: 11, fontWeight: '700' },
-  card: { position: 'absolute', bottom: 190, left: 24, right: 24, backgroundColor: '#0b0b0fee', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#ffe60088', shadowColor: '#ffe600', shadowRadius: 18, shadowOffset: { width: 0, height: 0 } },
+  card: { position: 'absolute', bottom: DOCK_TOP + 90, left: 24, right: 24, backgroundColor: '#0b0b0fee', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#ffe60088', shadowColor: '#ffe600', shadowRadius: 18, shadowOffset: { width: 0, height: 0 } },
   cardEyebrow: { color: '#ffe600', fontWeight: '900', fontSize: 11, letterSpacing: 2 },
   cardTitle: { color: '#fff', fontWeight: '900', fontSize: 24, marginTop: 4 },
   cardMeta: { color: '#ffffffaa', marginTop: 4, marginBottom: 8 },

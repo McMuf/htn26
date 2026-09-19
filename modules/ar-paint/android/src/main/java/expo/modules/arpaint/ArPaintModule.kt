@@ -1,0 +1,51 @@
+package expo.modules.arpaint
+
+import android.os.Handler
+import android.os.Looper
+import expo.modules.kotlin.Promise
+import expo.modules.kotlin.modules.Module
+import expo.modules.kotlin.modules.ModuleDefinition
+
+class ArPaintModule : Module() {
+  private val main = Handler(Looper.getMainLooper())
+  private val volumeKeys = VolumeKeys { key, down ->
+    sendEvent("onVolumeKey", mapOf("key" to key, "action" to if (down) "down" else "up"))
+  }
+
+  override fun definition() = ModuleDefinition {
+    Name("ArPaint")
+
+    Constant("isSupported") { appContext.reactContext?.let { ArSupport.isSupported(it) } ?: false }
+    Constant("hasLidar") { false }
+    Constant("platform") { "arcore" }
+    Constant("cloudAnchors") { appContext.reactContext?.let { ArSupport.hasCloudAnchorKey(it) } ?: false }
+
+    Events("onVolumeKey")
+
+    Function("setVolumeKeysIntercepted") { enabled: Boolean ->
+      main.post { volumeKeys.setEnabled(appContext.currentActivity, enabled) }
+    }
+
+    OnActivityEntersBackground { main.post { volumeKeys.releaseAll() } }
+
+    View(ArPaintView::class) {
+      Events("onTracking", "onHit", "onStrokeEnd", "onSurface")
+
+      Prop("spraying") { view: ArPaintView, value: Boolean -> view.setSpraying(value) }
+      Prop("paintColor") { view: ArPaintView, value: String -> view.setPaintColor(value) }
+      Prop("radius") { view: ArPaintView, value: Double -> view.radius = value.toFloat() }
+      Prop("flow") { view: ArPaintView, value: Double -> view.flow = value.toFloat() }
+      Prop("showPlanes") { view: ArPaintView, value: Boolean -> view.showPlanes = value }
+      Prop("worldMapPath") { view: ArPaintView, value: String? -> view.setWorldMapPath(value) }
+
+      AsyncFunction("saveWorldMap") { view: ArPaintView, path: String, promise: Promise -> view.saveWorldMap(path, promise) }
+      AsyncFunction("addStrokes") { view: ArPaintView, strokes: List<Map<String, Any?>>, mode: String? ->
+        view.addRemoteStrokes(strokes, mode ?: "absolute")
+      }
+      AsyncFunction("clearAll") { view: ArPaintView -> view.clearAll() }
+      AsyncFunction("resetSession") { view: ArPaintView -> view.resetSession() }
+
+      OnViewDestroys { view -> view.destroy() }
+    }
+  }
+}

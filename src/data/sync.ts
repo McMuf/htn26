@@ -4,6 +4,7 @@ import { NEARBY_FETCH_RADIUS_M } from '../config';
 import { useStore } from '../store';
 import { getWall } from '../paint/Wall';
 import { File, Paths } from 'expo-file-system';
+import { arPlatform, worldMapExtension, worldMapPlatform } from '../../modules/ar-paint';
 import type { Canvas, Painter, Stroke } from '../types';
 
 /**
@@ -213,13 +214,24 @@ export async function fetchPreviewStrokes(ids: string[]) {
 function isLocalId(id: string | null) { return !id || id.startsWith('local-'); }
 
 // ---- AR world maps (Supabase Storage bucket "worldmaps") ---------------------------------
+// iPhone saves an ARWorldMap ("<canvas>.arworldmap"); Android saves its Cloud Anchor list
+// ("<canvas>.arcore.json"). Each platform can only relocalise against its own kind.
+
+/** This device can relocalise against the canvas's saved map. */
+export function worldMapUsable(c: Canvas) {
+  return !!c.world_map_path && !!arPlatform && worldMapPlatform(c.world_map_path) === arPlatform;
+}
 
 export async function uploadWorldMap(canvasId: string, localPath: string) {
   if (!hasBackend) return null;
+  // first platform to save a map owns the canvas's map pointer: don't replace the other kind
+  const existing = useStore.getState().canvases[canvasId];
+  if (existing?.world_map_path && !worldMapUsable(existing)) return null;
   try {
     const buf = await new File(localPath).arrayBuffer();
-    const objectPath = `${canvasId}.arworldmap`;
-    const { error } = await supabase.storage.from('worldmaps').upload(objectPath, buf, { upsert: true, contentType: 'application/octet-stream' });
+    const objectPath = `${canvasId}${worldMapExtension}`;
+    const contentType = arPlatform === 'arcore' ? 'application/json' : 'application/octet-stream';
+    const { error } = await supabase.storage.from('worldmaps').upload(objectPath, buf, { upsert: true, contentType });
     if (error) throw error;
     const now = new Date().toISOString();
     const { error: e2 } = await supabase.rpc('set_world_map', { cid: canvasId, path: objectPath });
@@ -235,11 +247,11 @@ export async function uploadWorldMap(canvasId: string, localPath: string) {
 
 /** Downloads the canvas's world map to the cache and returns its local path (null if none). */
 export async function downloadWorldMap(c: Canvas): Promise<string | null> {
-  if (!hasBackend || !c.world_map_path) return null;
+  if (!hasBackend || !c.world_map_path || !worldMapUsable(c)) return null;
   try {
     const { data } = supabase.storage.from('worldmaps').getPublicUrl(c.world_map_path);
     const stamp = (c.world_map_updated_at ?? '').replace(/[^0-9]/g, '');
-    const dest = new File(Paths.cache, `${c.id}-${stamp}.arworldmap`);
+    const dest = new File(Paths.cache, `${c.id}-${stamp}${worldMapExtension}`);
     if (dest.exists) return dest.uri.replace('file://', '');
     const f = await File.downloadFileAsync(data.publicUrl + `?v=${stamp}`, dest);
     return f.uri.replace('file://', '');

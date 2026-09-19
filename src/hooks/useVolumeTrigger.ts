@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { VolumeManager } from 'react-native-volume-manager';
+import { volumeKeys } from '../../modules/ar-paint';
 import { VOLUME_BASELINE, VOLUME_HOLD_TIMEOUT_MS } from '../config';
 import { useStore, type Side } from '../store';
 
@@ -13,6 +14,9 @@ import { useStore, type Side } from '../store';
  * iOS auto-repeats volume changes while the button is HELD, so "held" = events keep arriving;
  * "released" = no event for VOLUME_HOLD_TIMEOUT_MS. That gives instant press-on and ~0.4s
  * release latency, which reads as a nozzle letting go.
+ *
+ * Android delivers real key events, so there the native module swallows VOL± while this is
+ * enabled (no volume panel, no volume change) and reports exact press and release.
  */
 export function useVolumeTrigger(
   enabled: boolean,
@@ -23,6 +27,29 @@ export function useVolumeTrigger(
 
   useEffect(() => {
     if (!enabled || Platform.OS === 'web') return;
+    if (Platform.OS === 'android' && volumeKeys) {
+      const keys = volumeKeys;
+      let down: Side | null = null;
+      keys.setIntercepted(true);
+      const sub = keys.addListener(({ key, action }) => {
+        const dbg = useStore.getState().debug;
+        useStore.getState().setDebug({ volEvents: dbg.volEvents + 1 });
+        const side: Side = key === 'up' ? 'A' : 'B';
+        if (action === 'down') {
+          if (down && down !== side) h.current.onHoldEnd(down);
+          down = side;
+          h.current.onHoldStart(side);
+        } else if (down === side) {
+          down = null;
+          h.current.onHoldEnd(side);
+        }
+      });
+      return () => {
+        sub.remove();
+        keys.setIntercepted(false);
+        if (down) { const s = down; down = null; h.current.onHoldEnd(s); }
+      };
+    }
     let held: Side | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;

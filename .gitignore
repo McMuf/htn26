@@ -46,3 +46,8 @@ yarn-error.*
 
 # playwright
 .playwright-mcp/
+
+# local module build output
+modules/*/android/build/
+modules/*/android/.gradle/
+modules/*/android/.cxx/

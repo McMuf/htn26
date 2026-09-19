@@ -88,7 +88,9 @@
         }
       ],
       "expo-dev-client",
-      "@bacons/apple-targets"
+      "@bacons/apple-targets",
+      "expo-sharing",
+      "./modules/ar-paint/app.plugin.js"
     ],
     "extra": {
       "eas": {

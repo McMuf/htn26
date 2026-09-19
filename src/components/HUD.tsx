@@ -4,6 +4,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSeq
 import { PAINT_MAX, SHAKE_MIN_TO_SPRAY } from '../config';
 import { useStore, type Side } from '../store';
 import type { Blocker } from '../hooks/useSprayEngine';
+import { DOCK_TOP } from '../ui/theme';
 
 export function Reticle({ spraying }: { spraying: boolean }) {
   const pulse = useSharedValue(1);
@@ -127,7 +128,7 @@ const styles = StyleSheet.create({
   canLabel: { color: '#fff', fontSize: 10, fontWeight: '800', marginTop: 6 },
   banner: { position: 'absolute', top: '58%', alignSelf: 'center', backgroundColor: '#000a', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   bannerText: { color: '#fff', fontWeight: '700' },
-  holdRow: { position: 'absolute', bottom: 112, left: 16, right: 16, flexDirection: 'row', justifyContent: 'center', gap: 12 },
+  holdRow: { position: 'absolute', bottom: DOCK_TOP + 12, left: 16, right: 16, flexDirection: 'row', justifyContent: 'center', gap: 12 },
   holdBtn: { flex: 1, height: 72, borderRadius: 36, borderWidth: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, overflow: 'hidden' },
   holdFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
   holdDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#fff' },
