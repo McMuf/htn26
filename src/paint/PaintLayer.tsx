@@ -3,7 +3,6 @@ import { StyleSheet, useWindowDimensions } from 'react-native';
 import { Blur, Canvas, Group, Image } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { WALL_PITCH_RANGE, WALL_PX_PER_DEG, WALL_YAW_RANGE } from '../config';
-import { wrapDiff } from '../lib/geo';
 import { getWall, WALL_H, WALL_W } from './Wall';
 import { useStore } from '../store';
 
@@ -75,5 +74,3 @@ function wrapDiffW(a: number, b: number) {
   'worklet';
   return ((((a - b + 180) % 360) + 360) % 360) - 180;
 }
-// keep the JS helper referenced for parity with the worklet version
-void wrapDiff;
