@@ -26,7 +26,7 @@ your paint stays on that spot for everyone who walks up to it later. Built for H
 | Social: stat card → share sheet | **real** (view snapshot → PNG → iOS share sheet). Friends / activity lists = **stubs** in `src/data/mock.ts` |
 | Vault: grid of your pieces + detail (render, location, stats) | **real**; "photo" = a re-render of the strokes, there is no camera capture. No 360° viewer |
 | Settings | real toggles; About section static |
-| Widget (medium): paint gauges + refill countdown + streak + can charge | **real** (`targets/widget`, App Group). Countdown assumes the in-app regen rate; paint only regenerates while the app is open |
+| Widgets (small/medium + lock screen): equipped colour swatches, paint gauges + refill countdown, streak, stats | **real** (`targets/widget`, App Group). Countdown assumes the in-app regen rate; paint only regenerates while the app is open |
 | Web `/world`, `/gallery` | **real** Supabase reads + realtime; samples only when empty |
 
 Cut this pass: Market tab, social auth, 360° viewer, friends backend, a textured 3D globe.
@@ -63,21 +63,60 @@ piece near E7 → shimmer/edge arrow pulls you in → it resolves from a smear i
 
 ## AR approach: real surfaces with ARKit (and a compass fallback)
 
-`modules/ar-paint` is a small custom Expo native module (Swift, ~450 lines) wrapping `ARSCNView`:
+`modules/ar-paint` is a custom Expo native module (Swift, ~770 lines) wrapping `ARSCNView`. It is
+our own ARKit bridge on purpose: nothing better-maintained exists for Expo, and owning it is what
+lets us do plane snapping and world-map persistence.
 
-- ARKit detects horizontal + vertical planes; a raycast from the reticle finds the surface you
-  aim at (existing plane geometry first, estimated planes as fallback).
+### Detection
+
+- `ARWorldTrackingConfiguration` with horizontal **and vertical** plane detection, `gravityAndHeading`
+  alignment (north-aligned metres, so transforms mean the same thing on the web). On phones with
+  LiDAR (`supportsSceneReconstruction(.mesh)`: iPhone Pro models) scene reconstruction is turned
+  on and blank walls are hit-testable immediately. The base iPhone 17 has no LiDAR, so there it is
+  feature-point plane detection: textured walls lock in ~1–2 s, blank white walls take longer or
+  need a slow sweep.
+- The reticle raycasts, in order: **detected plane geometry** (locked) → the **infinite extension of a
+  detected plane** within 0.9 m of its known extent (so a whole wall is paintable once any patch of
+  it is found) → **LiDAR mesh / feature-point estimate** (yellow reticle, "FINDING SURFACE…").
+  Nothing hit → "AIM AT A WALL OR FLOOR".
+- Feedback: detected planes fade in as a 25 cm grid (cyan = wall, lime = floor); the plane under the
+  reticle brightens ("WALL LOCKED" chip). `Settings → Show detected AR surfaces` hides the grids.
+
+### Anchoring
+
 - Paint lives in textures: each surface gets a 5 m × 5 m transparent quad (2048² CoreGraphics
-  canvas) glued to a custom `ARAnchor` on that plane. Dabs are composited into it, so frame
-  cost doesn't grow with paint. Strokes are recorded in anchor-local metres `(u, v)`.
-- **Persistence and sharing** = ARWorldMap. After you paint, the session's world map is saved
-  and uploaded to the Supabase Storage bucket `worldmaps`, keyed by canvas. Walking up to that
-  canvas (GPS) downloads the map, ARKit relocalises against it, and every stroke is replayed onto
-  anchors in the same world frame. Live strokes from another phone arrive with their anchor
-  transform and are placed directly. Relocalising *is* the discovery beat: the piece resolves
-  when tracking snaps to the saved map.
-- Tradeoff: relocalisation wants a similar viewpoint and lighting to the painter's; last writer
-  wins on the shared map. Devices without ARKit fall back to the compass-anchored renderer below.
+  canvas) glued to a custom `ARAnchor` in the session's world map, frame chosen so X runs along
+  the wall and −Z is up (drips run down). Strokes are recorded in anchor-local metres `(u, v)`.
+  ARKit owns the anchor's world pose, so paint holds its spot as you walk, approach at an angle,
+  or look away — it is never billboarded or camera-relative.
+- **Plane snapping** (the big fix): a quad started on an estimated surface is bound to the real
+  `ARPlaneAnchor` the moment ARKit detects one that is coplanar (< 15 cm, < 14°), re-anchored onto
+  it (position projected along the normal, orientation = plane's), and then follows ARKit's plane
+  refinement (re-snap when it drifts > 1.2 cm or > 2°, debounced). Quads on a plane that ARKit
+  merges away re-adopt the survivor. This is what stops paint floating off the wall at 45°.
+- **Across tabs**: the AR view stays mounted; leaving Create pauses the session and returning
+  *resumes* it (no reset), so in-session anchors survive tab switches.
+- **Across app restarts** (what survives): after you paint, the session's `ARWorldMap` (which
+  contains the paint anchors) is saved 5 s later and uploaded to Supabase Storage keyed by canvas,
+  alongside every stroke's anchor id + transform. Coming back within 15 m downloads the map and
+  ARKit relocalises against it — paint re-attaches to the same wall region **if you look from
+  roughly the painter's viewpoint under similar lighting**. That is the documented limit of
+  ARWorldMap; expect it to work indoors and on textured walls, and to be flaky on blank walls
+  or after big lighting changes.
+- **Fallback when relocalisation fails** (15 s timeout, missing/corrupt map, or a canvas whose map
+  upload failed): the session resets and each quad is placed at its stored offset from where the
+  painter stood, relative to the camera now (valid because the frame is heading-aligned), marked
+  *loose*; as soon as a detected plane within 0.6 m / 20° appears, the quad snaps onto it. HUD
+  shows "piece placed from memory · walk to where it was painted". Accuracy here is GPS + heading
+  class (metres), corrected to the real wall by the snap.
+- Last writer wins on the shared world map.
+
+### On-device test protocol (do this, not theory)
+
+Paint a piece on a textured wall → walk 5 m away → approach from 45° → look away 10 s → return.
+Expected: "WALL LOCKED" within ~2 s of raising the phone, paint flat on the wall from every angle,
+no float, no drift. Then kill the app, reopen within 15 m: "look around to resolve the piece" →
+"piece resolved" once ARKit relocalises (or the "placed from memory" fallback after 15 s).
 
 Run `supabase/migration_ar.sql` once for the new columns (`anchor_id`, `transform`, `viewer`, world map), the `set_world_map` RPC and the storage bucket.
 
@@ -159,12 +198,19 @@ are cached in AsyncStorage, and failed uploads queue and retry.
 `supabase/seed.sql` (from `scripts/gen_seed.mjs`) drops three pieces around E7 so judges can
 discover art without a second phone.
 
-## Home-screen widget
+## Home-screen + lock-screen widgets
 
-`targets/widget` (via `@bacons/apple-targets`) is a WidgetKit extension: medium = both paint
-gauges with a "full in mm:ss" countdown, day streak and can charge; small = the three bars. The app mirrors levels into the App Group `group.com.hamzakhan.tagged`
-(`src/lib/widget.ts`) and asks WidgetKit to refresh; the widget also refreshes itself every
-15 min. Building it needs the App Groups capability on the app id, so build with
+`targets/widget` (via `@bacons/apple-targets`, plugin listed in `app.json` so EAS/prebuild generate
+the extension target) is a WidgetKit extension. Families: **small** (two colour swatches with cap
+names, three bars, streak), **medium** (swatches, both gauges with a live "full in mm:ss" countdown,
+streak, can charge, all-time strokes/paint), and lock screen **rectangular / circular / inline**
+(colours + levels + streak). Add it from the iOS widget gallery under "Fresco Can".
+
+Data flow: the app mirrors state into the App Group `group.com.hamzakhan.tagged`
+(`src/lib/widget.ts`: `paintA/B`, `colorA/B`, `capA/B`, `shake`, `refillAtA/B`, `streak`, `strokes`,
+`paintUsed`, `tag`) at most once every 3 s while it changes, then asks WidgetKit to reload; the
+widget also refreshes itself every 15 min. Countdown assumes the in-app regen rate (paint only
+regenerates while the app is open). Building needs the App Groups capability on the app id:
 `xcodebuild … -allowProvisioningUpdates` or EAS (plain `expo run:ios` can't register it).
 
 ## Sound assets
