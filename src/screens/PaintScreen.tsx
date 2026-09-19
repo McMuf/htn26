@@ -33,12 +33,17 @@ export function PaintScreen() {
   const settings = useStore((s) => s.settings);
   const painter = useStore((s) => s.painter);
   const online = useStore((s) => s.online);
+  const location = useStore((s) => s.location);
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
+  const debug = useStore((s) => s.debug);
+  const setDebug = useStore((s) => s.setDebug);
   const engineRef = useRef<ReturnType<typeof useSprayEngine> | null>(null);
   const { yawSV, pitchSV, rollSV, pose } = usePose((m) => engineRef.current?.onShake(m));
   const engine = useSprayEngine(pose);
   engineRef.current = engine;
   const discovery = useDiscovery(pose);
+  const discoveryRef = useRef(discovery);
+  discoveryRef.current = discovery;
 
   useVolumeTrigger(!settings.onScreenButtons, { onHoldStart: engine.start, onHoldEnd: engine.end });
 
@@ -50,6 +55,11 @@ export function PaintScreen() {
       const blocker = engine.held.current ? engine.blocker.current : null;
       const yaw = Math.round(pose.current.yaw);
       setUi((p) => (p.spraying === spraying && p.blocker === blocker && p.yaw === yaw ? p : { spraying, blocker, yaw }));
+      const d = useStore.getState().debug;
+      const held = engine.held.current ?? '-';
+      const bl = engine.blocker.current ?? '-';
+      if (d.held !== held || d.blocker !== bl || d.walls !== discoveryRef.current.walls.length || d.poseReady !== pose.current.ready)
+        setDebug({ held, blocker: bl, walls: discoveryRef.current.walls.length, poseReady: pose.current.ready });
     }, 100);
     return () => clearInterval(id);
   }, []);
@@ -93,6 +103,11 @@ export function PaintScreen() {
           <Text style={styles.hintText}>hold VOL+ / VOL− to spray · shake to charge</Text>
         </View>
       )}
+      <View style={styles.debug} pointerEvents="none">
+        <Text style={styles.debugText}>
+          vol events {debug.volEvents} (last {debug.lastVol}) · held {debug.held} · block {debug.blocker} · walls {debug.walls} · pose {debug.poseReady ? 'ok' : '…'} · gps {location ? `±${Math.round(location.accuracy)}m` : '…'} · surface {debug.surface}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -108,6 +123,8 @@ const styles = StyleSheet.create({
   status: { color: '#ffffffaa', fontSize: 11, flex: 1 },
   gear: { backgroundColor: '#0008', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   gearText: { color: '#fff', fontSize: 18 },
+  debug: { position: 'absolute', bottom: 84, left: 12, right: 12, alignItems: 'center' },
+  debugText: { color: '#ffffff99', fontSize: 9, textAlign: 'center' },
   hint: { position: 'absolute', bottom: 104, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
   hintText: { color: '#ffffffcc', fontSize: 11 },
 });

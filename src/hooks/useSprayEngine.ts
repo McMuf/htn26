@@ -168,6 +168,7 @@ export function useSprayEngine(pose: React.MutableRefObject<Pose>) {
       const radius = capRadius(opt.cap) * (0.75 + 0.35 * strength);
       const alpha = 0.16 * flow;
       const wall = getWall(canvas.id);
+      if (st.debug.surface !== wall.backend) st.setDebug({ surface: wall.backend });
       const pt: StrokePoint = [round2(yaw), round2(pitch), round2(radius), round2(alpha), 0];
       wall.applyPoint(pt, opt.color, rng.current);
       s.points.push(pt);

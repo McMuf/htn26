@@ -28,12 +28,16 @@ export class Wall {
   private canvas: SkCanvas | null;
   image: SkImage | null = null;
   private dirty = false;
+  readonly backend: 'gpu' | 'cpu' | 'none' = 'none';
   private paints = new Map<string, ReturnType<typeof Skia.Paint>>();
 
   constructor(id: string) {
     this.id = id;
     this.surface = Skia.Surface.MakeOffscreen(WALL_W, WALL_H);
+    (this as any).backend = this.surface ? 'gpu' : 'cpu';
+    if (!this.surface) this.surface = Skia.Surface.Make(WALL_W, WALL_H); // raster fallback
     this.canvas = this.surface ? this.surface.getCanvas() : null;
+    if (!this.canvas) (this as any).backend = 'none';
     this.canvas?.clear(Skia.Color('transparent'));
   }
 

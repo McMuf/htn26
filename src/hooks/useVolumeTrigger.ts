@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { VolumeManager } from 'react-native-volume-manager';
 import { VOLUME_BASELINE, VOLUME_HOLD_TIMEOUT_MS } from '../config';
-import type { Side } from '../store';
+import { useStore, type Side } from '../store';
 
 /**
  * Turns the hardware volume rocker into two spray triggers.
@@ -33,11 +33,17 @@ export function useVolumeTrigger(
     };
     const reset = () => VolumeManager.setVolume(VOLUME_BASELINE, { showUI: false }).catch(() => {});
 
+    // iOS only reports outputVolume changes while an audio session is active.
+    VolumeManager.enable(true).catch(() => {});
+    VolumeManager.setActive(true).catch(() => {});
     VolumeManager.showNativeVolumeUI({ enabled: false }).catch(() => {});
     reset();
+    const keepAlive = setInterval(() => { VolumeManager.setActive(true).catch(() => {}); reset(); }, 4000);
 
     const sub = VolumeManager.addVolumeListener(({ volume }) => {
       if (disposed) return;
+      const dbg = useStore.getState().debug;
+      useStore.getState().setDebug({ volEvents: dbg.volEvents + 1, lastVol: Math.round(volume * 100) / 100 });
       const delta = volume - VOLUME_BASELINE;
       if (Math.abs(delta) < 0.02) return; // our own reset echoing back
       const side: Side = delta > 0 ? 'A' : 'B';
@@ -53,6 +59,7 @@ export function useVolumeTrigger(
 
     return () => {
       disposed = true;
+      clearInterval(keepAlive);
       if (timer) clearTimeout(timer);
       release();
       sub.remove();

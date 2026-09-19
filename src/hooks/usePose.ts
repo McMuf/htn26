@@ -50,6 +50,7 @@ export function usePose(onShake?: (magnitudeG: number) => void) {
       magYaw = wrap360((Math.atan2(he, hn) * 180) / Math.PI);
     };
 
+    DeviceMotion.requestPermissionsAsync().catch(() => {});
     DeviceMotion.setUpdateInterval(16);
     Magnetometer.setUpdateInterval(50);
 

@@ -30,6 +30,8 @@ type State = {
   online: boolean;
   tab: 'paint' | 'map' | 'board';
   settingsOpen: boolean;
+  debug: { volEvents: number; lastVol: number; held: string; blocker: string; walls: number; poseReady: boolean; surface: string };
+  setDebug: (d: Partial<State['debug']>) => void;
 
   setPainter: (p: Painter | null) => void;
   setSettings: (s: Partial<Settings>) => void;
@@ -61,7 +63,7 @@ export const useStore = create<State>((set, get) => ({
   painter: null,
   settings: DEFAULT_SETTINGS,
   paint: { A: PAINT_MAX, B: PAINT_MAX },
-  shake: 0,
+  shake: 1, // a fresh can: the first spray works without shaking; charge decays from there
   location: null,
   canvases: {},
   strokes: {},
@@ -70,6 +72,8 @@ export const useStore = create<State>((set, get) => ({
   online: false,
   tab: 'paint',
   settingsOpen: false,
+  debug: { volEvents: 0, lastVol: 0.5, held: '-', blocker: '-', walls: 0, poseReady: false, surface: '?' },
+  setDebug: (d) => set((st) => ({ debug: { ...st.debug, ...d } })),
 
   setPainter: (painter) => { set({ painter }); persist('painter', painter); },
   setSettings: (s) => { const settings = { ...get().settings, ...s }; set({ settings }); persist('settings', settings); },
