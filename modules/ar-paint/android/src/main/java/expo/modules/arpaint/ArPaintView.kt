@@ -36,6 +36,8 @@ import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
@@ -102,7 +104,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
 
   // ---- work queued for the GL thread -----------------------------------------------------
   /** Returns true when done; false to retry next frame. Stale ops (from before a reset) are dropped. */
-  private class Op(val gen: Int, val needsTracking: Boolean, val block: () -> Boolean)
+  private class Op(val gen: Int, val needsTracking: Boolean, val block: () -> Boolean, val onDropped: (() -> Unit)? = null)
   private val ops = ConcurrentLinkedQueue<Op>()
   private val pendingSaves = ConcurrentLinkedQueue<Promise>() // settled even if the view goes away first
   private val generation = AtomicInteger(0)
@@ -178,7 +180,8 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
 
   override fun onDetachedFromWindow() {
     appContext.currentActivity?.application?.unregisterActivityLifecycleCallbacks(lifecycle)
-    updateRunning()
+    // isAttachedToWindow / windowVisibility are still stale here, so stop outright rather than re-deriving
+    stop()
     super.onDetachedFromWindow()
   }
 
@@ -188,11 +191,19 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     glView.layout(0, 0, r - l, b - t)
   }
 
-  override fun onWindowVisibilityChanged(visibility: Int) { super.onWindowVisibilityChanged(visibility); updateRunning() }
-  override fun onVisibilityChanged(changedView: View, visibility: Int) { super.onVisibilityChanged(changedView, visibility); updateRunning() }
+  override fun onWindowVisibilityChanged(visibility: Int) {
+    super.onWindowVisibilityChanged(visibility)
+    if (visibility != View.VISIBLE) stop() else updateRunning()
+  }
+
+  override fun onVisibilityChanged(changedView: View, visibility: Int) {
+    super.onVisibilityChanged(changedView, visibility)
+    if (visibility != View.VISIBLE) stop() else updateRunning()
+  }
   override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
     super.onSizeChanged(w, h, oldw, oldh)
     displayRotation = display?.rotation ?: Surface.ROTATION_0
+    displayChanged = true
     updateRunning()
   }
 
@@ -275,13 +286,25 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
 
   fun destroy() {
     destroyed = true
-    stop()
     main.removeCallbacksAndMessages(null)
     ops.clear()
-    while (true) (pendingSaves.poll() ?: break).reject("E_WORLDMAP", "AR view closed before the map was saved", null)
-    glView.queueEvent { for (q in quads.values) q.release(); quads.clear() }
+    while (true) failSave(pendingSaves.poll() ?: break, "AR view closed before the map was saved")
+    // Free textures and detach anchors on the GL thread *before* the session closes under them.
+    // If the GL thread is already gone the latch times out and Session.close() frees them anyway.
+    val released = CountDownLatch(1)
+    glView.queueEvent {
+      try { for (q in quads.values) q.release(); quads.clear() } finally { released.countDown() }
+    }
+    try { released.await(500, TimeUnit.MILLISECONDS) } catch (_: InterruptedException) {}
+    stop()
     session?.close()
     session = null
+  }
+
+  private fun failSave(promise: Promise?, message: String) {
+    if (promise == null) return
+    pendingSaves.remove(promise)
+    promise.reject("E_WORLDMAP", message, null)
   }
 
   // ---- props / functions from JS ----------------------------------------------------------
@@ -302,8 +325,8 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     colorHex = "#" + s.lowercase()
   }
 
-  private fun enqueue(needsTracking: Boolean = true, gen: Int = generation.get(), block: () -> Boolean) {
-    ops.add(Op(gen, needsTracking, block))
+  private fun enqueue(needsTracking: Boolean = true, gen: Int = generation.get(), onDropped: (() -> Unit)? = null, block: () -> Boolean) {
+    ops.add(Op(gen, needsTracking, block, onDropped))
   }
 
   fun clearAll() {
@@ -344,7 +367,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     val deadline = SystemClock.elapsedRealtime() + SAVE_TIMEOUT_MS
     var started = false
     pendingSaves.add(promise)
-    enqueue(needsTracking = false) {
+    enqueue(needsTracking = false, onDropped = { failSave(promise, "AR session reset before the map was saved") }) {
       val now = SystemClock.elapsedRealtime()
       if (!started) {
         if (!tracking && now < deadline) return@enqueue false
@@ -441,7 +464,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
   private fun drainOps() {
     repeat(ops.size) {
       val op = ops.poll() ?: return
-      if (op.gen < activeGeneration) return@repeat
+      if (op.gen < activeGeneration) { op.onDropped?.invoke(); return@repeat }
       if (op.needsTracking && !tracking) { ops.add(op); return@repeat }
       val done = try { op.block() } catch (e: Exception) { Log.w(TAG, "op failed", e); true }
       if (!done) ops.add(op)

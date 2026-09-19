@@ -174,6 +174,8 @@ run on real hardware. In rough order of what's most likely to need fixing:
   a laptop. It only matters for sharing paint between devices, not for your own session.
 - **Depth, not LiDAR.** The S25 estimates depth from motion, so blank white walls still need a
   slow sweep; textured walls lock in a second or two.
+- **Floor pieces painted in the first ~2 seconds** (before the compass locks) can rotate slightly
+  when ARCore later refines the floor plane. Walls aren't affected.
 - **Cloud Anchors need line-of-sight scanning.** Hosting fails if the wall was barely looked at —
   the app logs it and the piece falls back to placed-from-memory.
 - **Glass panels don't blur on Android** (expo-blur needs an explicit blur target there); they're

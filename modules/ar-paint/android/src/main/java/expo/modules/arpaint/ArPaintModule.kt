@@ -27,6 +27,7 @@ class ArPaintModule : Module() {
     }
 
     OnActivityEntersBackground { main.post { volumeKeys.releaseAll() } }
+    OnActivityEntersForeground { main.post { volumeKeys.reattach(appContext.currentActivity) } }
 
     View(ArPaintView::class) {
       Events("onTracking", "onHit", "onStrokeEnd", "onSurface")

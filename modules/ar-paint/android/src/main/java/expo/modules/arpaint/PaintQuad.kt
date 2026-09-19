@@ -143,6 +143,7 @@ class PaintQuad(val id: String, var transform: M4) {
     } else {
       RadialGradient(x, y, r, intArrayOf(inner, inner, outer), floatArrayOf(0f, hard, 1f), Shader.TileMode.CLAMP)
     }
+    paint.alpha = 255 // Skia multiplies shader output by the paint's alpha; fillCircle leaves a low one behind
     c.drawCircle(x, y, r, paint)
     paint.shader = null
     markDirty(x, y, r)

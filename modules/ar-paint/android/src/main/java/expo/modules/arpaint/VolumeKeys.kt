@@ -24,6 +24,11 @@ class VolumeKeys(private val emit: (key: String, down: Boolean) -> Unit) {
     if (on && current !is Interceptor) window.callback = Interceptor(current)
   }
 
+  /** After an Activity recreation (config change) the new window has no interceptor: put it back. */
+  fun reattach(activity: Activity?) {
+    if (enabled) setEnabled(activity, true)
+  }
+
   /** App backgrounded mid-press: we will never see the key-up. */
   fun releaseAll() {
     for (code in held.toList()) emit(name(code), false)

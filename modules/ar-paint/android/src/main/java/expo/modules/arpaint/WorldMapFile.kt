@@ -59,13 +59,20 @@ internal object WorldMapFile {
 }
 
 internal object ArSupport {
-  /** ARCore device support (the Google Play Services for AR app may still need installing — the view asks). */
-  fun isSupported(context: Context): Boolean = try {
+  @Volatile private var cached: Boolean? = null
+
+  /**
+   * ARCore device support (the Google Play Services for AR app may still need installing — the
+   * view asks for that). JS reads this as a module constant at import time, so the wait for a
+   * transient answer is kept short and the result is cached.
+   */
+  fun isSupported(context: Context): Boolean = cached ?: try {
     val apk = ArCoreApk.getInstance()
     var a = apk.checkAvailability(context)
     var tries = 0
-    while (a.isTransient && tries < 12) { Thread.sleep(150); a = apk.checkAvailability(context); tries++ }
-    a.isSupported
+    while (a.isTransient && tries < 5) { Thread.sleep(100); a = apk.checkAvailability(context); tries++ }
+    // Still checking: assume supported — the view reports notAvailable if the session can't start.
+    (a.isSupported || a.isTransient).also { cached = it }
   } catch (_: Throwable) {
     false
   }
