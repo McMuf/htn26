@@ -4,6 +4,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { Paths } from 'expo-file-system';
 import { ArPaintView, type ArPaintViewRef, type ArStroke, type ArTrackingEvent } from '../../modules/ar-paint';
 import { usePose } from '../hooks/usePose';
+import { PaintLayer } from '../paint/PaintLayer';
 import { useArSpray } from '../hooks/useArSpray';
 import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
@@ -38,7 +39,7 @@ export function ArPaintScreen() {
 
   const viewRef = useRef<ArPaintViewRef | null>(null);
   const engineRef = useRef<ReturnType<typeof useArSpray> | null>(null);
-  const { pose } = usePose((m) => engineRef.current?.onShake(m));
+  const { pose, yawSV, pitchSV, rollSV } = usePose((m) => engineRef.current?.onShake(m));
   const mapCanvas = useRef<Canvas | null>(null); // canvas whose world map is loaded in the session
   const paintedThisSession = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -158,6 +159,8 @@ export function ArPaintScreen() {
         onStrokeEnd={onStrokeEnd}
         onSurface={onSurface}
       />
+      {/* strokes painted from the web app (compass-anchored) render as an overlay on top of the AR view */}
+      <PaintLayer yawSV={yawSV} pitchSV={pitchSV} rollSV={rollSV} walls={discovery.walls} />
       <PaintMeters />
       <CanMeter />
       <DiscoveryOverlay d={{ ...discovery, justFound: justFound ?? discovery.justFound, walls: [] }} onReport={onReport} />
