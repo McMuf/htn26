@@ -3,6 +3,7 @@ import { hasBackend, supabase } from '../lib/supabase';
 import { NEARBY_FETCH_RADIUS_M } from '../config';
 import { useStore } from '../store';
 import { getWall } from '../paint/Wall';
+import { File, Paths } from 'expo-file-system';
 import type { Canvas, Painter, Stroke } from '../types';
 
 /**
@@ -18,10 +19,13 @@ const PENDING = 'tagged:pending';
 export function applyStroke(s: Stroke) {
   const st = useStore.getState();
   if (!st.addStroke(s)) return false;
-  getWall(s.canvas_id).replay(s);
-  st.bumpWalls();
+  if (!s.anchor_id) { getWall(s.canvas_id).replay(s); st.bumpWalls(); }
+  remoteStrokeListeners.forEach((fn) => fn(s));
   return true;
 }
+const remoteStrokeListeners = new Set<(s: Stroke) => void>();
+/** AR screen subscribes to be told about strokes arriving for the canvas it has loaded. */
+export function onRemoteStroke(fn: (s: Stroke) => void) { remoteStrokeListeners.add(fn); return () => { remoteStrokeListeners.delete(fn); }; }
 
 /** Painter row for the signed-in user (id = auth uid). Throws with a readable message on failure. */
 export async function ensurePainter(userId: string, name: string): Promise<Painter> {
@@ -105,6 +109,7 @@ export async function uploadStroke(s: Stroke) {
   const row = {
     id: s.id, canvas_id: s.canvas_id, author_id: isLocalId(s.author_id) ? null : s.author_id,
     author_name: s.author_name, color: s.color, cap: s.cap, points: s.points, paint_used: s.paint_used,
+    anchor_id: s.anchor_id ?? null, transform: s.transform ?? null,
   };
   try {
     const { error } = await supabase.from('strokes').insert(row);
@@ -181,3 +186,39 @@ export async function fetchAllCanvases(): Promise<Canvas[]> {
 }
 
 function isLocalId(id: string | null) { return !id || id.startsWith('local-'); }
+
+// ---- AR world maps (Supabase Storage bucket "worldmaps") ---------------------------------
+
+export async function uploadWorldMap(canvasId: string, localPath: string) {
+  if (!hasBackend) return null;
+  try {
+    const buf = await new File(localPath).arrayBuffer();
+    const objectPath = `${canvasId}.arworldmap`;
+    const { error } = await supabase.storage.from('worldmaps').upload(objectPath, buf, { upsert: true, contentType: 'application/octet-stream' });
+    if (error) throw error;
+    const now = new Date().toISOString();
+    await supabase.from('canvases').update({ world_map_path: objectPath, world_map_updated_at: now }).eq('id', canvasId);
+    const c = useStore.getState().canvases[canvasId];
+    if (c) useStore.getState().upsertCanvas({ ...c, world_map_path: objectPath, world_map_updated_at: now });
+    return objectPath;
+  } catch (e) {
+    console.warn('uploadWorldMap failed', e);
+    return null;
+  }
+}
+
+/** Downloads the canvas's world map to the cache and returns its local path (null if none). */
+export async function downloadWorldMap(c: Canvas): Promise<string | null> {
+  if (!hasBackend || !c.world_map_path) return null;
+  try {
+    const { data } = supabase.storage.from('worldmaps').getPublicUrl(c.world_map_path);
+    const stamp = (c.world_map_updated_at ?? '').replace(/[^0-9]/g, '');
+    const dest = new File(Paths.cache, `${c.id}-${stamp}.arworldmap`);
+    if (dest.exists) return dest.uri.replace('file://', '');
+    const f = await File.downloadFileAsync(data.publicUrl + `?v=${stamp}`, dest);
+    return f.uri.replace('file://', '');
+  } catch (e) {
+    console.warn('downloadWorldMap failed', e);
+    return null;
+  }
+}

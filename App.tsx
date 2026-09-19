@@ -11,6 +11,9 @@ import type { Session } from '@supabase/supabase-js';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { NameScreen } from './src/screens/NameScreen';
 import { PaintScreen } from './src/screens/PaintScreen';
+import { ArPaintScreen } from './src/screens/ArPaintScreen';
+import { isArSupported } from './modules/ar-paint';
+import { startWidgetSync } from './src/lib/widget';
 import { MapScreen } from './src/screens/MapScreen';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -51,6 +54,7 @@ function Root() {
   useLocation();
 
   useEffect(() => { sfx.enabled = settings.sound; }, [settings.sound]);
+  useEffect(() => startWidgetSync(), []);
 
   // backend: realtime + periodic nearby refresh + pending flush
   useEffect(() => {
@@ -71,7 +75,7 @@ function Root() {
 
   return (
     <View style={styles.root}>
-      {tab === 'paint' && <PaintScreen />}
+      {tab === 'paint' && (isArSupported ? <ArPaintScreen /> : <PaintScreen />)}
       {tab === 'map' && <MapScreen />}
       {tab === 'board' && <LeaderboardScreen />}
       <SettingsScreen />

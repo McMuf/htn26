@@ -25,7 +25,15 @@
         "UIBackgroundModes": [
           "audio"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIRequiredDeviceCapabilities": [
+          "arkit"
+        ]
+      },
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.hamzakhan.tagged"
+        ]
       }
     },
     "android": {
@@ -79,7 +87,8 @@
           }
         }
       ],
-      "expo-dev-client"
+      "expo-dev-client",
+      "@bacons/apple-targets"
     ],
     "extra": {
       "eas": {

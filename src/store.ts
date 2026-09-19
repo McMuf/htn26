@@ -14,6 +14,7 @@ export type Settings = {
   hfov: number;
   haptics: boolean;
   sound: boolean;
+  showPlanes: boolean; // AR: tint detected surfaces
 };
 export type Loc = { lat: number; lng: number; accuracy: number };
 
@@ -57,6 +58,7 @@ const DEFAULT_SETTINGS: Settings = {
   hfov: HFOV_DEG,
   haptics: true,
   sound: true,
+  showPlanes: true,
 };
 
 export const useStore = create<State>((set, get) => ({

@@ -34,10 +34,29 @@ dwell on one spot to pool and drip → paint runs low (hollow rattle) → walk t
 piece near E7 → shimmer/edge arrow pulls you in → it resolves from a smear into a piece →
 "YOU FOUND A PIECE by …", views tick up → BOARD tab shows the leaderboard.
 
-## AR approach: geo-anchored canvases (and why)
+## AR approach: real surfaces with ARKit (and a compass fallback)
 
-Fallback ladder from the brief: plane-anchored ARKit → **geo-anchored canvases** → proximity
-lists. We chose the middle rung on purpose (see the comment atop `src/screens/PaintScreen.tsx`):
+`modules/ar-paint` is a small custom Expo native module (Swift, ~450 lines) wrapping `ARSCNView`:
+
+- ARKit detects horizontal + vertical planes; a raycast from the reticle finds the surface you
+  aim at (existing plane geometry first, estimated planes as fallback).
+- Paint lives in textures: each surface gets a 5 m × 5 m transparent quad (2048² CoreGraphics
+  canvas) glued to a custom `ARAnchor` on that plane. Dabs are composited into it, so frame
+  cost doesn't grow with paint. Strokes are recorded in anchor-local metres `(u, v)`.
+- **Persistence and sharing** = ARWorldMap. After you paint, the session's world map is saved
+  and uploaded to the Supabase Storage bucket `worldmaps`, keyed by canvas. Walking up to that
+  canvas (GPS) downloads the map, ARKit relocalises against it, and every stroke is replayed onto
+  anchors in the same world frame. Live strokes from another phone arrive with their anchor
+  transform and are placed directly. Relocalising *is* the discovery beat: the piece resolves
+  when tracking snaps to the saved map.
+- Tradeoff: relocalisation wants a similar viewpoint and lighting to the painter's; last writer
+  wins on the shared map. Devices without ARKit fall back to the compass-anchored renderer below.
+
+Run `supabase/migration_ar.sql` once for the new columns and storage bucket.
+
+### Compass fallback (`src/screens/PaintScreen.tsx`)
+
+Used only when ARKit is unavailable:
 
 - A **canvas** is a virtual cylindrical wall around the spot where its author stood (GPS) with
   a compass heading for its centre. Paint is stored in **angular coordinates** (yaw, pitch).
@@ -112,6 +131,14 @@ are cached in AsyncStorage, and failed uploads queue and retry.
 `supabase/seed.sql` (from `scripts/gen_seed.mjs`) drops three pieces around E7 so judges can
 discover art without a second phone.
 
+## Home-screen widget
+
+`targets/widget` (via `@bacons/apple-targets`) is a WidgetKit extension showing both paint cans
+and the can charge. The app mirrors levels into the App Group `group.com.hamzakhan.tagged`
+(`src/lib/widget.ts`) and asks WidgetKit to refresh; the widget also refreshes itself every
+15 min. Building it needs the App Groups capability on the app id, so build with
+`xcodebuild … -allowProvisioningUpdates` or EAS (plain `expo run:ios` can't register it).
+
 ## Sound assets
 
 All SFX are **procedurally generated** by `scripts/gen_sfx.py` (numpy → WAV, 44.1 kHz mono),
@@ -137,10 +164,10 @@ supabase/schema.sql, seed.sql;  scripts/gen_sfx.py, gen_seed.mjs
 
 ## What I'd harden next
 
-1. **Real surface anchoring**: ARKit plane detection + persistent anchors (Viro / a small
-   native module) so paint sticks to walls under parallax; keep geo canvases as the index.
-2. **Heading calibration**: magnetometer near steel buildings drifts 10–20°; add a one-tap
-   "align to a piece" and/or share ARKit world maps between phones.
+1. **Relocalisation UX**: guide the viewer to the painter's original viewpoint (store a thumbnail
+   of the first frame), and merge world maps instead of last-writer-wins.
+2. **Texture tiling**: 5 m quads per surface are simple; real walls want a tiled atlas so long
+   murals don't create seams or overlapping quads.
 3. **Volume trigger robustness**: handle the 0/100 % edge cases, Control Center changes, and
    audio-session interruptions; consider a screen-edge squeeze fallback.
 4. **Abuse controls**: rate limits per user, stroke size caps, and an admin unflag path.

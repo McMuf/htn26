@@ -43,6 +43,7 @@ export function SettingsScreen() {
 
         <Row label="On-screen hold buttons (fallback if volume trigger breaks)" value={settings.onScreenButtons} onChange={(v) => setSettings({ onScreenButtons: v })} />
         <Row label="Paint anywhere (bypass Waterloo Region geofence)" value={settings.geofenceBypass} onChange={(v) => setSettings({ geofenceBypass: v })} />
+        <Row label="Show detected AR surfaces" value={settings.showPlanes} onChange={(v) => setSettings({ showPlanes: v })} />
         <Row label="Sound" value={settings.sound} onChange={(v) => setSettings({ sound: v })} />
         <Row label="Haptics" value={settings.haptics} onChange={(v) => setSettings({ haptics: v })} />
 

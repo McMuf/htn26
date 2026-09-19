@@ -13,6 +13,9 @@ export type Stroke = {
   points: StrokePoint[];
   paint_used: number;
   created_at: string;
+  /** AR: custom ARAnchor id + its 4x4 transform (column-major) in the canvas world map. Null for compass-mode strokes. */
+  anchor_id?: string | null;
+  transform?: number[] | null;
 };
 
 export type Canvas = {
@@ -29,6 +32,8 @@ export type Canvas = {
   flagged: boolean;
   created_at: string;
   updated_at: string;
+  world_map_path?: string | null;
+  world_map_updated_at?: string | null;
 };
 
 export type Painter = { id: string; name: string; paint_used: number; strokes: number };

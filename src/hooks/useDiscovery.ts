@@ -24,7 +24,7 @@ export type Discovery = {
  * CANVAS_VISIBLE_RADIUS_M → DISCOVERED_RADIUS_M, and once you're inside DISCOVERED_RADIUS_M
  * looking at it for a beat, it "locks": view count increments and the author tag appears.
  */
-export function useDiscovery(pose: React.MutableRefObject<Pose>): Discovery {
+export function useDiscovery(pose: React.MutableRefObject<Pose>, autoLock = true): Discovery {
   const [state, setState] = useState<Discovery>({ walls: [], pull: null, justFound: null, focused: null });
   const lookingSince = useRef<Record<string, number>>({});
   const foundTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -55,7 +55,7 @@ export function useDiscovery(pose: React.MutableRefObject<Pose>): Discovery {
           if (!known) {
             // lock-on: inside the discovered radius and roughly facing the wall for ~0.8s
             const facing = Math.abs(wrapDiff(c.heading, yaw)) < 45 || d < 4;
-            if (d <= DISCOVERED_RADIUS_M && facing) {
+            if (autoLock && d <= DISCOVERED_RADIUS_M && facing) {
               const since = lookingSince.current[c.id] ?? (lookingSince.current[c.id] = Date.now());
               if (Date.now() - since > 800) {
                 st.markDiscovered(c.id);
