@@ -56,6 +56,8 @@ function Root() {
     fetchPainter(session.user.id).then((p) => { setPainter(p); setCheckedFor(session.user.id); }).catch(() => setCheckedFor(session.user.id));
   }, [session?.user.id]);
   const tab = useStore((s) => s.tab);
+  const [visitedCreate, setVisitedCreate] = useState(false);
+  useEffect(() => { if (tab === 'create') setVisitedCreate(true); }, [tab]);
   const settings = useStore((s) => s.settings);
   const location = useStore((s) => s.location);
   useLocation();
@@ -88,7 +90,12 @@ function Root() {
     <View style={styles.root}>
       {tab === 'home' && <HomeScreen />}
       {tab === 'explore' && <ExploreScreen />}
-      {tab === 'create' && (isArSupported ? <ArPaintScreen /> : <PaintScreen />)}
+      {/* the AR view stays mounted once opened: hiding pauses the session and showing resumes it, so paint keeps its anchors across tabs */}
+      {isArSupported ? (visitedCreate && (
+        <View style={[StyleSheet.absoluteFill, tab !== 'create' && styles.hidden]} pointerEvents={tab === 'create' ? 'auto' : 'none'}>
+          <ArPaintScreen active={tab === 'create'} />
+        </View>
+      )) : tab === 'create' && <PaintScreen />}
       {tab === 'social' && <SocialScreen />}
       {tab === 'vault' && <VaultScreen />}
       {tab === 'settings' && <SettingsScreen />}
@@ -100,4 +107,5 @@ function Root() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
+  hidden: { display: 'none' },
 });

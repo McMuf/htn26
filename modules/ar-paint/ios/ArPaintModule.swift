@@ -6,7 +6,8 @@ public class ArPaintModule: Module {
     Name("ArPaint")
 
     Constants([
-      "isSupported": ARWorldTrackingConfiguration.isSupported
+      "isSupported": ARWorldTrackingConfiguration.isSupported,
+      "hasLidar": ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh)
     ])
 
     View(ArPaintView.self) {
@@ -27,8 +28,8 @@ public class ArPaintModule: Module {
           }
         }
       }
-      AsyncFunction("addStrokes") { (view: ArPaintView, strokes: [[String: Any]]) in
-        view.addRemoteStrokes(strokes)
+      AsyncFunction("addStrokes") { (view: ArPaintView, strokes: [[String: Any]], mode: String?) in
+        view.addRemoteStrokes(strokes, mode: mode ?? "absolute")
       }
       AsyncFunction("clearAll") { (view: ArPaintView) in view.clearAll() }
       AsyncFunction("resetSession") { (view: ArPaintView) in view.restartSession(worldMap: nil) }

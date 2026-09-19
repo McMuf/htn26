@@ -3,7 +3,8 @@ import SwiftUI
 
 // The app writes these keys into the shared App Group UserDefaults (see src/lib/widget.ts):
 //   paintA, paintB (0-100), shake (0-100), colorA, colorB (hex), tag (string), updatedAt (unix seconds),
-//   refillAtA, refillAtB (unix seconds when that can is full again), streak (days)
+//   refillAtA, refillAtB (unix seconds when that can is full again), streak (days),
+//   capA, capB ("fat"/"skinny"), strokes, paintUsed (all-time stats)
 let appGroup = "group.com.hamzakhan.tagged"
 
 struct CanEntry: TimelineEntry {
@@ -17,6 +18,12 @@ struct CanEntry: TimelineEntry {
   let refillAtA: Date
   let refillAtB: Date
   let streak: Int
+  let capA: String
+  let capB: String
+  let colorAHex: String
+  let colorBHex: String
+  let strokes: Int
+  let paintUsed: Int
 
   static func load() -> CanEntry {
     let d = UserDefaults(suiteName: appGroup)
@@ -30,7 +37,10 @@ struct CanEntry: TimelineEntry {
       tag: d?.string(forKey: "tag") ?? "FRESCO",
       refillAtA: Date(timeIntervalSince1970: d?.object(forKey: "refillAtA") as? Double ?? 0),
       refillAtB: Date(timeIntervalSince1970: d?.object(forKey: "refillAtB") as? Double ?? 0),
-      streak: d?.object(forKey: "streak") as? Int ?? 0)
+      streak: d?.object(forKey: "streak") as? Int ?? 0,
+      capA: d?.string(forKey: "capA") ?? "fat", capB: d?.string(forKey: "capB") ?? "skinny",
+      colorAHex: d?.string(forKey: "colorA") ?? "#ff2d95", colorBHex: d?.string(forKey: "colorB") ?? "#19e6ff",
+      strokes: d?.object(forKey: "strokes") as? Int ?? 0, paintUsed: d?.object(forKey: "paintUsed") as? Int ?? 0)
   }
 }
 
@@ -90,6 +100,25 @@ struct Gauge: View {
   }
 }
 
+/// Equipped colour: a ring swatch with the cap name. What the user sees first on the home screen.
+struct Swatch: View {
+  let color: Color
+  let label: String
+  let cap: String
+  var size: CGFloat = 26
+  var body: some View {
+    HStack(spacing: 6) {
+      Circle().fill(color).frame(width: size, height: size)
+        .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 2))
+        .shadow(color: color.opacity(0.7), radius: 4)
+      VStack(alignment: .leading, spacing: 0) {
+        Text(label).font(.system(size: 9, weight: .heavy)).foregroundStyle(.white)
+        Text(cap + " cap").font(.system(size: 8, weight: .semibold)).foregroundStyle(.white.opacity(0.65))
+      }
+    }
+  }
+}
+
 struct PaintCanView: View {
   var entry: CanEntry
   @Environment(\.widgetFamily) var family
@@ -100,46 +129,90 @@ struct PaintCanView: View {
 
   var body: some View {
     Group {
-      if family == .systemMedium {
-        HStack(spacing: 14) {
-          VStack(alignment: .leading, spacing: 8) {
-            HStack {
-              Text("FRESCO").font(.system(size: 11, weight: .black)).tracking(2).foregroundStyle(.white)
-              Spacer()
-              Text(entry.tag).font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
-            }
-            Gauge(value: entry.paintA, color: entry.colorA, label: "VOL+ · A", refillAt: entry.refillAtA)
-            Gauge(value: entry.paintB, color: entry.colorB, label: "VOL− · B", refillAt: entry.refillAtB)
-            Text(status).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white.opacity(0.8))
-          }
-          VStack(spacing: 6) {
-            Text("🔥").font(.system(size: 22))
-            Text("\(entry.streak)").font(.system(size: 26, weight: .black)).foregroundStyle(.white)
-            Text(entry.streak == 1 ? "day streak" : "day streak").font(.system(size: 9, weight: .bold)).foregroundStyle(.white.opacity(0.7))
-            CanBar(value: entry.shake, color: entry.shake < 12 ? Color(hex: "#ff5c1a") : Color(hex: "#7cff3a"), label: "CAN").frame(width: 34)
-          }
-          .frame(width: 72)
-          .padding(8)
-          .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.08)))
-        }
-      } else {
-        VStack(alignment: .leading, spacing: 6) {
-          HStack {
-            Text("FRESCO").font(.system(size: 11, weight: .black)).tracking(2).foregroundStyle(.white)
-            Spacer()
-            Text("🔥\(entry.streak)").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.8))
-          }
-          HStack(spacing: 10) {
-            CanBar(value: entry.paintA, color: entry.colorA, label: "VOL+")
-            CanBar(value: entry.paintB, color: entry.colorB, label: "VOL−")
-            CanBar(value: entry.shake, color: entry.shake < 12 ? Color(hex: "#ff5c1a") : Color(hex: "#7cff3a"), label: "CAN")
-          }
-          Text(status).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white.opacity(0.8))
-        }
+      switch family {
+      case .systemMedium: medium
+      case .accessoryRectangular: lockRect
+      case .accessoryCircular: lockCircle
+      case .accessoryInline: Text("🎨 \(Int(entry.paintA))% · \(Int(entry.paintB))% · 🔥\(entry.streak)")
+      default: small
       }
     }
-    .padding(2)
-    .containerBackground(Color(hex: "#0b0b0f"), for: .widget)
+    .containerBackground(for: .widget) { Color(hex: "#0b0b0f") }
+  }
+
+  var small: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack {
+        Text("FRESCO").font(.system(size: 10, weight: .black)).tracking(2).foregroundStyle(.white)
+        Spacer()
+        Text("🔥\(entry.streak)").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.8))
+      }
+      HStack(spacing: 8) {
+        Swatch(color: entry.colorA, label: "A", cap: entry.capA, size: 22)
+        Swatch(color: entry.colorB, label: "B", cap: entry.capB, size: 22)
+      }
+      HStack(spacing: 8) {
+        CanBar(value: entry.paintA, color: entry.colorA, label: "A")
+        CanBar(value: entry.paintB, color: entry.colorB, label: "B")
+        CanBar(value: entry.shake, color: entry.shake < 12 ? Color(hex: "#ff5c1a") : Color(hex: "#7cff3a"), label: "CAN")
+      }
+      Text(status).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
+    }
+  }
+
+  var medium: some View {
+    HStack(spacing: 14) {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack {
+          Text("FRESCO").font(.system(size: 11, weight: .black)).tracking(2).foregroundStyle(.white)
+          Spacer()
+          Text(entry.tag).font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+        }
+        HStack(spacing: 14) {
+          Swatch(color: entry.colorA, label: "VOL+ · A", cap: entry.capA)
+          Swatch(color: entry.colorB, label: "VOL− · B", cap: entry.capB)
+        }
+        Gauge(value: entry.paintA, color: entry.colorA, label: "A", refillAt: entry.refillAtA)
+        Gauge(value: entry.paintB, color: entry.colorB, label: "B", refillAt: entry.refillAtB)
+        Text("\(status) · \(entry.strokes) strokes · \(entry.paintUsed) paint all-time").font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
+      }
+      VStack(spacing: 4) {
+        Text("🔥").font(.system(size: 20))
+        Text("\(entry.streak)").font(.system(size: 24, weight: .black)).foregroundStyle(.white)
+        Text("day streak").font(.system(size: 8, weight: .bold)).foregroundStyle(.white.opacity(0.7))
+        CanBar(value: entry.shake, color: entry.shake < 12 ? Color(hex: "#ff5c1a") : Color(hex: "#7cff3a"), label: "CAN").frame(width: 30)
+      }
+      .frame(width: 66)
+      .padding(6)
+      .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.08)))
+    }
+  }
+
+  /// Lock screen, rectangular: both colours + levels + streak (monochrome-safe: colours also carry a label).
+  var lockRect: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      HStack(spacing: 4) {
+        Text("FRESCO").font(.system(size: 10, weight: .black)).tracking(1)
+        Spacer()
+        Text("🔥\(entry.streak)").font(.system(size: 10, weight: .bold))
+      }
+      HStack(spacing: 6) {
+        Circle().fill(entry.colorA).frame(width: 10, height: 10).overlay(Circle().stroke(.white, lineWidth: 1))
+        Text("\(Int(entry.paintA))% \(entry.capA)").font(.system(size: 10, weight: .semibold))
+        Circle().fill(entry.colorB).frame(width: 10, height: 10).overlay(Circle().stroke(.white, lineWidth: 1))
+        Text("\(Int(entry.paintB))% \(entry.capB)").font(.system(size: 10, weight: .semibold))
+      }
+      Text(status).font(.system(size: 9)).opacity(0.8)
+    }
+  }
+
+  var lockCircle: some View {
+    ZStack {
+      AccessoryWidgetBackground()
+      Circle().trim(from: 0, to: entry.paintA / 100).stroke(entry.colorA, style: StrokeStyle(lineWidth: 4, lineCap: .round)).rotationEffect(.degrees(-90)).padding(3)
+      Circle().trim(from: 0, to: entry.paintB / 100).stroke(entry.colorB, style: StrokeStyle(lineWidth: 4, lineCap: .round)).rotationEffect(.degrees(-90)).padding(9)
+      Text("\(Int(min(entry.paintA, entry.paintB)))").font(.system(size: 13, weight: .black))
+    }
   }
 }
 
@@ -148,8 +221,8 @@ struct PaintCanWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: kind, provider: CanProvider()) { entry in PaintCanView(entry: entry) }
       .configurationDisplayName("Fresco can")
-      .description("Paint left, refill countdown and your streak.")
-      .supportedFamilies([.systemSmall, .systemMedium])
+      .description("Your equipped colours, paint left, refill countdown and streak.")
+      .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular, .accessoryCircular, .accessoryInline])
   }
 }
 

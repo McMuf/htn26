@@ -18,7 +18,12 @@ export type ArTrackingEvent = {
   planes?: number;
   surfaces?: number;
   anchors?: number;
+  lidar?: boolean;
 };
+
+/** What the reticle is on: plane = detected geometry (locked), extended = known plane's extension, mesh = LiDAR, estimated = feature points. */
+export type HitKind = 'plane' | 'extended' | 'mesh' | 'estimated' | 'none';
+export type ArHitEvent = { hit: boolean; distance: number; drip?: boolean; kind?: HitKind; vertical?: boolean; locked?: boolean };
 
 export type ArPaintViewProps = ViewProps & {
   spraying?: boolean;
@@ -28,18 +33,20 @@ export type ArPaintViewProps = ViewProps & {
   showPlanes?: boolean;
   worldMapPath?: string | null;
   onTracking?: (e: { nativeEvent: ArTrackingEvent }) => void;
-  onHit?: (e: { nativeEvent: { hit: boolean; distance: number; drip?: boolean } }) => void;
+  onHit?: (e: { nativeEvent: ArHitEvent }) => void;
   onStrokeEnd?: (e: { nativeEvent: ArStroke }) => void;
-  onSurface?: (e: { nativeEvent: { id: string; count: number; restored?: boolean } }) => void;
+  onSurface?: (e: { nativeEvent: { id: string; count: number; restored?: boolean; kind?: HitKind } }) => void;
 };
 
 export type ArPaintViewRef = {
   saveWorldMap: (path: string) => Promise<{ bytes: number; anchors: number }>;
-  addStrokes: (strokes: ArStroke[]) => Promise<void>;
+  /** mode 'absolute' (default): same world map as this session. 'relative': no map — place from where the painter stood, relative to the camera now. */
+  addStrokes: (strokes: ArStroke[], mode?: 'absolute' | 'relative') => Promise<void>;
   clearAll: () => Promise<void>;
   resetSession: () => Promise<void>;
 };
 
 const NativeModule = requireNativeModule('ArPaint');
 export const isArSupported: boolean = !!NativeModule.isSupported;
+export const hasLidar: boolean = !!NativeModule.hasLidar;
 export const ArPaintView = requireNativeView<ArPaintViewProps & { ref?: Ref<ArPaintViewRef> }>('ArPaint');

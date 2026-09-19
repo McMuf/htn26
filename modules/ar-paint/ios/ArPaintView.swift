@@ -19,6 +19,14 @@ final class PaintNode {
   var dirty = false
   var lastUpload: CFTimeInterval = 0
   var attached = false
+  /// The ARPlaneAnchor this quad is snapped to (nil while it only rests on an estimated surface).
+  var planeId: UUID?
+  /// Identifier of the session ARAnchor currently carrying this quad (changes when we re-anchor).
+  var anchorId: UUID?
+  var lastSnap: CFTimeInterval = 0
+  /// Placed by the geo/heading fallback (no world map): allow a wider snap radius onto real planes.
+  var loose = false
+  var center: simd_float3 { simd_float3(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z) }
 
   init(id: String, transform: simd_float4x4) {
     self.id = id
@@ -165,12 +173,18 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
 
   private var paintNodes: [String: PaintNode] = [:]
   private var planeNodes: [UUID: SCNNode] = [:]
+  private var planeAnchors: [UUID: ARPlaneAnchor] = [:]
   private var displayLink: CADisplayLink?
   private var reticle = SCNNode()
+  private var reticleMaterial = SCNMaterial()
   private var lastHitEvent: CFTimeInterval = 0
   private var lastTrackingEvent: CFTimeInterval = 0
   private var lastTrackingKey = ""
   private var pendingWorldMap: ARWorldMap?
+  private var started = false
+  private var aimedPlane: UUID?
+  private(set) var hasLidar = ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh)
+  private static let gridImage: UIImage = ArPaintView.makeGrid()
 
   // current stroke
   private struct StrokeRec { var id: String; var nodeId: String; var points: [[Double]]; var rng: SplitMix; var color: String; var viewer: [Double] }
@@ -179,6 +193,11 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
   private var lastDab: (u: CGFloat, v: CGFloat, t: CFTimeInterval)?
   private var dwellSince: CFTimeInterval = 0
   private var lastTick: CFTimeInterval = 0
+
+  /// What the reticle is on. plane = detected plane geometry (locked), extended = the infinite
+  /// extension of a detected plane, mesh = LiDAR mesh, estimated = feature-point estimate.
+  private enum HitKind: String { case plane, extended, mesh, estimated }
+  private struct Hit { let transform: simd_float4x4; let plane: ARPlaneAnchor?; let kind: HitKind; let vertical: Bool }
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -197,11 +216,14 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
     sceneView.frame = bounds
   }
 
+  /// Leaving the window (other tab) pauses; coming back RESUMES the same session so every
+  /// anchor keeps its place. Only a first start or a world-map load resets tracking.
   override func didMoveToWindow() {
     super.didMoveToWindow()
     if window != nil {
-      restartSession(worldMap: pendingWorldMap)
-      pendingWorldMap = nil
+      if let map = pendingWorldMap { pendingWorldMap = nil; restartSession(worldMap: map) }
+      else if !started { restartSession(worldMap: nil) }
+      else { sceneView.session.run(makeConfig(worldMap: nil)) }
       if displayLink == nil {
         displayLink = CADisplayLink(target: self, selector: #selector(tick))
         displayLink?.preferredFramesPerSecond = 60
@@ -215,8 +237,7 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
 
   // MARK: session
 
-  func restartSession(worldMap: ARWorldMap?) {
-    guard ARWorldTrackingConfiguration.isSupported else { return }
+  private func makeConfig(worldMap: ARWorldMap?) -> ARWorldTrackingConfiguration {
     let config = ARWorldTrackingConfiguration()
     // North-aligned metric frame (−Z = north, +X = east, +Y = up, origin = where the session started).
     // Anchor transforms are stored in this frame, so the web app can project AR strokes onto its
@@ -225,12 +246,22 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
     config.planeDetection = [.horizontal, .vertical]
     config.environmentTexturing = .none
     config.isLightEstimationEnabled = true
+    // LiDAR phones: the scene mesh makes blank walls hit-testable immediately (raycasts use it).
+    if hasLidar { config.sceneReconstruction = .mesh }
     if let map = worldMap { config.initialWorldMap = map }
+    return config
+  }
+
+  func restartSession(worldMap: ARWorldMap?) {
+    guard ARWorldTrackingConfiguration.isSupported else { return }
     for p in paintNodes.values { p.node.removeFromParentNode(); p.attached = false }
     paintNodes.removeAll()
     planeNodes.values.forEach { $0.removeFromParentNode() }
     planeNodes.removeAll()
-    sceneView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
+    planeAnchors.removeAll()
+    aimedPlane = nil
+    started = true
+    sceneView.session.run(makeConfig(worldMap: worldMap), options: [.resetTracking, .removeExistingAnchors])
   }
 
   func setWorldMapPath(_ path: String?) {
@@ -267,13 +298,14 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
     paintNodes.removeAll()
   }
 
-  // MARK: reticle
+  // MARK: reticle + plane visuals
 
   private func buildReticle() {
     let ring = SCNTube(innerRadius: 0.035, outerRadius: 0.045, height: 0.001)
-    let m = SCNMaterial(); m.diffuse.contents = UIColor.white.withAlphaComponent(0.85); m.lightingModel = .constant
-    m.writesToDepthBuffer = false
-    ring.materials = [m]
+    reticleMaterial.diffuse.contents = UIColor.white.withAlphaComponent(0.85)
+    reticleMaterial.lightingModel = .constant
+    reticleMaterial.writesToDepthBuffer = false
+    ring.materials = [reticleMaterial]
     reticle = SCNNode(geometry: ring)
     reticle.renderingOrder = 20
     reticle.isHidden = true
@@ -283,32 +315,124 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
     reticle.addChildNode(dot)
   }
 
-  // MARK: paint loop
+  /// 1 m tile with 25 cm lines; ARSCNPlaneGeometry texture coordinates are in metres, so it tiles as a real grid.
+  private static func makeGrid() -> UIImage {
+    let px = 256
+    let r = UIGraphicsImageRenderer(size: CGSize(width: px, height: px))
+    return r.image { c in
+      let ctx = c.cgContext
+      ctx.clear(CGRect(x: 0, y: 0, width: px, height: px))
+      ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.9).cgColor)
+      for i in 0...4 {
+        let p = CGFloat(i) * CGFloat(px) / 4
+        ctx.setLineWidth(i % 4 == 0 ? 3 : 1.2)
+        ctx.move(to: CGPoint(x: p, y: 0)); ctx.addLine(to: CGPoint(x: p, y: CGFloat(px)))
+        ctx.move(to: CGPoint(x: 0, y: p)); ctx.addLine(to: CGPoint(x: CGFloat(px), y: p))
+        ctx.strokePath()
+      }
+    }
+  }
 
-  private func raycastCenter() -> ARRaycastResult? {
+  private func stylePlane(_ node: SCNNode, anchor: ARPlaneAnchor, aimed: Bool) {
+    guard let m = node.geometry?.firstMaterial else { return }
+    let vertical = anchor.alignment == .vertical
+    let tint = vertical ? UIColor(red: 0.1, green: 0.9, blue: 1, alpha: 1) : UIColor(red: 0.49, green: 1, blue: 0.23, alpha: 1)
+    m.multiply.contents = tint
+    m.transparency = aimed ? 0.55 : 0.16
+  }
+
+  // MARK: raycast
+
+  /// Locked plane geometry first, then the infinite extension of a known plane (so a whole wall is
+  /// paintable once any patch of it is detected), then LiDAR mesh / feature-point estimates.
+  private func raycastCenter() -> Hit? {
     let center = CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY)
     if let q = sceneView.raycastQuery(from: center, allowing: .existingPlaneGeometry, alignment: .any),
-       let r = sceneView.session.raycast(q).first { return r }
+       let r = sceneView.session.raycast(q).first {
+      let plane = r.anchor as? ARPlaneAnchor
+      return Hit(transform: r.worldTransform, plane: plane, kind: .plane, vertical: plane?.alignment == .vertical || isVertical(r.worldTransform))
+    }
+    if let q = sceneView.raycastQuery(from: center, allowing: .existingPlaneInfinite, alignment: .any) {
+      for r in sceneView.session.raycast(q) {
+        guard let plane = r.anchor as? ARPlaneAnchor else { continue }
+        // only trust the extension close to the part of the plane ARKit has actually seen
+        let p = simd_float3(r.worldTransform.columns.3.x, r.worldTransform.columns.3.y, r.worldTransform.columns.3.z)
+        let l = simd_inverse(plane.transform) * simd_float4(p, 1)
+        let dx = max(0, abs(l.x - plane.center.x) - plane.planeExtent.width / 2)
+        let dz = max(0, abs(l.z - plane.center.z) - plane.planeExtent.height / 2)
+        if hypot(dx, dz) < 0.9 { return Hit(transform: r.worldTransform, plane: plane, kind: .extended, vertical: plane.alignment == .vertical) }
+      }
+    }
     if let q = sceneView.raycastQuery(from: center, allowing: .estimatedPlane, alignment: .any),
-       let r = sceneView.session.raycast(q).first { return r }
+       let r = sceneView.session.raycast(q).first {
+      return Hit(transform: r.worldTransform, plane: nil, kind: hasLidar ? .mesh : .estimated, vertical: isVertical(r.worldTransform))
+    }
     return nil
   }
+
+  private func isVertical(_ t: simd_float4x4) -> Bool { abs(t.columns.1.y) < 0.5 }
+
+  // MARK: frames
+
+  /// A right-handed quad frame: Y = surface normal, X horizontal along the surface, −Z "up the
+  /// wall" (so drips run down) or north for floors. Plane anchors keep their own axes, flipped
+  /// if needed so the up rule holds; estimated hits get a frame built from the normal alone.
+  private func quadFrame(position p: simd_float3, normal nIn: simd_float3, plane: ARPlaneAnchor?) -> simd_float4x4 {
+    var x: simd_float3, y: simd_float3, z: simd_float3
+    if let plane = plane {
+      x = simd_normalize(simd_float3(plane.transform.columns.0.x, plane.transform.columns.0.y, plane.transform.columns.0.z))
+      y = simd_normalize(simd_float3(plane.transform.columns.1.x, plane.transform.columns.1.y, plane.transform.columns.1.z))
+      z = simd_normalize(simd_float3(plane.transform.columns.2.x, plane.transform.columns.2.y, plane.transform.columns.2.z))
+      if plane.alignment == .vertical && z.y > 0 { x = -x; z = -z } // make −Z point up
+    } else {
+      y = simd_normalize(nIn)
+      let up = simd_float3(0, 1, 0)
+      if abs(y.y) > 0.7 { // floor / table: X = east
+        if y.y < 0 { y = -y }
+        x = simd_normalize(simd_float3(1, 0, 0) - y * y.x)
+        z = simd_cross(x, y)
+      } else {
+        x = simd_normalize(simd_cross(up, y))
+        z = simd_cross(x, y) // points down for a wall normal → −Z is up
+        if z.y > 0 { x = -x; z = -z }
+      }
+    }
+    var m = matrix_identity_float4x4
+    m.columns.0 = simd_float4(x, 0); m.columns.1 = simd_float4(y, 0); m.columns.2 = simd_float4(z, 0); m.columns.3 = simd_float4(p, 1)
+    return m
+  }
+
+  private func planeCenterWorld(_ plane: ARPlaneAnchor) -> simd_float3 {
+    let c = plane.transform * simd_float4(plane.center, 1)
+    return simd_float3(c.x, c.y, c.z)
+  }
+
+  private func normal(of t: simd_float4x4) -> simd_float3 { simd_normalize(simd_float3(t.columns.1.x, t.columns.1.y, t.columns.1.z)) }
+
+  // MARK: paint loop
 
   @objc private func tick(_ link: CADisplayLink) {
     let now = link.timestamp
     let hit = raycastCenter()
     if let h = hit {
-      let t = h.worldTransform
+      let t = h.transform
       reticle.simdTransform = t
-      reticle.simdPosition += simd_float3(t.columns.1.x, t.columns.1.y, t.columns.1.z) * 0.006
+      reticle.simdPosition += normal(of: t) * 0.006
       reticle.isHidden = false
+      let locked = h.kind == .plane || h.kind == .extended || h.kind == .mesh
+      reticleMaterial.diffuse.contents = locked ? UIColor.white.withAlphaComponent(0.9) : UIColor(red: 1, green: 0.9, blue: 0, alpha: 0.9)
       let cam = sceneView.pointOfView?.simdWorldPosition ?? .zero
       let dist = simd_distance(cam, simd_float3(t.columns.3.x, t.columns.3.y, t.columns.3.z))
       reticle.simdScale = simd_float3(repeating: max(0.5, min(3, dist / 0.8)))
-      if now - lastHitEvent > 0.1 { lastHitEvent = now; onHit(["hit": true, "distance": Double(dist)]) }
+      setAimed(h.plane?.identifier)
+      if now - lastHitEvent > 0.1 {
+        lastHitEvent = now
+        onHit(["hit": true, "distance": Double(dist), "kind": h.kind.rawValue, "vertical": h.vertical, "locked": locked])
+      }
     } else {
       reticle.isHidden = true
-      if now - lastHitEvent > 0.1 { lastHitEvent = now; onHit(["hit": false, "distance": 0]) }
+      setAimed(nil)
+      if now - lastHitEvent > 0.1 { lastHitEvent = now; onHit(["hit": false, "distance": 0, "kind": "none", "locked": false]) }
     }
 
     if spraying, let h = hit, now - lastTick >= 1.0 / 30.0 {
@@ -316,6 +440,13 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
       paintAt(h, now: now)
     }
     for p in paintNodes.values { p.uploadIfNeeded(now: now) }
+  }
+
+  private func setAimed(_ id: UUID?) {
+    guard id != aimedPlane else { return }
+    if let old = aimedPlane, let n = planeNodes[old], let a = planeAnchors[old] { stylePlane(n, anchor: a, aimed: false) }
+    if let new = id, let n = planeNodes[new], let a = planeAnchors[new] { stylePlane(n, anchor: a, aimed: true) }
+    aimedPlane = id
   }
 
   private func beginStroke() {
@@ -339,31 +470,70 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
     ])
   }
 
-  /// Pick the paint node for a hit: an existing coplanar quad that contains the point, else a new one.
-  private func nodeFor(hit: ARRaycastResult) -> PaintNode {
-    let t = hit.worldTransform
+  /// Pick the paint node for a hit: a quad on the same detected plane that contains the point,
+  /// else any coplanar quad that does, else a new one built in a wall-aligned frame.
+  private func nodeFor(hit: Hit) -> PaintNode {
+    let t = hit.transform
     let p = simd_float3(t.columns.3.x, t.columns.3.y, t.columns.3.z)
-    let n = simd_normalize(simd_float3(t.columns.1.x, t.columns.1.y, t.columns.1.z))
+    let n = normal(of: t)
+    if let plane = hit.plane {
+      for node in paintNodes.values where node.planeId == plane.identifier {
+        let l = node.local(p)
+        if node.contains(u: l.u, v: l.v) { return node }
+      }
+    }
     for node in paintNodes.values {
       let l = node.local(p)
-      if l.d < 0.06 && node.contains(u: l.u, v: l.v) && simd_dot(n, node.normal) > 0.9 { return node }
+      if l.d < 0.08 && node.contains(u: l.u, v: l.v) && simd_dot(n, node.normal) > 0.95 {
+        if node.planeId == nil, let plane = hit.plane { adopt(node, plane: plane) } // estimated quad meets its real wall
+        return node
+      }
     }
-    // New quad centred on the hit, oriented like the surface (use the plane anchor's frame when we have one
-    // so u/v run along the wall's own axes).
-    var transform = t
-    if let plane = hit.anchor as? ARPlaneAnchor {
-      transform = plane.transform
-      transform.columns.3 = simd_float4(p, 1)
-    }
+    let transform = quadFrame(position: p, normal: n, plane: hit.plane)
     let id = "paint-" + UUID().uuidString.lowercased()
     let node = PaintNode(id: id, transform: transform)
+    node.planeId = hit.plane?.identifier
     paintNodes[id] = node
-    sceneView.session.add(anchor: ARAnchor(name: id, transform: transform))
-    onSurface(["id": id, "count": paintNodes.count])
+    addAnchor(for: node)
+    onSurface(["id": id, "count": paintNodes.count, "kind": hit.kind.rawValue])
     return node
   }
 
-  private func paintAt(_ hit: ARRaycastResult, now: CFTimeInterval) {
+  private func addAnchor(for node: PaintNode) {
+    let a = ARAnchor(name: node.id, transform: node.transform)
+    node.anchorId = a.identifier
+    sceneView.session.add(anchor: a)
+  }
+
+  /// Bind an estimated quad to a real plane and pull it onto that plane.
+  private func adopt(_ node: PaintNode, plane: ARPlaneAnchor) {
+    node.planeId = plane.identifier
+    node.loose = false
+    snap(node, to: plane, force: true)
+  }
+
+  /// Move a quad onto its plane (position projected along the normal, orientation = plane's).
+  /// Re-anchors the quad so ARKit keeps the corrected pose; debounced so refinement jitter is ignored.
+  private func snap(_ node: PaintNode, to plane: ARPlaneAnchor, force: Bool = false) {
+    let now = CACurrentMediaTime()
+    guard force || now - node.lastSnap > 0.7 else { return }
+    let pn = normal(of: plane.transform)
+    let pc = planeCenterWorld(plane)
+    let c = node.center
+    let off = simd_dot(c - pc, pn)
+    let angle = acos(max(-1, min(1, simd_dot(pn, node.normal))))
+    guard force || abs(off) > 0.012 || angle > 2 * .pi / 180 else { return }
+    let target = quadFrame(position: c - pn * off, normal: pn, plane: plane)
+    node.lastSnap = now
+    node.transform = target
+    if let old = node.anchorId, let a = sceneView.session.currentFrame?.anchors.first(where: { $0.identifier == old }) {
+      sceneView.session.remove(anchor: a)
+    }
+    node.node.removeFromParentNode(); node.attached = false
+    addAnchor(for: node)
+  }
+
+  private func paintAt(_ hit: Hit, now: CFTimeInterval) {
     let node = nodeFor(hit: hit)
     if stroke == nil || stroke!.nodeId != node.id {
       flushStroke()
@@ -371,7 +541,7 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
       let cam = sceneView.pointOfView?.simdWorldPosition ?? .zero
       stroke = StrokeRec(id: id, nodeId: node.id, points: [], rng: SplitMix(seed: id), color: paintColor.hexString, viewer: [Double(cam.x), Double(cam.y), Double(cam.z)])
     }
-    let t = hit.worldTransform
+    let t = hit.transform
     let p = simd_float3(t.columns.3.x, t.columns.3.y, t.columns.3.z)
     let l = node.local(p)
     let r = radius * (0.85 + 0.3 * flow)
@@ -392,26 +562,40 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
     lastDab = (l.u, l.v, now)
   }
 
-  /// Strokes from other phones / previous sessions: [{id, anchorId, transform:[16], color, points:[[u,v,r,a,kind]]}]
-  func addRemoteStrokes(_ strokes: [[String: Any]]) {
+  /// Strokes from other phones / previous sessions: [{id, anchorId, transform:[16], color, points:[[u,v,r,a,kind]], viewer:[3]}]
+  /// mode "absolute": transforms are in this session's frame (same world map). mode "relative":
+  /// no shared map — place each quad at its offset from where the painter stood, relative to the
+  /// camera now (frame is heading-aligned so the rotation is valid); real planes then pull it in.
+  func addRemoteStrokes(_ strokes: [[String: Any]], mode: String) {
+    let cam = sceneView.pointOfView?.simdWorldPosition ?? .zero
     for s in strokes {
       guard let id = s["id"] as? String, let anchorId = s["anchorId"] as? String,
             let tf = s["transform"] as? [Double], tf.count == 16,
             let colorHex = s["color"] as? String, let pts = s["points"] as? [[Double]] else { continue }
       let node: PaintNode
       if let existing = paintNodes[anchorId] { node = existing } else {
-        let transform = unflatten(tf)
+        var transform = unflatten(tf)
+        if mode == "relative" {
+          if let v = s["viewer"] as? [Double], v.count == 3 {
+            let viewer = simd_float3(Float(v[0]), Float(v[1]), Float(v[2]))
+            let anchorPos = simd_float3(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z)
+            transform.columns.3 = simd_float4(cam + (anchorPos - viewer), 1)
+          } else { continue }
+        }
         node = PaintNode(id: anchorId, transform: transform)
+        node.loose = mode == "relative"
         paintNodes[anchorId] = node
         // If the loaded world map already contains this anchor, ARKit will call didAdd and we attach there;
         // otherwise add it ourselves.
-        let inLoadedMap = loadedMapAnchorNames.contains(anchorId)
-        if !inLoadedMap && !(sceneView.session.currentFrame?.anchors.contains { $0.name == anchorId } ?? false) {
-          sceneView.session.add(anchor: ARAnchor(name: anchorId, transform: transform))
-        } else if let anchor = sceneView.session.currentFrame?.anchors.first(where: { $0.name == anchorId }),
-                  let anchorNode = sceneView.node(for: anchor) {
-          anchorNode.addChildNode(node.node); node.attached = true
+        let inLoadedMap = mode == "absolute" && loadedMapAnchorNames.contains(anchorId)
+        if let anchor = sceneView.session.currentFrame?.anchors.first(where: { $0.name == anchorId }) {
+          node.anchorId = anchor.identifier
+          node.transform = anchor.transform
+          if let anchorNode = sceneView.node(for: anchor) { anchorNode.addChildNode(node.node); node.attached = true }
+        } else if !inLoadedMap {
+          addAnchor(for: node)
         }
+        if node.loose { attachLooseNodeToNearbyPlane(node) }
       }
       var rng = SplitMix(seed: id)
       let color = UIColor(hex: colorHex)
@@ -424,6 +608,29 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
     }
   }
 
+  /// Quads without a real plane (estimated hits, or geo-fallback placement) adopt a newly seen
+  /// plane that is close and parallel. Loose (fallback) quads accept a wider gap.
+  private func attachLooseNodeToNearbyPlane(_ node: PaintNode) {
+    for plane in planeAnchors.values { if tryAdopt(node, plane: plane) { return } }
+  }
+  @discardableResult private func tryAdopt(_ node: PaintNode, plane: ARPlaneAnchor) -> Bool {
+    guard node.planeId == nil else { return false }
+    let pn = normal(of: plane.transform)
+    let dot = simd_dot(pn, node.normal)
+    let maxAngle: Float = node.loose ? 0.94 : 0.97 // ~20° / ~14°
+    guard dot > maxAngle else { return false }
+    let pc = planeCenterWorld(plane)
+    let off = abs(simd_dot(node.center - pc, pn))
+    guard off < (node.loose ? 0.6 : 0.15) else { return false }
+    // and the quad must overlap the plane's known extent (in-plane distance)
+    let l = simd_inverse(plane.transform) * simd_float4(node.center, 1)
+    let dx = max(0, abs(l.x - plane.center.x) - plane.planeExtent.width / 2)
+    let dz = max(0, abs(l.z - plane.center.z) - plane.planeExtent.height / 2)
+    guard hypot(dx, dz) < Float(PaintNode.sizeM) / 2 else { return false }
+    adopt(node, plane: plane)
+    return true
+  }
+
   // MARK: ARSCNViewDelegate
 
   func renderer(_ renderer: SCNSceneRenderer, didAdd node: SCNNode, for anchor: ARAnchor) {
@@ -431,15 +638,24 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
       guard let geo = ARSCNPlaneGeometry(device: sceneView.device!) else { return }
       geo.update(from: plane.geometry)
       let m = SCNMaterial()
-      m.diffuse.contents = UIColor.white.withAlphaComponent(0.06)
+      m.diffuse.contents = ArPaintView.gridImage
+      m.diffuse.wrapS = .repeat; m.diffuse.wrapT = .repeat
       m.lightingModel = .constant
       m.writesToDepthBuffer = false
+      m.isDoubleSided = true
       geo.materials = [m]
       let pn = SCNNode(geometry: geo)
       pn.isHidden = !showPlanes
       pn.renderingOrder = 5
+      pn.opacity = 0
       node.addChildNode(pn)
-      DispatchQueue.main.async { self.planeNodes[plane.identifier] = pn }
+      pn.runAction(.fadeOpacity(to: 1, duration: 0.35))
+      DispatchQueue.main.async {
+        self.planeNodes[plane.identifier] = pn
+        self.planeAnchors[plane.identifier] = plane
+        self.stylePlane(pn, anchor: plane, aimed: plane.identifier == self.aimedPlane)
+        for n in self.paintNodes.values { self.tryAdopt(n, plane: plane) }
+      }
       return
     }
     if let name = anchor.name, name.hasPrefix("paint-") {
@@ -450,6 +666,7 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
           pnode = PaintNode(id: name, transform: anchor.transform)
           self.paintNodes[name] = pnode
         }
+        pnode.anchorId = anchor.identifier
         pnode.transform = anchor.transform
         if !pnode.attached { node.addChildNode(pnode.node); pnode.attached = true }
         self.onSurface(["id": name, "count": self.paintNodes.count, "restored": true])
@@ -463,17 +680,35 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
       let geometry = plane.geometry
       DispatchQueue.main.async {
         if let geo = self.planeNodes[plane.identifier]?.geometry as? ARSCNPlaneGeometry { geo.update(from: geometry) }
+        self.planeAnchors[plane.identifier] = plane
+        // ARKit refines a plane's depth/tilt for a while after it appears: keep our quads on it
+        for n in self.paintNodes.values {
+          if n.planeId == plane.identifier { self.snap(n, to: plane) } else { self.tryAdopt(n, plane: plane) }
+        }
       }
     } else if let name = anchor.name, name.hasPrefix("paint-") {
-      DispatchQueue.main.async { self.paintNodes[name]?.transform = transform }
+      DispatchQueue.main.async {
+        if let n = self.paintNodes[name], n.anchorId == anchor.identifier { n.transform = transform }
+      }
     }
   }
 
   func sessionShouldAttemptRelocalization(_ session: ARSession) -> Bool { true }
 
   func renderer(_ renderer: SCNSceneRenderer, didRemove node: SCNNode, for anchor: ARAnchor) {
-    if let plane = anchor as? ARPlaneAnchor { DispatchQueue.main.async { self.planeNodes[plane.identifier] = nil } }
-    // paint anchors are never removed by ARKit; if they were, keep the node where it is
+    if let plane = anchor as? ARPlaneAnchor {
+      DispatchQueue.main.async {
+        self.planeNodes[plane.identifier] = nil
+        self.planeAnchors[plane.identifier] = nil
+        // merged into another plane: quads go back to "unbound" and re-adopt the survivor
+        for n in self.paintNodes.values where n.planeId == plane.identifier { n.planeId = nil; self.attachLooseNodeToNearbyPlane(n) }
+      }
+    } else if let name = anchor.name, name.hasPrefix("paint-") {
+      // our own re-anchoring removes the old anchor; a stale one must not detach the quad's new node
+      DispatchQueue.main.async {
+        if let n = self.paintNodes[name], n.anchorId == anchor.identifier { n.node.removeFromParentNode(); n.attached = false }
+      }
+    }
   }
 
   // MARK: ARSessionDelegate
@@ -516,7 +751,7 @@ final class ArPaintView: ExpoView, ARSCNViewDelegate, ARSessionDelegate {
     let now = CACurrentMediaTime()
     if key == lastTrackingKey && now - lastTrackingEvent < 2 { return }
     lastTrackingKey = key; lastTrackingEvent = now
-    onTracking(["state": state, "reason": reason, "mapping": mapping, "planes": planeNodes.count, "surfaces": paintNodes.count])
+    onTracking(["state": state, "reason": reason, "mapping": mapping, "planes": planeNodes.count, "surfaces": paintNodes.count, "lidar": hasLidar])
   }
 }
 
