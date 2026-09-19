@@ -37,7 +37,9 @@ Cut this pass: Market tab, social auth, 360° viewer, friends backend, a texture
 
 ```sh
 npm install
-# 1) backend: paste supabase/schema.sql, then supabase/seed.sql, into the Supabase SQL editor
+# 1) backend: paste supabase/schema.sql, then supabase/migration_ar.sql (the AR columns,
+#    world-map bucket and undo policy), then supabase/seed.sql, into the Supabase SQL editor.
+#    Pointing the app at your own Supabase project: see deploy.md
 # 2) native build onto your iPhone (once; later changes are JS-only):
 npx expo run:ios --device          # or: eas build --profile development --platform ios
 # 3) dev server (any port; the dev client asks for the URL / scans the QR):
