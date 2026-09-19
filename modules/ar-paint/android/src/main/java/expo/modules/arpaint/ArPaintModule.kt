@@ -17,6 +17,8 @@ class ArPaintModule : Module() {
 
     Constant("isSupported") { appContext.reactContext?.let { ArSupport.isSupported(it) } ?: false }
     Constant("hasLidar") { false }
+    Constant("hasSnapshot") { true }
+    Constant("hasUndo") { true }
     Constant("platform") { "arcore" }
     Constant("cloudAnchors") { appContext.reactContext?.let { ArSupport.hasCloudAnchorKey(it) } ?: false }
 
@@ -43,6 +45,8 @@ class ArPaintModule : Module() {
       AsyncFunction("addStrokes") { view: ArPaintView, strokes: List<Map<String, Any?>>, mode: String? ->
         view.addRemoteStrokes(strokes, mode ?: "absolute")
       }
+      AsyncFunction("snapshot") { view: ArPaintView, path: String, promise: Promise -> view.snapshot(path, promise) }
+      AsyncFunction("undoLast") { view: ArPaintView, promise: Promise -> view.undoLast(promise) }
       AsyncFunction("clearAll") { view: ArPaintView -> view.clearAll() }
       AsyncFunction("resetSession") { view: ArPaintView -> view.resetSession() }
 

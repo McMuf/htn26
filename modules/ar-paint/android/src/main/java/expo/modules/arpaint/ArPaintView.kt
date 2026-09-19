@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
@@ -34,6 +35,10 @@ import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
@@ -138,11 +143,12 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
   private class StrokeRec(val id: String, val quadId: String, val points: MutableList<List<Double>>, val rng: SplitMix, val color: String, val viewer: List<Double>)
   private var spraying = false
   private var stroke: StrokeRec? = null
-  private var lastDabU = 0f
-  private var lastDabV = 0f
-  private var hasLastDab = false
-  private var dwellSince = 0L
+  /** Strokes you painted this session, newest last - what undo walks back through. */
+  private val myStrokes = mutableListOf<Pair<String, String>>() // quad id, stroke id
   private var lastTick = 0L
+  private var snapshotJob: SnapshotJob? = null
+
+  private class SnapshotJob(val path: String, val promise: Promise)
 
   // loaded Cloud-Anchor map
   private enum class MapState { NONE, RESOLVING, RESOLVED, FAILED }
@@ -318,12 +324,16 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
   }
 
   fun setPaintColor(hex: String) {
-    var s = hex.trim().removePrefix("#")
-    val c = if (s.length == 6) s.toLongOrNull(16)?.let { Color.rgb(((it shr 16) and 0xff).toInt(), ((it shr 8) and 0xff).toInt(), (it and 0xff).toInt()) } else null
-    if (c == null) s = "ff00ff"
-    colorInt = c ?: Color.rgb(255, 0, 255)
-    colorHex = "#" + s.lowercase()
+    val clean = hex.trim().removePrefix("#")
+    val parsed = colorOrNull(clean)
+    colorInt = parsed ?: Color.rgb(255, 0, 255)
+    colorHex = "#" + (if (parsed != null) clean.lowercase() else "ff00ff")
   }
+
+  private fun colorOrNull(hex: String): Int? = hex.takeIf { it.length == 6 }?.toLongOrNull(16)
+    ?.let { Color.rgb(((it shr 16) and 0xff).toInt(), ((it shr 8) and 0xff).toInt(), (it and 0xff).toInt()) }
+
+  private fun colorOf(hex: String): Int = colorOrNull(hex.trim().removePrefix("#")) ?: Color.rgb(255, 0, 255)
 
   private fun enqueue(needsTracking: Boolean = true, gen: Int = generation.get(), onDropped: (() -> Unit)? = null, block: () -> Boolean) {
     ops.add(Op(gen, needsTracking, block, onDropped))
@@ -341,6 +351,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
 
   private fun resetState() {
     stroke = null
+    myStrokes.clear()
     for (f in resolveFutures) f.cancel()
     resolveFutures.clear()
     for (q in quads.values) q.release()
@@ -379,6 +390,67 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       finishSave(path, promise)
       true
     }
+  }
+
+  /**
+   * Takes back your most recent stroke in this session: its quad is repainted from the strokes that
+   * remain, so other people's paint over the top survives. Resolves the stroke id for the app to
+   * drop from the shared wall, or null when you have nothing left to undo here.
+   */
+  fun undoLast(promise: Promise) {
+    enqueue(needsTracking = false, onDropped = { promise.resolve(null) }) {
+      var result: Map<String, Any>? = null
+      while (result == null && myStrokes.isNotEmpty()) {
+        val (quadId, strokeId) = myStrokes.removeAt(myStrokes.size - 1)
+        val q = quads[quadId] ?: continue
+        if (!q.remove(strokeId)) continue
+        q.upload(SystemClock.elapsedRealtime(), force = true)
+        result = mapOf("id" to strokeId, "anchorId" to quadId)
+      }
+      promise.resolve(result)
+      true
+    }
+  }
+
+  /**
+   * A photo of the wall as you're seeing it: the camera frame with the paint composited on top,
+   * written to [path] as JPEG. The reticle and the surface grids are left out of that frame, so it
+   * looks like a picture of the piece rather than a screenshot of the app.
+   */
+  fun snapshot(path: String, promise: Promise) {
+    if (!running) return promise.reject("E_SNAPSHOT", "AR session not running", null)
+    if (snapshotJob != null) return promise.reject("E_SNAPSHOT", "a photo is already being taken", null)
+    snapshotJob = SnapshotJob(path, promise) // the next drawn frame takes it
+  }
+
+  /** Reads the frame just drawn (GL origin is bottom-left, so it comes back flipped) and writes a JPEG. */
+  private fun takeSnapshot(job: SnapshotJob) {
+    val w = viewportW
+    val h = viewportH
+    if (w <= 0 || h <= 0) return job.promise.reject("E_SNAPSHOT", "nothing drawn yet", null)
+    val buf = ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder())
+    GLES20.glReadPixels(0, 0, w, h, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buf)
+    buf.rewind()
+    val raw = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    raw.copyPixelsFromBuffer(buf)
+    val flip = android.graphics.Matrix().apply { postScale(1f, -1f, w / 2f, h / 2f) } // android.opengl.Matrix is the other one
+    val image = Bitmap.createBitmap(raw, 0, 0, w, h, flip, true)
+    raw.recycle()
+    Thread {
+      try {
+        val file = File(job.path)
+        file.parentFile?.mkdirs()
+        FileOutputStream(file).use { out ->
+          image.compress(Bitmap.CompressFormat.JPEG, 85, out)
+          out.flush()
+        }
+        val bytes = file.length().toInt()
+        image.recycle()
+        job.promise.resolve(mapOf("width" to w, "height" to h, "bytes" to bytes))
+      } catch (e: Exception) {
+        job.promise.reject("E_SNAPSHOT", e.message ?: "could not write the photo", e)
+      }
+    }.start()
   }
 
   /** Strokes from other phones / previous sessions: [{id, anchorId, transform:[16], color, points:[[u,v,r,a,kind]], viewer:[3]}]. */
@@ -457,7 +529,10 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     }
 
     for (q in quads.values) q.upload(now)
-    drawScene(hit, now)
+    val job = snapshotJob
+    if (job != null) snapshotJob = null
+    drawScene(hit, now, overlays = job == null)
+    if (job != null) takeSnapshot(job)
     emitTrackingIfDue(camera, now)
   }
 
@@ -471,8 +546,8 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     }
   }
 
-  private fun drawScene(hit: Hit?, now: Long) {
-    if (showPlanes) {
+  private fun drawScene(hit: Hit?, now: Long, overlays: Boolean = true) {
+    if (showPlanes && overlays) {
       planeRenderer.begin()
       for ((p, seen) in planes) {
         if (p.trackingState != TrackingState.TRACKING || p.subsumedBy != null) continue
@@ -483,7 +558,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     }
     quadRenderer.beginPaint()
     for (q in quads.values) if (q.placed) quadRenderer.drawPaint(viewProj, q)
-    if (hit != null) {
+    if (hit != null && overlays) {
       val t = hit.transform
       val n = M.col(t, 1).normalized()
       val scale = max(0.5f, min(3f, cameraPos.distance(M.pos(t)) / 0.8f))
@@ -656,8 +731,6 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
 
   private fun beginStroke() {
     lastTick = 0
-    hasLastDab = false
-    dwellSince = SystemClock.elapsedRealtime()
     stroke = null // created lazily on first hit so the anchor is the surface we actually hit
   }
 
@@ -666,6 +739,8 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     stroke = null
     val q = quads[s.quadId] ?: return
     if (s.points.isEmpty()) return
+    q.record(PaintQuad.Painted(s.id, colorOf(s.color), s.points.map { p -> FloatArray(p.size) { i -> p[i].toFloat() } }))
+    myStrokes.add(q.id to s.id)
     q.upload(SystemClock.elapsedRealtime(), force = true)
     emitStrokeEnd(mapOf(
       "id" to s.id,
@@ -706,6 +781,10 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     return q
   }
 
+  /**
+   * One spray tick. Dwelling on a spot used to start a drip; paint now stays where it was sprayed
+   * and only builds up, which is what you want when you're actually trying to draw something.
+   */
   private fun paintAt(hit: Hit, now: Long) {
     val q = quadFor(hit, now)
     var s = stroke
@@ -719,24 +798,9 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     val l = q.local(M.pos(hit.transform))
     val f = flow
     val r = radius * (0.85f + 0.3f * f)
-    val a = 0.16f * f
+    val a = 0.28f * f
     q.dab(l.u, l.v, r, a, colorInt, s.rng)
     s.points.add(listOf(l.u.toDouble(), l.v.toDouble(), r.toDouble(), a.toDouble(), 0.0))
-
-    // dwell → pooling drip
-    if (hasLastDab && hypot(l.u - lastDabU, l.v - lastDabV) < 0.02f) {
-      if (now - dwellSince > 1100) {
-        dwellSince = now
-        val len = (0.05 + s.rng.next() * 0.12).toFloat()
-        val dv = l.v - r * 0.3f
-        q.drip(l.u, dv, len, 0.6f * f, colorInt, s.rng)
-        s.points.add(listOf(l.u.toDouble(), dv.toDouble(), len.toDouble(), (0.6f * f).toDouble(), 1.0))
-        emitHit(mapOf("hit" to true, "distance" to 0.0, "drip" to true))
-      }
-    } else {
-      dwellSince = now
-    }
-    lastDabU = l.u; lastDabV = l.v; hasLastDab = true
   }
 
   // ---- remote strokes ----------------------------------------------------------------------
@@ -748,7 +812,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     val anchorId = m["anchorId"] as? String ?: return null
     val tf = M.unflatten(m["transform"]) ?: return null
     val hex = (m["color"] as? String)?.trim()?.removePrefix("#") ?: return null
-    val color = hex.takeIf { it.length == 6 }?.toLongOrNull(16)?.let { Color.rgb(((it shr 16) and 0xff).toInt(), ((it shr 8) and 0xff).toInt(), (it and 0xff).toInt()) } ?: Color.rgb(255, 0, 255)
+    val color = colorOf(hex)
     val pts = (m["points"] as? List<*>)?.mapNotNull { p -> (p as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }?.toFloatArray()?.takeIf { it.size >= 4 } } ?: return null
     val viewer = (m["viewer"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }?.takeIf { it.size == 3 }?.let { V3(it[0], it[1], it[2]) }
     return RemoteStroke(id, anchorId, tf, color, pts, viewer)
@@ -783,11 +847,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
         quads[s.anchorId] = q
         if (q.placed) { anchorQuad(q); if (q.loose) attachLooseToNearbyPlane(q) }
       }
-      val rng = SplitMix(s.id)
-      for (p in s.points) {
-        val kind = if (p.size > 4) p[4] else 0f
-        if (kind == 1f) { rng.next(); q.drip(p[0], p[1], p[2], p[3], s.color, rng) } else q.dab(p[0], p[1], p[2], p[3], s.color, rng)
-      }
+      q.add(PaintQuad.Painted(s.id, s.color, s.points))
       q.upload(now, force = true)
     }
   }

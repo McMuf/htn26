@@ -88,44 +88,66 @@ class PaintQuad(val id: String, var transform: M4) {
   // y up: +v is up) and converted only when drawing, so the same stroke + seed produces the same
   // speckle on both platforms.
 
-  /** Curtis-style cheap spray: faint darker halo (edge darkening), scattered soft body (buildup), dense core, overspray speckle. */
+  /**
+   * Cheap spray that reads as paint rather than mist: a faint darker rim (edge darkening), a few
+   * soft blobs for buildup, then a hard, nearly opaque core. Overspray is kept light so a second
+   * pass covers the surface instead of hazing it.
+   */
   fun dab(u: Float, v: Float, radiusM: Float, alpha: Float, color: Int, rng: SplitMix) {
     val cx = (u + H) * PX_PER_M
     val cy = (v + H) * PX_PER_M
     val r = max(2f, radiusM * PX_PER_M)
     val dark = Color.rgb((Color.red(color) * 0.72f).toInt(), (Color.green(color) * 0.72f).toInt(), (Color.blue(color) * 0.72f).toInt())
 
-    softCircle(cx, cy, r * 0.95f, dark, alpha * 0.07f)
-    repeat(5) {
+    softCircle(cx, cy, r * 0.98f, dark, alpha * 0.10f, hard = 0.35f)
+    repeat(4) {
       val a = rng.next() * 2 * PI
-      val d = rng.gauss() * r * 0.45
-      softCircle((cx + cos(a) * d).toFloat(), (cy + sin(a) * d).toFloat(), r * 0.5f, color, alpha * (0.22f + 0.16f * rng.next().toFloat()))
+      val d = rng.gauss() * r * 0.36
+      softCircle((cx + cos(a) * d).toFloat(), (cy + sin(a) * d).toFloat(), r * 0.55f, color, alpha * (0.34f + 0.16f * rng.next().toFloat()), hard = 0.4f)
     }
-    softCircle(cx, cy, r * 0.24f, color, alpha * 0.55f, hard = 0.5f)
-    repeat(3) {
+    softCircle(cx, cy, r * 0.46f, color, alpha * 0.9f, hard = 0.8f)
+    repeat(2) {
       val a = rng.next() * 2 * PI
       val d = r * (0.8 + rng.next() * 0.9)
       val sr = (r * (0.06 + rng.next() * 0.05)).toFloat()
-      fillCircle((cx + cos(a) * d).toFloat(), (cy + sin(a) * d).toFloat(), sr, color, alpha * 0.5f)
+      fillCircle((cx + cos(a) * d).toFloat(), (cy + sin(a) * d).toFloat(), sr, color, alpha * 0.45f)
     }
   }
 
-  /** A run of paint downward from (u, v): pooling when you dwell on a spot. */
-  fun drip(u: Float, v: Float, lengthM: Float, alpha: Float, color: Int, rng: SplitMix) {
-    val w = ((0.004 + rng.next() * 0.003) * PX_PER_M).toFloat()
-    val sx = (u + H) * PX_PER_M
-    val sy = (v + H) * PX_PER_M
-    val len = lengthM * PX_PER_M
-    val steps = max(4, (len / (w * 0.6f)).toInt())
-    var x = sx + ((rng.next() - 0.5) * w).toFloat()
-    for (i in 0..steps) {
-      val t = i.toFloat() / steps
-      x += ((rng.next() - 0.5) * w * 0.35).toFloat()
-      val rr = w * (1 - 0.45f * t)
-      softCircle(x, sy - len * t, rr, color, alpha * (0.75f - 0.35f * t), hard = 0.6f)
+  /** Every stroke composited into this texture, kept so undo can rebuild the texture without one. */
+  class Painted(val id: String, val color: Int, val points: List<FloatArray>)
+
+  private val history = mutableListOf<Painted>()
+
+  /** Records a stroke that is already on the texture (the one you just sprayed, dab by dab). */
+  fun record(p: Painted) { history.add(p) }
+
+  /** Records and paints a stroke that isn't on the texture yet (another phone's, or a past session's). */
+  fun add(p: Painted) { history.add(p); replay(p) }
+
+  /** Seeded per stroke id, so the speckle lands identically on every phone and on every repaint. */
+  private fun replay(p: Painted) {
+    val rng = SplitMix(p.id)
+    for (pt in p.points) {
+      if (pt.size < 4) continue
+      // kind 1 is a drip from an older build. Paint doesn't run any more, so it isn't drawn at all
+      // (the rng still advances, so every phone skips it the same way).
+      if (pt.size > 4 && pt[4] == 1f) { rng.next(); continue }
+      dab(pt[0], pt[1], pt[2], pt[3], p.color, rng)
     }
-    softCircle(x, sy - len, w * 0.9f, color, alpha * 0.7f, hard = 0.5f)
-    softCircle(sx, sy, w * 2.2f, color, alpha * 0.25f)
+  }
+
+  /** Drops a stroke and rebuilds the texture from the ones that are left. */
+  fun remove(strokeId: String): Boolean {
+    val i = history.indexOfLast { it.id == strokeId }
+    if (i < 0) return false
+    history.removeAt(i)
+    val bmp = bitmap ?: return false
+    bmp.eraseColor(Color.TRANSPARENT)
+    dirty = true; fullDirty = true
+    dl = 0f; dt = 0f; dr = PX.toFloat(); db = PX.toFloat()
+    for (p in history) replay(p)
+    return true
   }
 
   private fun withAlpha(color: Int, a: Float) =

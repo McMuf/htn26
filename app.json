@@ -90,6 +90,7 @@
       "expo-dev-client",
       "@bacons/apple-targets",
       "expo-sharing",
+      "expo-asset",
       "./modules/ar-paint/app.plugin.js"
     ],
     "extra": {
