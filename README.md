@@ -4,6 +4,13 @@ Aim your phone like a spray can, **hold a volume button** to spray, and your pai
 spot for everyone who walks up to it later. Built for Hack the North (36h MVP), Expo SDK 57,
 iOS dev build.
 
+## Two clients, one wall
+
+- **iPhone app** (this repo root): ARKit surface painting, volume-button trigger, widget.
+- **Mobile web** (`web/`, live at https://tagged-web.vercel.app): any phone browser, compass-anchored
+  paint with on-screen hold buttons. Same Supabase project, same tables, same auth; strokes from
+  either client show up in the other (see `web/README.md` for how AR strokes are projected).
+
 ## Run it
 
 ```sh
@@ -52,7 +59,7 @@ piece near E7 → shimmer/edge arrow pulls you in → it resolves from a smear i
 - Tradeoff: relocalisation wants a similar viewpoint and lighting to the painter's; last writer
   wins on the shared map. Devices without ARKit fall back to the compass-anchored renderer below.
 
-Run `supabase/migration_ar.sql` once for the new columns and storage bucket.
+Run `supabase/migration_ar.sql` once for the new columns (`anchor_id`, `transform`, `viewer`, world map), the `set_world_map` RPC and the storage bucket.
 
 ### Compass fallback (`src/screens/PaintScreen.tsx`)
 
