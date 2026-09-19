@@ -1,4 +1,7 @@
--- Seeded pieces around E7 (run after schema.sql)
+-- Seeded pieces around E7 (run after schema.sql). Safe to re-run: painters upsert by name.
+alter table painters alter column id set default gen_random_uuid();
+alter table painters drop constraint if exists painters_id_fkey;
+delete from canvases where author_name like 'seed_%';
 
 with a as (insert into painters (name) values ('seed_nova') on conflict (name) do update set name = excluded.name returning id),
 c as (insert into canvases (lat, lng, heading, title, author_id, author_name) select 43.47295, -80.53985, 200, 'HTN', a.id, 'seed_nova' from a returning id, author_id)

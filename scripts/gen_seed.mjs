@@ -37,7 +37,7 @@ function raster(lines, cap) {
 }
 const r2 = (v) => Math.round(v * 100) / 100;
 
-let sql = `-- Seeded pieces around E7 (run after schema.sql)\n`;
+let sql = `-- Seeded pieces around E7 (run after schema.sql). Safe to re-run: painters upsert by name.\nalter table painters alter column id set default gen_random_uuid();\nalter table painters drop constraint if exists painters_id_fkey;\ndelete from canvases where author_name like 'seed_%';\n`;
 for (const p of pieces) {
   const pts = raster(p.lines, p.cap);
   sql += `

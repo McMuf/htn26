@@ -1,5 +1,6 @@
 -- Tagged: shared AR graffiti. Paste this whole file into the Supabase SQL editor and run it.
--- Auth: Supabase email/password. A painter row's id IS the auth user id; writes are gated on
+-- Auth: Supabase email/password. A real painter row's id IS the auth user id (seeded painters
+-- just get random ids and can't log in); writes are gated on
 -- auth.uid() so a piece is always signed by whoever is logged in. Reads are public.
 -- Tip for the demo: Authentication → Providers → Email → turn OFF "Confirm email" so sign-up
 -- logs straight in (otherwise the user must tap the emailed link first).
@@ -7,7 +8,7 @@
 create extension if not exists pgcrypto;
 
 create table if not exists painters (
-  id uuid primary key references auth.users(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
   name text not null unique,
   device_id text,
   paint_used double precision not null default 0,
@@ -46,6 +47,10 @@ create table if not exists strokes (
   paint_used double precision not null default 0,
   created_at timestamptz not null default now()
 );
+-- (migration for databases created from an earlier version of this file)
+alter table painters alter column id set default gen_random_uuid();
+alter table painters drop constraint if exists painters_id_fkey;
+
 create index if not exists strokes_canvas_idx on strokes(canvas_id, created_at);
 
 create table if not exists reports (
