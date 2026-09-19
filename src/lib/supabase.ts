@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_KEY, SUPABASE_URL } from '../config';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { storage: AsyncStorage, persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  auth: { storage: AsyncStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
   realtime: { params: { eventsPerSecond: 20 } },
 });
 

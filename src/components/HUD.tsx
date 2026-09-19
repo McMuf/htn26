@@ -72,7 +72,7 @@ export function BlockerBanner({ blocker }: { blocker: Blocker }) {
   if (!blocker) return null;
   const msg = {
     'no-location': 'Waiting for GPS…',
-    'outside-geofence': 'Outside the Waterloo paint zone',
+    'outside-geofence': 'Outside Waterloo Region — paint zone',
     shake: 'Shake the can first!',
     empty: 'Out of paint — wait for it to refill',
   }[blocker];

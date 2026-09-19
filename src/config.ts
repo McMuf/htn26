@@ -20,8 +20,8 @@ export const DISCOVERY_SHIMMER_RADIUS_M = 80; // shimmer/pull starts here
 export const DISCOVERED_RADIUS_M = 14; // "resolved" -> counts a view, shows the tag
 export const NEARBY_FETCH_RADIUS_M = 600;
 
-// Waterloo geofence: generous circle over UW main campus (E7 is ~43.4729, -80.5399).
-export const GEOFENCE = { lat: 43.4723, lng: -80.5449, radiusM: 1500 };
+// Waterloo Region geofence: ~25 km circle centred between Kitchener, Waterloo and Cambridge.
+export const GEOFENCE = { lat: 43.45, lng: -80.48, radiusM: 25000 };
 // Flip to true to paint anywhere (e.g. testing at home). Also togglable in settings.
 export const GEOFENCE_BYPASS_DEFAULT = false;
 

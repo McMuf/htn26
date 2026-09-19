@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { PALETTE, type Cap, type SprayOption } from '../config';
 import { useStore } from '../store';
+import { supabase } from '../lib/supabase';
 
 export function SettingsScreen() {
   const open = useStore((s) => s.settingsOpen);
@@ -41,7 +42,7 @@ export function SettingsScreen() {
         ))}
 
         <Row label="On-screen hold buttons (fallback if volume trigger breaks)" value={settings.onScreenButtons} onChange={(v) => setSettings({ onScreenButtons: v })} />
-        <Row label="Paint anywhere (bypass Waterloo geofence)" value={settings.geofenceBypass} onChange={(v) => setSettings({ geofenceBypass: v })} />
+        <Row label="Paint anywhere (bypass Waterloo Region geofence)" value={settings.geofenceBypass} onChange={(v) => setSettings({ geofenceBypass: v })} />
         <Row label="Sound" value={settings.sound} onChange={(v) => setSettings({ sound: v })} />
         <Row label="Haptics" value={settings.haptics} onChange={(v) => setSettings({ haptics: v })} />
 
@@ -58,7 +59,7 @@ export function SettingsScreen() {
           <Text style={styles.label}>DEBUG</Text>
           <View style={styles.row}>
             <Pressable onPress={() => setShake(1)} style={styles.pill}><Text style={styles.pillText}>fill can</Text></Pressable>
-            <Pressable onPress={() => { setPainter(null); setOpen(false); }} style={styles.pill}><Text style={styles.pillText}>change tag ({painter?.name})</Text></Pressable>
+            <Pressable onPress={() => { setPainter(null); setOpen(false); supabase.auth.signOut().catch(() => {}); }} style={styles.pill}><Text style={styles.pillText}>sign out ({painter?.name})</Text></Pressable>
           </View>
         </View>
       </ScrollView>

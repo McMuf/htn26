@@ -22,13 +22,27 @@
         "NSLocationWhenInUseUsageDescription": "Tagged uses your location to anchor graffiti to the place you painted it and to find pieces near you.",
         "NSMotionUsageDescription": "Tagged uses motion sensors to aim the spray can and to detect you shaking it.",
         "NSMicrophoneUsageDescription": "Tagged does not record audio; this is required by the camera module.",
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.hamzakhan.tagged",
-      "permissions": ["CAMERA", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "VIBRATE"]
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "VIBRATE",
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "plugins": [
       [
@@ -68,7 +82,10 @@
       "expo-dev-client"
     ],
     "extra": {
-      "eas": {}
-    }
+      "eas": {
+        "projectId": "5513273d-ce1f-442b-9051-954075d16d0a"
+      }
+    },
+    "owner": "synaraapp"
   }
 }

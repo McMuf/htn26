@@ -23,18 +23,22 @@ export function applyStroke(s: Stroke) {
   return true;
 }
 
-export async function ensurePainter(name: string): Promise<Painter> {
-  const local: Painter = { id: `local-${Date.now()}`, name, paint_used: 0, strokes: 0 };
-  if (!hasBackend) return local;
-  try {
-    const { data, error } = await supabase.from('painters').upsert({ name }, { onConflict: 'name' }).select().single();
-    if (error) throw error;
-    useStore.getState().setOnline(true);
-    return { id: data.id, name: data.name, paint_used: data.paint_used, strokes: data.strokes };
-  } catch (e) {
-    console.warn('ensurePainter failed, staying local', e);
-    return local;
+/** Painter row for the signed-in user (id = auth uid). Throws with a readable message on failure. */
+export async function ensurePainter(userId: string, name: string): Promise<Painter> {
+  const { data, error } = await supabase.from('painters').upsert({ id: userId, name }, { onConflict: 'id' }).select().single();
+  if (error) {
+    if (error.code === '23505') throw new Error('That tag is taken — pick another.');
+    throw new Error(error.message);
   }
+  useStore.getState().setOnline(true);
+  return { id: data.id, name: data.name, paint_used: data.paint_used, strokes: data.strokes };
+}
+
+/** Existing painter row for a signed-in user, or null if they haven't picked a tag yet. */
+export async function fetchPainter(userId: string): Promise<Painter | null> {
+  const { data, error } = await supabase.from('painters').select('*').eq('id', userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? { id: data.id, name: data.name, paint_used: data.paint_used, strokes: data.strokes } : null;
 }
 
 export async function loadCached() {

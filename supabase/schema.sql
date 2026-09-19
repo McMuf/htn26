@@ -1,10 +1,13 @@
 -- Tagged: shared AR graffiti. Paste this whole file into the Supabase SQL editor and run it.
--- No real auth: the publishable (anon) key can read/write everything below. Hackathon-grade.
+-- Auth: Supabase email/password. A painter row's id IS the auth user id; writes are gated on
+-- auth.uid() so a piece is always signed by whoever is logged in. Reads are public.
+-- Tip for the demo: Authentication → Providers → Email → turn OFF "Confirm email" so sign-up
+-- logs straight in (otherwise the user must tap the emailed link first).
 
 create extension if not exists pgcrypto;
 
 create table if not exists painters (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key references auth.users(id) on delete cascade,
   name text not null unique,
   device_id text,
   paint_used double precision not null default 0,
@@ -75,7 +78,7 @@ end $$;
 drop trigger if exists strokes_counters on strokes;
 create trigger strokes_counters after insert on strokes for each row execute function on_stroke();
 
-create or replace function increment_views(cid uuid) returns integer language sql as $$
+create or replace function increment_views(cid uuid) returns integer language sql security definer as $$
   update canvases set views = views + 1 where id = cid returning views;
 $$;
 
@@ -100,10 +103,25 @@ drop policy if exists "anon all painters" on painters;
 drop policy if exists "anon all canvases" on canvases;
 drop policy if exists "anon all strokes" on strokes;
 drop policy if exists "anon all reports" on reports;
-create policy "anon all painters" on painters for all using (true) with check (true);
-create policy "anon all canvases" on canvases for all using (true) with check (true);
-create policy "anon all strokes" on strokes for all using (true) with check (true);
-create policy "anon all reports" on reports for all using (true) with check (true);
+drop policy if exists "read painters" on painters;
+drop policy if exists "own painter" on painters;
+drop policy if exists "read canvases" on canvases;
+drop policy if exists "create canvas" on canvases;
+drop policy if exists "read strokes" on strokes;
+drop policy if exists "create stroke" on strokes;
+drop policy if exists "create report" on reports;
+
+create policy "read painters" on painters for select using (true);
+create policy "own painter" on painters for all using (auth.uid() = id) with check (auth.uid() = id);
+create policy "read canvases" on canvases for select using (true);
+create policy "create canvas" on canvases for insert with check (auth.uid() = author_id);
+create policy "read strokes" on strokes for select using (true);
+create policy "create stroke" on strokes for insert with check (auth.uid() = author_id);
+create policy "create report" on reports for insert with check (auth.uid() = reporter_id);
+
+-- Triggers update counters on tables the caller can't update directly.
+alter function on_stroke() security definer;
+alter function on_report() security definer;
 
 -- Realtime for live multi-phone painting.
 do $$ begin
