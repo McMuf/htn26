@@ -1,0 +1,105 @@
+/* Fresco companion site: dark, glassy, responsive. Overrides the paint client's body rules. */
+.site { min-height: 100dvh; background: radial-gradient(1200px 600px at 20% -10%, #1c0a2e 0%, #07070c 55%), #07070c; color: #fff; -webkit-user-select: text; user-select: text; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, sans-serif; }
+.site a { color: inherit; text-decoration: none; }
+.site .muted { color: #ffffff88; font-size: 13px; }
+.site .ok { color: #7cff3a; }
+.site h1 { margin: 0; font-weight: 900; letter-spacing: 0.12em; }
+.site h2 { margin: 0; font-weight: 900; font-size: 18px; }
+.site h3 { margin: 0 0 6px; font-weight: 800; }
+
+.topnav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); background: #07070c99; border-bottom: 1px solid #ffffff14; }
+.logo { font-weight: 900; letter-spacing: 0.25em; display: flex; align-items: center; gap: 8px; }
+.logo-f { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #ff2d95; border: 2px solid #fff; font-size: 14px; letter-spacing: 0; }
+.links { display: flex; gap: 6px; }
+.links a { padding: 8px 12px; border-radius: 999px; font-weight: 700; font-size: 13px; color: #ffffffaa; }
+.links a.on, .links a:hover { background: #ffffff14; color: #fff; }
+.links a.paint { background: #ff2d95; color: #fff; }
+
+.btn { display: inline-block; padding: 12px 18px; border-radius: 14px; background: #ff2d95; color: #fff; font-weight: 900; letter-spacing: 0.08em; font-size: 13px; border: 0; cursor: pointer; }
+.btn.ghost { background: #ffffff14; border: 1px solid #ffffff22; }
+.btn.wide { width: 100%; text-align: center; }
+
+/* landing */
+.land { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+.hero { display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; gap: 24px; min-height: 70vh; }
+.eyebrow { color: #ffe600; font-weight: 800; letter-spacing: 0.2em; font-size: 11px; }
+.hero h1 { font-size: clamp(56px, 10vw, 112px); letter-spacing: 0.18em; line-height: 1; margin: 8px 0 12px; background: linear-gradient(90deg, #fff, #ff2d95 70%, #19e6ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lede { font-size: 17px; line-height: 1.55; color: #ffffffcc; max-width: 520px; }
+.cta-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
+.pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.pill { padding: 6px 12px; border-radius: 999px; background: #ffffff10; border: 1px solid #ffffff1c; font-size: 12px; color: #ffffffaa; }
+.pill b { color: #fff; }
+.pill.ok { color: #7cff3a; }
+.hero-globe { display: grid; place-items: center; }
+.how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 24px; }
+.card { padding: 18px; border-radius: 20px; background: #ffffff0d; border: 1px solid #ffffff1c; border-top-color: #ffffff33; }
+.card .k { color: #19e6ff; font-weight: 900; letter-spacing: 0.2em; font-size: 12px; margin-bottom: 8px; }
+.card p { margin: 0; color: #ffffffaa; font-size: 14px; line-height: 1.5; }
+.foot { margin-top: 40px; color: #ffffff66; font-size: 13px; text-align: center; }
+.foot a { color: #19e6ff; }
+
+/* gallery */
+.page { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
+.page-head { margin: 18px 0 14px; }
+.page-head h1 { font-size: 26px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.tile { padding: 0; text-align: left; border-radius: 20px; overflow: hidden; background: #ffffff0d; border: 1px solid #ffffff1c; border-top-color: #ffffff33; color: inherit; cursor: pointer; font: inherit; }
+.tile-img { width: 100% !important; height: auto !important; aspect-ratio: 7 / 5; }
+.tile-meta { display: flex; gap: 10px; align-items: center; padding: 12px 14px; }
+.rank { color: #ffe600; font-weight: 900; min-width: 28px; }
+.title { font-weight: 800; font-size: 14px; }
+.tag { margin-left: 8px; font-size: 10px; padding: 2px 7px; border-radius: 999px; background: #ffffff18; color: #ffffff99; font-weight: 700; vertical-align: middle; }
+.board { border-radius: 20px; background: #ffffff0d; border: 1px solid #ffffff1c; overflow: hidden; }
+.row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 12px 16px; border-top: 1px solid #ffffff10; }
+.row:first-child { border-top: 0; }
+.row.top .name { color: #fff; }
+.row .name { font-weight: 800; }
+
+/* detail sheet */
+.modal { position: fixed; inset: 0; z-index: 100; background: #000000aa; backdrop-filter: blur(8px); display: grid; place-items: center; padding: 16px; }
+.sheet { width: min(700px, 100%); max-height: 92dvh; overflow: auto; padding: 18px; border-radius: 24px; background: #0f0f17; border: 1px solid #ffffff22; display: grid; gap: 14px; }
+.sheet-head, .side-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.sheet-img, .side-img { width: 100% !important; height: auto !important; border-radius: 16px; }
+.x { background: #ffffff14; border: 0; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.stats.small { grid-template-columns: repeat(3, 1fr); }
+.stats div { display: grid; text-align: center; padding: 10px; border-radius: 14px; background: #ffffff0a; }
+.stats b { font-size: 24px; font-weight: 900; }
+.stats span { color: #ffffff77; font-size: 11px; }
+.swatches { display: flex; gap: 6px; }
+.swatches span { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #ffffff66; }
+
+/* world map */
+.world { position: relative; height: calc(100dvh - 57px); }
+.map { position: absolute; inset: 0; background: #07070c; }
+.map-chip { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 500; padding: 8px 14px; border-radius: 999px; background: #07070ccc; border: 1px solid #ffffff22; font-size: 12px; color: #ffffffcc; backdrop-filter: blur(12px); white-space: nowrap; }
+.pin-wrap { background: none; border: 0; }
+.pin { width: 72px; height: 72px; border-radius: 16px; overflow: visible; border: 2px solid #ff2d95; box-shadow: 0 6px 20px #000a, 0 0 0 3px #ff2d9533; background: #0f0f17; cursor: pointer; transition: transform 0.15s; }
+.pin:hover { transform: scale(1.08); }
+.pin canvas { border-radius: 14px; display: block; }
+.pin.sample { border-color: #ffffff55; box-shadow: 0 6px 20px #000a; }
+.pin.empty { border-style: dashed; }
+.pin-label { position: absolute; left: 50%; transform: translateX(-50%); top: 74px; white-space: nowrap; font-size: 10px; font-weight: 800; color: #fff; background: #07070ccc; padding: 2px 7px; border-radius: 999px; border: 1px solid #ffffff22; }
+.side { position: absolute; z-index: 600; right: 14px; top: 56px; width: 330px; max-width: calc(100% - 28px); padding: 16px; border-radius: 22px; background: #0f0f17ee; border: 1px solid #ffffff22; backdrop-filter: blur(16px); display: grid; gap: 12px; }
+.leaflet-container { font: inherit; }
+/* OSM tiles, inverted into a dark basemap */
+.dark-tiles { filter: invert(1) hue-rotate(200deg) brightness(0.62) contrast(1.05) saturate(0.4); }
+.leaflet-control-attribution { background: #07070ccc !important; color: #ffffff77 !important; font-size: 10px; }
+.leaflet-control-attribution a { color: #19e6ff !important; }
+.leaflet-bar a { background: #0f0f17 !important; color: #fff !important; border-color: #ffffff22 !important; }
+
+@media (max-width: 820px) {
+  .hero { grid-template-columns: 1fr; min-height: auto; text-align: center; }
+  .hero-copy { order: 2; }
+  .lede { margin: 0 auto; }
+  .cta-row, .pills { justify-content: center; }
+  .how { grid-template-columns: 1fr; }
+  .links a:not(.paint) { padding: 8px 9px; }
+  .side { right: 10px; left: 10px; top: auto; bottom: 14px; width: auto; }
+  .row { grid-template-columns: 32px 1fr auto; }
+  .row span:nth-child(4) { display: none; }
+}
+
+/* base (the paint client's reset is not loaded here) */
+html, body, #root { margin: 0; min-height: 100%; background: #07070c; }
+*, *::before, *::after { box-sizing: border-box; }
