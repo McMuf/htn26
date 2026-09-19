@@ -6,7 +6,7 @@ import {
 import type { Canvas, Painter, Stroke } from './types';
 
 export type Side = 'A' | 'B';
-export type Tab = 'home' | 'explore' | 'create' | 'social' | 'vault' | 'settings';
+export type Tab = 'home' | 'explore' | 'create' | 'social' | 'market' | 'vault' | 'settings';
 export type Settings = {
   optionA: SprayOption;
   optionB: SprayOption;
@@ -18,6 +18,16 @@ export type Settings = {
   haptics: boolean;
   sound: boolean;
   showPlanes: boolean; // AR: tint detected surfaces
+  // ---- local-only (no backend): crew pick, market wallet + unlocks, Create tools
+  crew: string | null;
+  owned: string[]; // market item ids
+  spent: number; // coins spent
+  bonus: number; // coins earned from claimed missions
+  claimed: Record<string, true>; // `${yyyy-mm-dd}:${missionId}`
+  canSkin: string; // 'paint' = body follows the equipped colour
+  thickness: number; // Create: index into THICKNESS
+  opacity: number; // Create: index into OPACITY
+  debugHud: boolean; // Create: show the tracking/debug line
 };
 export type Loc = { lat: number; lng: number; accuracy: number };
 
@@ -67,6 +77,15 @@ const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   sound: true,
   showPlanes: true,
+  crew: null,
+  owned: [],
+  spent: 0,
+  bonus: 0,
+  claimed: {},
+  canSkin: 'paint',
+  thickness: 1,
+  opacity: 3,
+  debugHud: false,
 };
 
 export const useStore = create<State>((set, get) => ({

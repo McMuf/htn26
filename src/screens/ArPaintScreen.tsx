@@ -8,7 +8,10 @@ import { PaintLayer } from '../paint/PaintLayer';
 import { useArSpray } from '../hooks/useArSpray';
 import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
-import { BlockerBanner, CanMeter, HoldButtons, PaintMeters } from '../components/HUD';
+import { BlockerBanner, CanMeter, DistanceChip, HoldButtons, PaintMeters, ToolsPanel, TopBar } from '../components/HUD';
+import { PixelBox } from '../ui/PixelBox';
+import { PixelIcon } from '../ui/PixelIcon';
+import { F, HOLD_TOP } from '../ui/theme';
 import { DiscoveryOverlay } from '../components/DiscoveryOverlay';
 import { useStore } from '../store';
 import { downloadWorldMap, incrementViews, onRemoteStroke, reportCanvas, uploadWorldMap } from '../data/sync';
@@ -61,7 +64,9 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const [surfaces, setSurfaces] = useState(0);
   const [justFound, setJustFound] = useState<Canvas | null>(null);
   const [mapState, setMapState] = useState<'none' | 'loading' | 'relocalizing' | 'resolved' | 'approx'>('none');
-  const [hitInfo, setHitInfo] = useState<{ kind: HitKind; vertical: boolean; locked: boolean }>({ kind: 'none', vertical: false, locked: false });
+  const [hitInfo, setHitInfo] = useState<{ kind: HitKind; vertical: boolean; locked: boolean; dist: number }>({ kind: 'none', vertical: false, locked: false, dist: 1 });
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [hinted, setHinted] = useState(true); // first-run hint, hidden after the first spray
   const relocTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scheduleMapSave = useCallback(() => {
@@ -169,7 +174,9 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     engine.hit.current = ev.hit;
     if (ev.drip) { if (useStore.getState().settings.sound) import('../audio/sfx').then(({ sfx }) => sfx.pool()); return; }
     const kind = ev.kind ?? (ev.hit ? 'estimated' : 'none');
-    setHitInfo((p) => (p.kind === kind && p.vertical === !!ev.vertical && p.locked === !!ev.locked ? p : { kind, vertical: !!ev.vertical, locked: !!ev.locked }));
+    if (ev.hit && ev.distance > 0) engine.dist.current = ev.distance;
+    setHitInfo((p) => (p.kind === kind && p.vertical === !!ev.vertical && p.locked === !!ev.locked && Math.abs(p.dist - (ev.distance ?? p.dist)) < 0.1 ? p
+      : { kind, vertical: !!ev.vertical, locked: !!ev.locked, dist: ev.distance || p.dist }));
   }, []);
   const onStrokeEnd = useCallback((e: { nativeEvent: ArStroke }) => engine.onNativeStroke(e.nativeEvent), []);
   const onSurface = useCallback((e: { nativeEvent: { count: number } }) => setSurfaces(e.nativeEvent.count), []);
@@ -179,6 +186,7 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     const id = setInterval(() => {
       const blocker = engine.held.current ? engine.blocker.current : null;
       const held = engine.held.current ?? '-';
+      if (held !== '-') setHinted(false);
       setUi((p) => (p.blocker === blocker && p.held === held ? p : { blocker, held }));
     }, 100);
     return () => clearInterval(id);
@@ -191,12 +199,13 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     ]);
   }, [painter]);
 
-  const trackingText = tracking.state === 'normal' ? 'tracking' : tracking.state === 'limited' ? `limited · ${tracking.reason}` : tracking.state;
-  const mapText = mapState === 'loading' ? 'loading piece…' : mapState === 'relocalizing' ? 'look around to resolve the piece' : mapState === 'resolved' ? 'piece resolved' : mapState === 'approx' ? 'piece placed from memory · walk to where it was painted' : '';
+  const trackingText = tracking.state === 'normal' ? 'TRACKING' : tracking.state === 'limited' ? `LIMITED ${(tracking.reason ?? '').toUpperCase()}` : tracking.state.toUpperCase();
+  const mapText = mapState === 'loading' ? 'LOADING PIECE' : mapState === 'relocalizing' ? 'LOOK AROUND' : mapState === 'resolved' ? 'PIECE RESOLVED' : mapState === 'approx' ? 'PLACED FROM MEMORY' : '';
   const aimingAtNothing = engine.native.spraying && !engine.hit.current;
-  const lock = hitInfo.kind === 'none' ? { text: 'AIM AT A WALL OR FLOOR', color: '#ff5c1a' }
-    : hitInfo.locked ? { text: `${hitInfo.vertical ? 'WALL' : 'FLOOR'} LOCKED${hitInfo.kind === 'extended' ? ' · edge' : hitInfo.kind === 'mesh' ? ' · lidar' : ''}`, color: hitInfo.vertical ? '#19e6ff' : '#7cff3a' }
-    : { text: 'FINDING SURFACE… move the phone slowly', color: '#ffe600' };
+  const lock = hitInfo.kind === 'none' ? { text: 'AIM AT A WALL OR FLOOR', locked: false }
+    : hitInfo.locked ? { text: `${hitInfo.vertical ? 'WALL' : 'FLOOR'} LOCKED${hitInfo.kind === 'extended' ? ' · EDGE' : hitInfo.kind === 'mesh' ? ' · LIDAR' : ''}`, locked: true }
+    : { text: 'FINDING SURFACE · MOVE SLOWLY', locked: false };
+  const noticeBusy = !!discovery.pull || !!discovery.focused || !!justFound || !!discovery.justFound;
 
   return (
     <View style={styles.root}>
@@ -220,46 +229,49 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
       <CanMeter />
       <DiscoveryOverlay d={{ ...discovery, justFound: justFound ?? discovery.justFound, walls: [] }} onReport={onReport} />
       <BlockerBanner blocker={ui.blocker} />
-      <View style={[styles.lock, { borderColor: lock.color }]} pointerEvents="none">
-        <View style={[styles.lockDot, { backgroundColor: lock.color }]} />
-        <Text style={[styles.lockText, { color: lock.color }]}>{lock.text}</Text>
+      <DistanceChip meters={hitInfo.dist} hit={hitInfo.kind !== 'none'} />
+      <View style={styles.lock} pointerEvents="none">
+        <PixelBox fill="#120a2e" hi="#2a1c5c" depth={4} contentStyle={styles.lockIn}>
+          {lock.locked ? <PixelIcon name="lock" size={24} color="#fff" /> : null}
+          <Text style={styles.lockText}>{lock.text}</Text>
+        </PixelBox>
       </View>
       {aimingAtNothing && !ui.blocker && (
-        <View style={styles.banner} pointerEvents="none"><Text style={styles.bannerText}>Aim at a wall or floor — move the phone slowly so it finds the surface</Text></View>
+        <View style={styles.banner} pointerEvents="none">
+          <PixelBox fill="#120a2e" hi="#2a1c5c" depth={4} contentStyle={{ paddingHorizontal: 14, paddingVertical: 8 }}><Text style={styles.bannerText}>Aim at a wall or floor and move slowly so it finds the surface</Text></PixelBox>
+        </View>
       )}
+      {toolsOpen && <ToolsPanel />}
       <HoldButtons onStart={engine.start} onEnd={engine.end} />
-
-      <View style={styles.topBar} pointerEvents="box-none">
-        <Text style={styles.brand}>FRESCO</Text>
-        <Text style={styles.status}>{painter?.name ?? '—'} · {online ? 'live' : 'offline'} · {trackingText}{mapText ? ` · ${mapText}` : ''}</Text>
-        <Pressable onPress={() => setTab('settings')} hitSlop={10} style={styles.gear}><Text style={styles.gearText}>⚙︎</Text></Pressable>
-      </View>
-      <View style={styles.hint} pointerEvents="none">
-        <Text style={styles.hintText}>{settings.volumeButtons ? 'hold the buttons or VOL+ / VOL− to spray · shake to charge' : 'hold the buttons to spray · shake to charge'}</Text>
-      </View>
-      <View style={styles.debug} pointerEvents="none">
-        <Text style={styles.debugText}>
-          planes {tracking.planes ?? 0} · quads {surfaces} · {hasLidar ? 'lidar' : 'no lidar'} · hit {hitInfo.kind} · held {ui.held} · block {ui.blocker ?? '-'} · gps {location ? `±${Math.round(location.accuracy)}m` : '…'} · map {tracking.mapping || '-'}
-        </Text>
-      </View>
+      {hinted && !noticeBusy && (
+        <View style={styles.hint} pointerEvents="none">
+          <PixelBox fill="#120a2e" hi="#2a1c5c" depth={3} contentStyle={{ paddingHorizontal: 12, height: 30, justifyContent: 'center' }}>
+            <Text style={styles.hintText}>{settings.volumeButtons ? 'HOLD THE BUTTONS OR VOL+ / VOL− · SHAKE TO CHARGE' : 'HOLD THE BUTTONS · SHAKE TO CHARGE'}</Text>
+          </PixelBox>
+        </View>
+      )}
+      <TopBar status={`${(painter?.name ?? '—').toUpperCase()} · ${online ? 'LIVE' : 'OFFLINE'} · ${trackingText}${mapText ? ` · ${mapText}` : ''}`}
+        toolsOn={toolsOpen} onTools={() => setToolsOpen((v) => !v)} onSettings={() => setTab('settings')} />
+      {settings.debugHud && (
+        <View style={styles.debug} pointerEvents="none">
+          <Text style={styles.debugText}>
+            planes {tracking.planes ?? 0} · quads {surfaces} · {hasLidar ? 'lidar' : 'no lidar'} · hit {hitInfo.kind} · held {ui.held} · block {ui.blocker ?? '-'} · gps {location ? `±${Math.round(location.accuracy)}m` : '…'} · map {tracking.mapping || '-'}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  topBar: { position: 'absolute', top: 56, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brand: { color: '#fff', fontWeight: '900', fontSize: 18, letterSpacing: 3 },
-  status: { color: '#ffffffaa', fontSize: 11, flex: 1 },
-  gear: { backgroundColor: '#0008', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  gearText: { color: '#fff', fontSize: 18 },
-  banner: { position: 'absolute', top: '58%', alignSelf: 'center', backgroundColor: '#000a', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, maxWidth: '85%' },
-  bannerText: { color: '#fff', fontWeight: '700', textAlign: 'center' },
-  debug: { position: 'absolute', top: 92, left: 12, right: 12, alignItems: 'center' },
-  debugText: { color: '#ffffff99', fontSize: 9, textAlign: 'center' },
-  lock: { position: 'absolute', top: '36%', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#000a', borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  lockDot: { width: 8, height: 8, borderRadius: 4 },
-  lockText: { fontWeight: '900', fontSize: 11, letterSpacing: 1.5 },
-  hint: { position: 'absolute', bottom: 194, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
-  hintText: { color: '#ffffffcc', fontSize: 11 },
+  banner: { position: 'absolute', top: '58%', alignSelf: 'center', maxWidth: '85%' },
+  bannerText: { fontFamily: F.body, fontSize: 13, color: '#fff', textAlign: 'center' },
+  lock: { position: 'absolute', top: '36%', alignSelf: 'center' },
+  lockIn: { height: 36, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
+  lockText: { fontFamily: F.labelBold, fontSize: 10, color: '#fff', letterSpacing: 1 },
+  hint: { position: 'absolute', bottom: HOLD_TOP + 8, alignSelf: 'center' },
+  hintText: { fontFamily: F.labelBold, fontSize: 8, color: '#ffffffcc', letterSpacing: 0.6 },
+  debug: { position: 'absolute', top: 108, left: 12, right: 12, alignItems: 'center' },
+  debugText: { fontFamily: F.mono, fontSize: 14, color: '#ffffffcc', textAlign: 'center', backgroundColor: '#000a' },
 });

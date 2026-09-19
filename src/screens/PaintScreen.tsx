@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Btn } from '../ui/kit';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useKeepAwake } from 'expo-keep-awake';
 import { PaintLayer } from '../paint/PaintLayer';
@@ -7,7 +8,9 @@ import { usePose } from '../hooks/usePose';
 import { useSprayEngine, type Blocker } from '../hooks/useSprayEngine';
 import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
-import { BlockerBanner, CanMeter, HoldButtons, PaintMeters, Reticle } from '../components/HUD';
+import { BlockerBanner, CanMeter, HoldButtons, PaintMeters, Reticle, TopBar } from '../components/HUD';
+import { PixelBox } from '../ui/PixelBox';
+import { F, HOLD_TOP } from '../ui/theme';
 import { DiscoveryOverlay } from '../components/DiscoveryOverlay';
 import { useStore } from '../store';
 import { reportCanvas } from '../data/sync';
@@ -77,7 +80,7 @@ export function PaintScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.msg}>Camera permission is needed to paint.</Text>
-        <Pressable onPress={requestPerm} style={styles.btn}><Text style={styles.btnText}>Allow camera</Text></Pressable>
+        <Btn label="ALLOW CAMERA" tone="green" onPress={requestPerm} />
       </View>
     );
   }
@@ -92,37 +95,29 @@ export function PaintScreen() {
       <DiscoveryOverlay d={discovery} onReport={onReport} />
       <BlockerBanner blocker={ui.blocker} />
       <HoldButtons onStart={engine.start} onEnd={engine.end} />
-
-      <View style={styles.topBar} pointerEvents="box-none">
-        <Text style={styles.brand}>FRESCO</Text>
-        <Text style={styles.status}>{painter?.name ?? '—'} · {online ? 'live' : 'offline'} · {ui.yaw}°</Text>
-        <Pressable onPress={() => setTab('settings')} hitSlop={10} style={styles.gear}><Text style={styles.gearText}>⚙︎</Text></Pressable>
-      </View>
       <View style={styles.hint} pointerEvents="none">
-        <Text style={styles.hintText}>{settings.volumeButtons ? 'hold the buttons or VOL+ / VOL− to spray · shake to charge' : 'hold the buttons to spray · shake to charge'}</Text>
+        <PixelBox fill="#120a2e" hi="#2a1c5c" depth={3} contentStyle={{ paddingHorizontal: 12, height: 30, justifyContent: 'center' }}>
+          <Text style={styles.hintText}>{settings.volumeButtons ? 'HOLD THE BUTTONS OR VOL+ / VOL− · SHAKE TO CHARGE' : 'HOLD THE BUTTONS · SHAKE TO CHARGE'}</Text>
+        </PixelBox>
       </View>
-      <View style={styles.debug} pointerEvents="none">
-        <Text style={styles.debugText}>
-          vol events {debug.volEvents} (last {debug.lastVol}) · held {debug.held} · block {debug.blocker} · walls {debug.walls} · pose {debug.poseReady ? 'ok' : '…'} · gps {location ? `±${Math.round(location.accuracy)}m` : '…'} · surface {debug.surface}
-        </Text>
-      </View>
+      <TopBar status={`${(painter?.name ?? '—').toUpperCase()} · ${online ? 'LIVE' : 'OFFLINE'} · ${ui.yaw}°`} toolsOn={false} onTools={() => {}} onSettings={() => setTab('settings')} />
+      {settings.debugHud && (
+        <View style={styles.debug} pointerEvents="none">
+          <Text style={styles.debugText}>
+            vol events {debug.volEvents} (last {debug.lastVol}) · held {debug.held} · block {debug.blocker} · walls {debug.walls} · pose {debug.poseReady ? 'ok' : '…'} · gps {location ? `±${Math.round(location.accuracy)}m` : '…'} · surface {debug.surface}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0b0b0f', padding: 24 },
-  msg: { color: '#fff', fontSize: 16, textAlign: 'center', marginBottom: 16 },
-  btn: { backgroundColor: '#ff2d95', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 24 },
-  btnText: { color: '#fff', fontWeight: '800' },
-  topBar: { position: 'absolute', top: 56, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brand: { color: '#fff', fontWeight: '900', fontSize: 18, letterSpacing: 3 },
-  status: { color: '#ffffffaa', fontSize: 11, flex: 1 },
-  gear: { backgroundColor: '#0008', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  gearText: { color: '#fff', fontSize: 18 },
-  debug: { position: 'absolute', top: 92, left: 12, right: 12, alignItems: 'center' },
-  debugText: { color: '#ffffff99', fontSize: 9, textAlign: 'center' },
-  hint: { position: 'absolute', bottom: 194, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
-  hintText: { color: '#ffffffcc', fontSize: 11 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#12082b', padding: 24, gap: 16 },
+  msg: { fontFamily: F.body, color: '#fff', fontSize: 16, textAlign: 'center' },
+  debug: { position: 'absolute', top: 108, left: 12, right: 12, alignItems: 'center' },
+  debugText: { fontFamily: F.mono, fontSize: 14, color: '#ffffffcc', textAlign: 'center', backgroundColor: '#000a' },
+  hint: { position: 'absolute', bottom: HOLD_TOP + 8, alignSelf: 'center' },
+  hintText: { fontFamily: F.labelBold, fontSize: 8, color: '#ffffffcc', letterSpacing: 0.6 },
 });

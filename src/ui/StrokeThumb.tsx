@@ -1,30 +1,48 @@
 import React, { useMemo } from 'react';
-import { Canvas, Circle, Group, Rect, Skia } from '@shopify/react-native-skia';
+import { Canvas, Group, Rect, Skia } from '@shopify/react-native-skia';
 import { useStore } from '../store';
 import { isMock } from '../data/mock';
 import { seededRng } from '../lib/ids';
 import type { Stroke } from '../types';
 
+export type Dab = { x: number; y: number; r: number; a: number; color: string };
+
 /**
- * A small render of a canvas's strokes for cards/grids: every dab, auto-fit to the box.
- * Compass strokes are in degrees, AR strokes in anchor-local metres — either way the point
- * cloud is normalised to its own bounds, so the thumbnail is the piece's silhouette.
- * Mock canvases (no strokes) get a deterministic generated scribble so the grid isn't empty.
+ * A piece as a pixel mosaic: every dab is snapped to a coarse grid, so a 4000-dab wall becomes at
+ * most a couple of thousand squares and reads as chunky digitised art. Compass strokes are in
+ * degrees, AR strokes in anchor-local metres; either way the cloud is normalised to its bounds.
+ * Mock canvases (no strokes) get a deterministic scribble so grids aren't empty.
  */
-export function StrokeThumb({ canvasId, width, height, radius = 16 }: { canvasId: string; width: number; height: number; radius?: number }) {
+export function StrokeThumb({ canvasId, width, height, radius = 0, bg = '#171033', cell = 3 }: {
+  canvasId: string; width: number; height: number; radius?: number; bg?: string; cell?: number;
+}) {
   const strokes = useStore((s) => s.strokes[canvasId] ?? s.previewStrokes[canvasId]);
-  const dabs = useMemo(() => layout(strokes ?? [], canvasId, width, height), [strokes, canvasId, width, height]);
+  const tiles = useMemo(() => mosaic(layoutDabs(strokes ?? [], canvasId, width, height), cell), [strokes, canvasId, width, height, cell]);
+  const clip = useMemo(() => (radius > 0 ? Skia.RRectXY(Skia.XYWHRect(0, 0, width, height), radius, radius) : Skia.RRectXY(Skia.XYWHRect(0, 0, width, height), 0, 0)), [radius, width, height]);
   return (
-    <Canvas style={{ width, height }}>
-      <Group clip={Skia.RRectXY(Skia.XYWHRect(0, 0, width, height), radius, radius)}>
-        <Rect x={0} y={0} width={width} height={height} color="#14141e" />
-        {dabs.map((d, i) => <Circle key={i} cx={d.x} cy={d.y} r={d.r} color={d.color} opacity={d.a} />)}
+    <Canvas style={{ width, height }} pointerEvents="none">
+      <Group clip={clip}>
+        <Rect x={0} y={0} width={width} height={height} color={bg} />
+        {tiles.map((t, i) => <Rect key={i} x={t.x} y={t.y} width={t.s} height={t.s} color={t.color} opacity={t.a} />)}
       </Group>
     </Canvas>
   );
 }
 
-function layout(strokes: Stroke[], id: string, w: number, h: number) {
+export function mosaic(dabs: Dab[], cell: number) {
+  const m = new Map<string, { x: number; y: number; s: number; color: string; a: number }>();
+  for (const d of dabs) {
+    const s = Math.max(cell, Math.round((d.r * 2) / cell) * cell);
+    const x = Math.round((d.x - s / 2) / cell) * cell, y = Math.round((d.y - s / 2) / cell) * cell;
+    const a = d.a > 0.6 ? 1 : d.a > 0.3 ? 0.75 : 0.5;
+    const k = `${x},${y},${s}`;
+    const prev = m.get(k);
+    if (!prev || a >= prev.a) m.set(k, { x, y, s, color: d.color, a });
+  }
+  return [...m.values()];
+}
+
+export function layoutDabs(strokes: Stroke[], id: string, w: number, h: number): Dab[] {
   let pts: { x: number; y: number; s: number; a: number; color: string }[] = [];
   for (const st of strokes) for (const p of st.points) {
     if (p[4] === 1 && pts.length > 2000) continue;

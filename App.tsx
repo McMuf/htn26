@@ -2,6 +2,10 @@ import 'react-native-url-polyfill/auto';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
+import { PixelifySans_400Regular, PixelifySans_500Medium, PixelifySans_600SemiBold, PixelifySans_700Bold } from '@expo-google-fonts/pixelify-sans';
+import { VT323_400Regular } from '@expo-google-fonts/vt323';
+import { Silkscreen_400Regular, Silkscreen_700Bold } from '@expo-google-fonts/silkscreen';
 import { hydrateStore, useStore } from './src/store';
 import { useLocation } from './src/hooks/useLocation';
 import { sfx } from './src/audio/sfx';
@@ -19,12 +23,14 @@ import { ExploreScreen } from './src/screens/ExploreScreen';
 import { SocialScreen } from './src/screens/SocialScreen';
 import { VaultScreen } from './src/screens/VaultScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { MarketScreen } from './src/screens/MarketScreen';
 import { Dock } from './src/ui/Dock';
 import { C } from './src/ui/theme';
 
 export default function App() {
   const [ready, setReady] = useState(false);
   const [launched, setLaunched] = useState(false);
+  const [fontsLoaded, fontError] = useFonts({ PixelifySans_400Regular, PixelifySans_500Medium, PixelifySans_600SemiBold, PixelifySans_700Bold, VT323_400Regular, Silkscreen_400Regular, Silkscreen_700Bold });
   useEffect(() => {
     (async () => {
       await hydrateStore();
@@ -33,7 +39,7 @@ export default function App() {
       setReady(true);
     })();
   }, []);
-  if (!ready) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
+  if (!ready || !(fontsLoaded || fontError)) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
   if (!launched) return <><LaunchScreen onEnter={() => setLaunched(true)} /><StatusBar style="light" /></>;
   return <Root />;
 }
@@ -97,6 +103,7 @@ function Root() {
         </View>
       )) : tab === 'create' && <PaintScreen />}
       {tab === 'social' && <SocialScreen />}
+      {tab === 'market' && <MarketScreen />}
       {tab === 'vault' && <VaultScreen />}
       {tab === 'settings' && <SettingsScreen />}
       <Dock />

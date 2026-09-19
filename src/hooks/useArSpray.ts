@@ -13,6 +13,7 @@ import type { Pose } from './usePose';
 import type { Canvas, Stroke, StrokePoint } from '../types';
 import type { ArStroke } from '../../modules/ar-paint';
 import type { Blocker } from './useSprayEngine';
+import { OPACITY, THICKNESS } from '../lib/economy';
 
 const CAP_RADIUS_M = { fat: 0.06, skinny: 0.026 } as const;
 
@@ -28,6 +29,7 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
   const blocker = useRef<Blocker>(null);
   const activeCanvas = useRef<Canvas | null>(null);
   const hit = useRef(false);
+  const dist = useRef(1); // metres from the camera to the reticle hit (ARKit)
   const strokePaint = useRef(0);
   const hapticsAt = useRef(0);
   const lastLowRattle = useRef(0);
@@ -97,8 +99,13 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     const strength = Math.min(1, st.shake / 0.35);
     const paintFrac = st.paint[side] / PAINT_MAX;
     const flow = strength * (0.55 + 0.45 * Math.min(1, paintFrac * 3));
-    setNative({ spraying: true, color: opt.color, radius: CAP_RADIUS_M[opt.cap], flow: Math.max(0.05, flow) });
-    return { flow, opt };
+    // Create tools: size + opacity steppers. Distance: close to the wall = tight, strong "focus";
+    // stepping back widens the spray and thins it out into "mist".
+    const th = THICKNESS[st.settings.thickness]?.mult ?? 1;
+    const op = OPACITY[st.settings.opacity]?.mult ?? 1;
+    const mist = Math.max(0, Math.min(1, (dist.current - 0.5) / 1.2));
+    setNative({ spraying: true, color: opt.color, radius: CAP_RADIUS_M[opt.cap] * th * (0.8 + 0.9 * mist), flow: Math.max(0.05, flow * op * (1 - 0.45 * mist)) });
+    return { flow, opt, th };
   };
 
   const start = (side: Side) => {
@@ -145,9 +152,9 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
         if (b === 'empty' && now - lastLowRattle.current > 1500 && st.settings.sound) { lastLowRattle.current = now; sfx.emptyRattle(); }
         return;
       }
-      const { flow, opt } = applyNativeProps(side);
+      const { flow, opt, th } = applyNativeProps(side);
       if (!hit.current) { sfx.setHiss(false, 0, 0); return; } // aiming at nothing: no paint, no cost
-      const cost = PAINT_COST_PER_SEC[opt.cap] * dt * (0.6 + 0.4 * flow);
+      const cost = PAINT_COST_PER_SEC[opt.cap] * dt * (0.6 + 0.4 * flow) * (0.7 + 0.3 * th); // fatter lines burn more paint
       strokePaint.current += cost;
       st.setPaint(side, Math.max(0, st.paint[side] - cost));
       if (st.settings.sound) sfx.setHiss(true, flow, 0.5);
@@ -182,5 +189,5 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     cb.current.onStrokeSaved?.(s);
   };
 
-  return { start, end, onShake, onNativeStroke, native, held, blocker, hit, activeCanvas };
+  return { start, end, onShake, onNativeStroke, native, held, blocker, hit, dist, activeCanvas };
 }
