@@ -42,6 +42,7 @@ export function ArPaintScreen() {
   const { pose, yawSV, pitchSV, rollSV } = usePose((m) => engineRef.current?.onShake(m));
   const mapCanvas = useRef<Canvas | null>(null); // canvas whose world map is loaded in the session
   const paintedThisSession = useRef(false);
+  const failedMaps = useRef(new Set<string>());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [worldMapPath, setWorldMapPath] = useState<string | null>(null);
   const [tracking, setTracking] = useState<ArTrackingEvent>({ state: 'limited', reason: 'initializing' });
@@ -64,7 +65,8 @@ export function ArPaintScreen() {
 
   const engine = useArSpray(pose, { onStrokeSaved: () => { paintedThisSession.current = true; scheduleMapSave(); } });
   engineRef.current = engine;
-  const discovery = useDiscovery(pose, false);
+  // canvases with a world map resolve by relocalisation; web-made canvases (no map) resolve by proximity
+  const discovery = useDiscovery(pose, (c) => !c.world_map_path);
 
   useVolumeTrigger(!settings.onScreenButtons, { onHoldStart: engine.start, onHoldEnd: engine.end });
 
@@ -73,7 +75,7 @@ export function ArPaintScreen() {
     if (!location || mapCanvas.current || paintedThisSession.current) return;
     let best: Canvas | null = null, bestD = Infinity;
     for (const c of Object.values(canvases)) {
-      if (c.flagged || !c.world_map_path) continue;
+      if (c.flagged || !c.world_map_path || failedMaps.current.has(c.id)) continue;
       const d = haversineM(location.lat, location.lng, c.lat, c.lng);
       if (d < CANVAS_JOIN_RADIUS_M && d < bestD) { best = c; bestD = d; }
     }
@@ -101,9 +103,9 @@ export function ArPaintScreen() {
       if (strokes.length) viewRef.current?.addStrokes(strokes.map((s) => ({ id: s.id, anchorId: s.anchor_id!, transform: s.transform!, color: s.color, points: s.points as number[][] }))).catch(() => {});
       return;
     }
-    if (ev.state === 'mapLoadFailed') { setMapState('none'); mapCanvas.current = null; return; }
+    if (ev.state === 'mapLoadFailed') { setMapState('none'); failedMaps.current.add(mapCanvas.current?.id ?? ''); mapCanvas.current = null; return; }
     setTracking(ev);
-    if (ev.state === 'normal' && mapCanvas.current && mapState !== 'resolved' && worldMapPath) {
+    if (ev.state === 'normal' && mapCanvas.current && mapState === 'relocalizing') {
       setMapState('resolved');
       const c = mapCanvas.current;
       const st = useStore.getState();

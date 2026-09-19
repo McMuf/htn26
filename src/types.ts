@@ -16,6 +16,8 @@ export type Stroke = {
   /** AR: custom ARAnchor id + its 4x4 transform (column-major) in the canvas world map. Null for compass-mode strokes. */
   anchor_id?: string | null;
   transform?: number[] | null;
+  /** AR strokes: camera world position [x,y,z] when sprayed, so other clients project from where the painter stood. */
+  viewer?: number[] | null;
 };
 
 export type Canvas = {

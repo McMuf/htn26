@@ -53,8 +53,8 @@ class Sfx {
       if (this.hissing) { p.volume = 0; p.pause(); this.hissing = false; }
       return;
     }
-    if (!this.hissing) { p.play(); this.hissing = true; }
     try {
+      if (!this.hissing) { p.play(); this.hissing = true; }
       p.volume = Math.min(1, 0.25 + 0.65 * strength);
       p.setPlaybackRate(0.85 + 0.3 * strength + 0.2 * near, 'low');
     } catch {}

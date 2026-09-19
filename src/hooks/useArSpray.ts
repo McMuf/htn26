@@ -24,6 +24,7 @@ const CAP_RADIUS_M = { fat: 0.06, skinny: 0.026 } as const;
  */
 export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeSaved?: (s: Stroke) => void }) {
   const held = useRef<Side | null>(null);
+  const lastSide = useRef<Side>('A'); // survives end(), for strokes flushed after release
   const blocker = useRef<Blocker>(null);
   const activeCanvas = useRef<Canvas | null>(null);
   const hit = useRef(false);
@@ -104,6 +105,7 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     if (held.current === side) return;
     if (held.current) end(held.current);
     held.current = side;
+    lastSide.current = side;
     const b = computeBlocker();
     blocker.current = b;
     const st = useStore.getState();
@@ -165,12 +167,12 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     const st = useStore.getState();
     const canvas = activeCanvas.current;
     if (!canvas || a.points.length === 0) return;
-    const side = held.current ?? 'A';
+    const side = held.current ?? lastSide.current;
     const opt = side === 'A' ? st.settings.optionA : st.settings.optionB;
     const s: Stroke = {
       id: a.id, canvas_id: canvas.id, author_id: st.painter?.id ?? null, author_name: st.painter?.name ?? 'anon',
       color: a.color, cap: opt.cap, points: a.points as StrokePoint[], paint_used: Math.round(strokePaint.current * 100) / 100,
-      created_at: new Date().toISOString(), anchor_id: a.anchorId, transform: a.transform,
+      created_at: new Date().toISOString(), anchor_id: a.anchorId, transform: a.transform, viewer: a.viewer ?? null,
     };
     strokePaint.current = 0;
     st.addStroke(s);

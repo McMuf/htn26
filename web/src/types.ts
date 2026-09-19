@@ -19,6 +19,9 @@ export type Stroke = {
   created_at: string;
   anchor_id?: string | null;
   transform?: number[] | null;
+  /** AR strokes only: camera world position [x, y, z] (same frame as `transform`) when the stroke
+   *  was sprayed, so the web can project it as seen from where the painter stood. Optional column. */
+  viewer?: number[] | null;
 };
 
 export type Canvas = {

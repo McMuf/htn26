@@ -109,9 +109,13 @@ export async function uploadStroke(s: Stroke) {
   const row = {
     id: s.id, canvas_id: s.canvas_id, author_id: isLocalId(s.author_id) ? null : s.author_id,
     author_name: s.author_name, color: s.color, cap: s.cap, points: s.points, paint_used: s.paint_used,
-    anchor_id: s.anchor_id ?? null, transform: s.transform ?? null,
+    anchor_id: s.anchor_id ?? null, transform: s.transform ?? null, viewer: s.viewer ?? null,
   };
   try {
+    // make sure our own canvas row exists first (its insert may have failed earlier)
+    if (c && c.author_id && c.author_id === useStore.getState().painter?.id) {
+      await supabase.from('canvases').upsert({ id: c.id, lat: c.lat, lng: c.lng, heading: c.heading, title: c.title, author_id: c.author_id, author_name: c.author_name }, { onConflict: 'id', ignoreDuplicates: true });
+    }
     const { error } = await supabase.from('strokes').insert(row);
     if (error) throw error;
     useStore.getState().setOnline(true);
@@ -132,7 +136,14 @@ export async function flushPending() {
     const q: any[] = JSON.parse((await AsyncStorage.getItem(PENDING)) ?? '[]');
     if (!q.length) return;
     const { error } = await supabase.from('strokes').upsert(q, { onConflict: 'id' });
-    if (!error) await AsyncStorage.removeItem(PENDING);
+    if (!error) { await AsyncStorage.removeItem(PENDING); return; }
+    // batch failed: retry row by row and drop rows that can never succeed (FK / RLS / duplicate)
+    const keep: any[] = [];
+    for (const row of q) {
+      const { error: e } = await supabase.from('strokes').upsert(row, { onConflict: 'id' });
+      if (e && !['23503', '42501', '23505'].includes(e.code ?? '')) keep.push(row);
+    }
+    await AsyncStorage.setItem(PENDING, JSON.stringify(keep));
   } catch {}
 }
 
@@ -197,7 +208,8 @@ export async function uploadWorldMap(canvasId: string, localPath: string) {
     const { error } = await supabase.storage.from('worldmaps').upload(objectPath, buf, { upsert: true, contentType: 'application/octet-stream' });
     if (error) throw error;
     const now = new Date().toISOString();
-    await supabase.from('canvases').update({ world_map_path: objectPath, world_map_updated_at: now }).eq('id', canvasId);
+    const { error: e2 } = await supabase.rpc('set_world_map', { cid: canvasId, path: objectPath });
+    if (e2) throw e2;
     const c = useStore.getState().canvases[canvasId];
     if (c) useStore.getState().upsertCanvas({ ...c, world_map_path: objectPath, world_map_updated_at: now });
     return objectPath;

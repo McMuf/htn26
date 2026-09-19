@@ -38,7 +38,8 @@ export function useVolumeTrigger(
     VolumeManager.setActive(true).catch(() => {});
     VolumeManager.showNativeVolumeUI({ enabled: false }).catch(() => {});
     reset();
-    const keepAlive = setInterval(() => { VolumeManager.setActive(true).catch(() => {}); reset(); }, 4000);
+    // expo-audio players deactivate the session when they stop, which silences volume events; re-arm often
+    const keepAlive = setInterval(() => { VolumeManager.setActive(true).catch(() => {}); reset(); }, 1500);
 
     const sub = VolumeManager.addVolumeListener(({ volume }) => {
       if (disposed) return;

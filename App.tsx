@@ -36,6 +36,7 @@ function Root() {
   const painter = useStore((s) => s.painter);
   const setPainter = useStore((s) => s.setPainter);
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [checkedFor, setCheckedFor] = useState<string | null>(null); // painter row looked up for this uid
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
@@ -44,8 +45,8 @@ function Root() {
   // keep the persisted painter in sync with whoever is signed in
   useEffect(() => {
     if (!session) { if (session === null && painter) setPainter(null); return; }
-    if (painter?.id === session.user.id) return;
-    fetchPainter(session.user.id).then((p) => setPainter(p)).catch(() => {});
+    if (painter?.id === session.user.id) { setCheckedFor(session.user.id); return; }
+    fetchPainter(session.user.id).then((p) => { setPainter(p); setCheckedFor(session.user.id); }).catch(() => setCheckedFor(session.user.id));
   }, [session?.user.id]);
   const tab = useStore((s) => s.tab);
   const setTab = useStore((s) => s.setTab);
@@ -71,7 +72,10 @@ function Root() {
 
   if (session === undefined) return <View style={{ flex: 1, backgroundColor: '#0b0b0f' }} />;
   if (!session) return <><AuthScreen /><StatusBar style="light" /></>;
-  if (!painter || painter.id !== session.user.id) return <><NameScreen userId={session.user.id} /><StatusBar style="light" /></>;
+  if (!painter || painter.id !== session.user.id) {
+    if (checkedFor !== session.user.id) return <View style={{ flex: 1, backgroundColor: '#0b0b0f' }} />; // don't flash the tag prompt for returning users
+    return <><NameScreen userId={session.user.id} /><StatusBar style="light" /></>;
+  }
 
   return (
     <View style={styles.root}>

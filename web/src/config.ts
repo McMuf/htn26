@@ -5,9 +5,18 @@ export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
 export const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY ?? '';
 
 // ---- projection -----------------------------------------------------------
-// Horizontal field of view of the camera preview in portrait, degrees. Same value as the native
-// app so paint lands in the same place; tunable in Settings ("AR scale").
-export const HFOV_DEG = 52;
+// Horizontal field of view of the camera preview across the phone's SHORT edge, degrees (the
+// angle the visible preview spans, not the sensor's). A phone main camera spans ~52° across the
+// short edge of a 4:3 stream, but `object-fit: cover` on a 9:19.5 screen only shows ~60% of that
+// width, so the preview the user sees is ≈ 36°. Only affects on-screen px/deg (paint is stored in
+// degrees); tunable in Settings ("AR scale").
+export const HFOV_DEG = 36;
+// ARKit's `.gravityAndHeading` frame (the iPhone app's AR strokes) is aligned to TRUE north (it needs
+// Location Services for the declination lookup), while every canvas heading is MAGNETIC (raw
+// magnetometer natively, webkitCompassHeading / deviceorientationabsolute here). Declination at
+// Waterloo Region, east-positive: magnetic = true − declination. Set to 0 if a field check shows
+// the AR frame is already magnetic.
+export const MAG_DECLINATION_DEG = -9.7;
 // Offscreen wall raster: pixels per degree. 12 px/deg over ±90° yaw × ±60° pitch = 2160×1440.
 export const WALL_PX_PER_DEG = 12;
 export const WALL_YAW_RANGE = 90;

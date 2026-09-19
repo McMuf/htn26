@@ -56,10 +56,20 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 function load<T>(key: string, fallback: T): T {
-  try { const v = localStorage.getItem(`tagged:${key}`); return v ? { ...fallback, ...JSON.parse(v) } : fallback; } catch { return fallback; }
+  try {
+    const v = localStorage.getItem(`tagged:${key}`);
+    if (!v) return fallback;
+    const parsed: unknown = JSON.parse(v);
+    // a persisted null (signed-out painter) must stay null, not become a truthy `{}`
+    if (parsed === null || typeof parsed !== 'object') return fallback;
+    return fallback !== null && typeof fallback === 'object' ? { ...fallback, ...(parsed as object) } as T : (parsed as T);
+  } catch { return fallback; }
 }
 function persist(key: string, value: unknown) {
-  try { localStorage.setItem(`tagged:${key}`, JSON.stringify(value)); } catch {}
+  try {
+    if (value == null) localStorage.removeItem(`tagged:${key}`);
+    else localStorage.setItem(`tagged:${key}`, JSON.stringify(value));
+  } catch {}
 }
 
 export const useStore = create<State>((set, get) => ({

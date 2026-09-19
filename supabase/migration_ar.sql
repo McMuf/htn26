@@ -15,6 +15,15 @@ create policy "worldmaps write" on storage.objects for insert to authenticated w
 drop policy if exists "worldmaps update" on storage.objects;
 create policy "worldmaps update" on storage.objects for update to authenticated using (bucket_id = 'worldmaps');
 
--- painters may update the world map of any canvas they can see (last writer wins)
+-- Any signed-in painter may replace a canvas's world map (last writer wins) — but only that column.
 drop policy if exists "update canvas map" on canvases;
-create policy "update canvas map" on canvases for update to authenticated using (true) with check (true);
+create or replace function set_world_map(cid uuid, path text) returns void
+language sql security definer set search_path = public as $$
+  update canvases set world_map_path = path, world_map_updated_at = now() where id = cid;
+$$;
+revoke all on function set_world_map(uuid, text) from public;
+grant execute on function set_world_map(uuid, text) to authenticated;
+
+-- AR strokes may record where the painter stood (camera world position, same frame as `transform`)
+-- so other clients can project the stroke as seen from that spot rather than from the session origin.
+alter table strokes add column if not exists viewer jsonb;

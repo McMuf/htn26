@@ -8,6 +8,7 @@ export type ArStroke = {
   transform: number[]; // 16 floats, column-major, ARKit world space of the canvas's world map
   color: string;
   points: number[][]; // [u, v, radiusM, alpha, kind] in the anchor's plane, metres
+  viewer?: number[]; // camera world position when the stroke started (same frame as transform)
 };
 
 export type ArTrackingEvent = {
