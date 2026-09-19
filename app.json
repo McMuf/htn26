@@ -1,0 +1,74 @@
+{
+  "expo": {
+    "name": "Tagged",
+    "slug": "tagged",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "tagged",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b0b0f"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.hamzakhan.tagged",
+      "appleTeamId": "8H99FU8A8H",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Tagged uses the camera so you can spray graffiti onto real-world surfaces.",
+        "NSLocationWhenInUseUsageDescription": "Tagged uses your location to anchor graffiti to the place you painted it and to find pieces near you.",
+        "NSMotionUsageDescription": "Tagged uses motion sensors to aim the spray can and to detect you shaking it.",
+        "NSMicrophoneUsageDescription": "Tagged does not record audio; this is required by the camera module.",
+        "UIBackgroundModes": ["audio"],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.hamzakhan.tagged",
+      "permissions": ["CAMERA", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "VIBRATE"]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Tagged uses the camera so you can spray graffiti onto real-world surfaces.",
+          "microphonePermission": "Tagged does not record audio; this is required by the camera module.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Tagged uses your location to anchor graffiti to the place you painted it and to find pieces near you."
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "Tagged uses motion sensors to aim the spray can and to detect you shaking it."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      "expo-dev-client"
+    ],
+    "extra": {
+      "eas": {}
+    }
+  }
+}
