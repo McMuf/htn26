@@ -1,32 +1,40 @@
-# React + TypeScript + Vite
+# Tagged — mobile web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Phone-browser version of Tagged (Vite + React 19 + TypeScript). Same Supabase project, tables,
+auth and canvas model as the iPhone app in the repo root, so both clients paint the same walls.
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```sh
+cd web
+npm install
+npm run dev        # https is needed on a phone for camera/sensors: use `npx vite --host` + a tunnel, or the Vercel URL
+npm run build      # tsc + vite → dist/
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Live: https://tagged-web-devhamzakhans-projects.vercel.app (Vercel project `tagged-web`,
+root directory `web`, deploys from GitHub `main`).
+
+## What's different from the iPhone app
+
+| | iPhone app | web |
+|---|---|---|
+| surfaces | ARKit planes + world maps | compass-anchored walls (camera + deviceorientation) |
+| trigger | hold volume buttons | two on-screen HOLD buttons (VOL+/VOL− equivalents) |
+| sensors | expo-sensors fusion | `deviceorientation` (+ `webkitCompassHeading` on iOS), `devicemotion` for shake |
+| sound | expo-audio | Web Audio, same generated WAVs in `public/sfx` |
+| haptics | expo-haptics | `navigator.vibrate` where supported (Android) |
+| widget | WidgetKit | — |
+
+## Sync between clients
+
+- Web strokes are compass strokes: `points = [[yaw, pitch, size°, alpha, kind], …]`, `anchor_id = null`.
+  The iPhone app renders them as an overlay on top of its AR view (same renderer as its fallback).
+- iPhone AR strokes carry an anchor transform in a north-aligned metric frame (ARKit
+  `gravityAndHeading`, origin ≈ the canvas GPS point). The web projects each dab onto the compass
+  sphere in `src/data/sync.ts` (`projectArStroke`) so pieces painted in AR show up in the browser.
+- Realtime: both subscribe to `strokes` inserts; polling every 15 s as backup; local-first with a
+  retry queue in `localStorage`.
+
+## Permissions on iOS Safari
+
+Camera, motion/orientation and audio all need a user gesture, so the paint screen starts behind a
+single **START PAINTING** button. Add to Home Screen for a full-screen PWA.
