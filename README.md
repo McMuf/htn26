@@ -1,15 +1,35 @@
-# Tagged — r/place, but graffiti in the real world
+# Fresco — the world is your wall (formerly "Tagged")
 
-Aim your phone like a spray can, **hold a volume button** to spray, and your paint stays on that
-spot for everyone who walks up to it later. Built for Hack the North (36h MVP), Expo SDK 57,
-iOS dev build.
+Aim your phone like a spray can, **hold to spray** (on-screen buttons or the volume rocker), and
+your paint stays on that spot for everyone who walks up to it later. Built for Hack the North
+(36h MVP), Expo SDK 57, iOS dev build. Bundle id / package names still say `tagged`.
 
-## Two clients, one wall
+## Three surfaces, one wall
 
-- **iPhone app** (this repo root): ARKit surface painting, volume-button trigger, widget.
-- **Mobile web** (`web/`, live at https://tagged-web.vercel.app): any phone browser, compass-anchored
-  paint with on-screen hold buttons. Same Supabase project, same tables, same auth; strokes from
-  either client show up in the other (see `web/README.md` for how AR strokes are projected).
+- **iPhone app** (this repo root): ARKit surface painting, glass dock shell, widget.
+- **Companion site** (`web/`, live at **https://tagged-web.vercel.app**): judge-facing, read-only.
+  `/` landing + globe, `/world` live map of Waterloo with every canvas's paint rendered as its
+  marker (realtime), `/gallery` trending pieces + leaderboard. Same Supabase project.
+- **Mobile web painter** (`/paint` on the same site): compass-anchored painting from any phone browser.
+
+## What's real vs. stubbed (Sept 19 pass)
+
+| Area | Status |
+|---|---|
+| Spray loop (shake → hold → paint on ARKit surfaces → sync) | **real**, unchanged |
+| Input | **real**: on-screen hold buttons always visible (one per can) + volume rocker in parallel (toggle in Settings) |
+| Launch globe → tap zooms into Waterloo | **real** (Skia wireframe globe, orbiting logo; not a textured 3D earth) |
+| Onboarding (handle + avatar colour + permissions, one screen) | **real**; identity = Supabase anonymous session — enable *Anonymous sign-ins* in Authentication → Providers. If it's off the same screen unfolds email + password. Avatar colour is local-only (no column) |
+| Dock (Home / Explore / Create / Social / Vault / Settings) | **real** (expo-blur glass, haptics, spring pill). Market skipped on purpose |
+| Home: can status, paint gauges + refill timer, shake test, daily stats | **real** (stats computed from locally cached strokes; streak = consecutive days with a stroke) |
+| Explore: trending + nearby | **real backend data**; `src/data/mock.ts` sample spots appear only when the wall is empty (labelled "sample") |
+| Social: stat card → share sheet | **real** (view snapshot → PNG → iOS share sheet). Friends / activity lists = **stubs** in `src/data/mock.ts` |
+| Vault: grid of your pieces + detail (render, location, stats) | **real**; "photo" = a re-render of the strokes, there is no camera capture. No 360° viewer |
+| Settings | real toggles; About section static |
+| Widget (medium): paint gauges + refill countdown + streak + can charge | **real** (`targets/widget`, App Group). Countdown assumes the in-app regen rate; paint only regenerates while the app is open |
+| Web `/world`, `/gallery` | **real** Supabase reads + realtime; samples only when empty |
+
+Cut this pass: Market tab, social auth, 360° viewer, friends backend, a textured 3D globe.
 
 ## Run it
 
@@ -96,7 +116,8 @@ with the native HUD hidden. A press nudges it up/down → that tells us VOL+ (op
 is **held**, so "held" = events keep arriving and "released" = no event for ~380 ms. Instant
 press-on, ~0.4 s release latency. Hacky but it feels like a nozzle.
 
-Fallback: Settings → "On-screen hold buttons" shows two big hold buttons instead.
+The two on-screen HOLD buttons are always visible (one per can, with its fill level) and work in
+parallel; Settings → "Volume buttons also spray" turns the rocker off if it misbehaves.
 
 ## Interaction model
 
@@ -140,8 +161,8 @@ discover art without a second phone.
 
 ## Home-screen widget
 
-`targets/widget` (via `@bacons/apple-targets`) is a WidgetKit extension showing both paint cans
-and the can charge. The app mirrors levels into the App Group `group.com.hamzakhan.tagged`
+`targets/widget` (via `@bacons/apple-targets`) is a WidgetKit extension: medium = both paint
+gauges with a "full in mm:ss" countdown, day streak and can charge; small = the three bars. The app mirrors levels into the App Group `group.com.hamzakhan.tagged`
 (`src/lib/widget.ts`) and asks WidgetKit to refresh; the widget also refreshes itself every
 15 min. Building it needs the App Groups capability on the app id, so build with
 `xcodebuild … -allowProvisioningUpdates` or EAS (plain `expo run:ios` can't register it).
@@ -157,7 +178,9 @@ Played via `expo-audio` (expo-av is deprecated in SDK 57).
 ## Layout
 
 ```
-App.tsx                  tabs (paint/map/board), boot, realtime + polling
+App.tsx                  launch → onboarding → dock shell (home/explore/create/social/vault/settings)
+src/ui/*                 Dock, Glass, StrokeThumb, theme;  src/data/mock.ts  every stub in one place
+src/screens/*            Launch, Onboarding, Home, Explore, ArPaint/Paint (create), Social, Vault, Settings
 src/config.ts            every tunable
 src/store.ts             zustand store + AsyncStorage persistence
 src/hooks/usePose.ts     sensor fusion → yaw/pitch/roll (shared values)

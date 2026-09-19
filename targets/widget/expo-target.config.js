@@ -2,7 +2,7 @@
 module.exports = (config) => ({
   type: 'widget',
   name: 'widget',
-  displayName: 'Tagged Can',
+  displayName: 'Fresco Can',
   deploymentTarget: '17.0',
   colors: {
     $widgetBackground: '#0b0b0f',
