@@ -85,14 +85,21 @@ export function BlockerBanner({ blocker }: { blocker: Blocker }) {
 
 export function HoldButtons({ onStart, onEnd }: { onStart: (s: Side) => void; onEnd: (s: Side) => void }) {
   const settings = useStore((s) => s.settings);
+  const paint = useStore((s) => s.paint);
   return (
     <View style={styles.holdRow}>
       {(['A', 'B'] as Side[]).map((side) => {
         const opt = side === 'A' ? settings.optionA : settings.optionB;
+        const frac = paint[side] / PAINT_MAX;
         return (
           <Pressable key={side} onPressIn={() => onStart(side)} onPressOut={() => onEnd(side)}
-            style={({ pressed }) => [styles.holdBtn, { borderColor: opt.color, backgroundColor: pressed ? opt.color + 'cc' : '#0008' }]}>
-            <Text style={styles.holdText}>HOLD {side}</Text>
+            style={({ pressed }) => [styles.holdBtn, { borderColor: opt.color, backgroundColor: pressed ? opt.color + 'dd' : '#000a', transform: [{ scale: pressed ? 0.96 : 1 }] }]}>
+            <View style={[styles.holdFill, { backgroundColor: opt.color + '55', width: `${Math.round(frac * 100)}%` }]} />
+            <View style={[styles.holdDot, { backgroundColor: opt.color }]} />
+            <View>
+              <Text style={styles.holdText}>HOLD · {side === 'A' ? 'VOL+' : 'VOL−'}</Text>
+              <Text style={styles.holdSub}>{opt.cap} cap · {Math.round(frac * 100)}%</Text>
+            </View>
           </Pressable>
         );
       })}
@@ -120,7 +127,10 @@ const styles = StyleSheet.create({
   canLabel: { color: '#fff', fontSize: 10, fontWeight: '800', marginTop: 6 },
   banner: { position: 'absolute', top: '58%', alignSelf: 'center', backgroundColor: '#000a', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   bannerText: { color: '#fff', fontWeight: '700' },
-  holdRow: { position: 'absolute', bottom: 110, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 20 },
-  holdBtn: { width: 120, height: 64, borderRadius: 32, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
-  holdText: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  holdRow: { position: 'absolute', bottom: 112, left: 16, right: 16, flexDirection: 'row', justifyContent: 'center', gap: 12 },
+  holdBtn: { flex: 1, height: 72, borderRadius: 36, borderWidth: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, overflow: 'hidden' },
+  holdFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
+  holdDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#fff' },
+  holdText: { color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 1 },
+  holdSub: { color: '#ffffffcc', fontSize: 11, fontWeight: '700' },
 });

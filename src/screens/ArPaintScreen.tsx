@@ -34,7 +34,7 @@ export function ArPaintScreen() {
   const online = useStore((s) => s.online);
   const location = useStore((s) => s.location);
   const canvases = useStore((s) => s.canvases);
-  const setSettingsOpen = useStore((s) => s.setSettingsOpen);
+  const setTab = useStore((s) => s.setTab);
   const markDiscovered = useStore((s) => s.markDiscovered);
 
   const viewRef = useRef<ArPaintViewRef | null>(null);
@@ -68,7 +68,7 @@ export function ArPaintScreen() {
   // canvases with a world map resolve by relocalisation; web-made canvases (no map) resolve by proximity
   const discovery = useDiscovery(pose, (c) => !c.world_map_path);
 
-  useVolumeTrigger(!settings.onScreenButtons, { onHoldStart: engine.start, onHoldEnd: engine.end });
+  useVolumeTrigger(settings.volumeButtons, { onHoldStart: engine.start, onHoldEnd: engine.end });
 
   // Load the world map of the canvas you're standing at (once, and only before you paint here).
   useEffect(() => {
@@ -170,18 +170,16 @@ export function ArPaintScreen() {
       {aimingAtNothing && !ui.blocker && (
         <View style={styles.banner} pointerEvents="none"><Text style={styles.bannerText}>Aim at a wall or floor — move the phone slowly so it finds the surface</Text></View>
       )}
-      {settings.onScreenButtons && <HoldButtons onStart={engine.start} onEnd={engine.end} />}
+      <HoldButtons onStart={engine.start} onEnd={engine.end} />
 
       <View style={styles.topBar} pointerEvents="box-none">
-        <Text style={styles.brand}>TAGGED</Text>
+        <Text style={styles.brand}>FRESCO</Text>
         <Text style={styles.status}>{painter?.name ?? '—'} · {online ? 'live' : 'offline'} · {trackingText}{mapText ? ` · ${mapText}` : ''}</Text>
-        <Pressable onPress={() => setSettingsOpen(true)} hitSlop={10} style={styles.gear}><Text style={styles.gearText}>⚙︎</Text></Pressable>
+        <Pressable onPress={() => setTab('settings')} hitSlop={10} style={styles.gear}><Text style={styles.gearText}>⚙︎</Text></Pressable>
       </View>
-      {!settings.onScreenButtons && (
-        <View style={styles.hint} pointerEvents="none">
-          <Text style={styles.hintText}>hold VOL+ / VOL− to spray · shake to charge</Text>
-        </View>
-      )}
+      <View style={styles.hint} pointerEvents="none">
+        <Text style={styles.hintText}>{settings.volumeButtons ? 'hold the buttons or VOL+ / VOL− to spray · shake to charge' : 'hold the buttons to spray · shake to charge'}</Text>
+      </View>
       <View style={styles.debug} pointerEvents="none">
         <Text style={styles.debugText}>
           planes {tracking.planes ?? 0} · surfaces {surfaces} · hit {engine.hit.current ? 'yes' : 'no'} · held {ui.held} · block {ui.blocker ?? '-'} · gps {location ? `±${Math.round(location.accuracy)}m` : '…'} · map {tracking.mapping || '-'}
@@ -200,8 +198,8 @@ const styles = StyleSheet.create({
   gearText: { color: '#fff', fontSize: 18 },
   banner: { position: 'absolute', top: '58%', alignSelf: 'center', backgroundColor: '#000a', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, maxWidth: '85%' },
   bannerText: { color: '#fff', fontWeight: '700', textAlign: 'center' },
-  debug: { position: 'absolute', bottom: 84, left: 12, right: 12, alignItems: 'center' },
+  debug: { position: 'absolute', top: 92, left: 12, right: 12, alignItems: 'center' },
   debugText: { color: '#ffffff99', fontSize: 9, textAlign: 'center' },
-  hint: { position: 'absolute', bottom: 104, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
+  hint: { position: 'absolute', bottom: 194, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
   hintText: { color: '#ffffffcc', fontSize: 11 },
 });

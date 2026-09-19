@@ -6,10 +6,13 @@ import {
 import type { Canvas, Painter, Stroke } from './types';
 
 export type Side = 'A' | 'B';
+export type Tab = 'home' | 'explore' | 'create' | 'social' | 'vault' | 'settings';
 export type Settings = {
   optionA: SprayOption;
   optionB: SprayOption;
-  onScreenButtons: boolean; // fallback if volume interception misbehaves
+  volumeButtons: boolean; // hardware volume rocker also sprays (on-screen hold buttons are always on)
+  avatarColor: string;
+  onboarded: boolean;
   geofenceBypass: boolean;
   hfov: number;
   haptics: boolean;
@@ -26,10 +29,13 @@ type State = {
   location: Loc | null;
   canvases: Record<string, Canvas>;
   strokes: Record<string, Stroke[]>;
+  /** Strokes fetched only for thumbnails (explore/vault): no wall raster is built for these. */
+  previewStrokes: Record<string, Stroke[]>;
+  setPreviewStrokes: (byCanvas: Record<string, Stroke[]>) => void;
   discovered: Record<string, true>;
   wallVersion: number; // bumps whenever any wall raster changes
   online: boolean;
-  tab: 'paint' | 'map' | 'board';
+  tab: Tab;
   settingsOpen: boolean;
   debug: { volEvents: number; lastVol: number; held: string; blocker: string; walls: number; poseReady: boolean; surface: string };
   setDebug: (d: Partial<State['debug']>) => void;
@@ -53,7 +59,9 @@ type State = {
 const DEFAULT_SETTINGS: Settings = {
   optionA: DEFAULT_OPTION_A,
   optionB: DEFAULT_OPTION_B,
-  onScreenButtons: false,
+  volumeButtons: true,
+  avatarColor: '#ff2d95',
+  onboarded: false,
   geofenceBypass: GEOFENCE_BYPASS_DEFAULT,
   hfov: HFOV_DEG,
   haptics: true,
@@ -69,10 +77,12 @@ export const useStore = create<State>((set, get) => ({
   location: null,
   canvases: {},
   strokes: {},
+  previewStrokes: {},
+  setPreviewStrokes: (byCanvas) => set((st) => ({ previewStrokes: { ...st.previewStrokes, ...byCanvas } })),
   discovered: {},
   wallVersion: 0,
   online: false,
-  tab: 'paint',
+  tab: 'home',
   settingsOpen: false,
   debug: { volEvents: 0, lastVol: 0.5, held: '-', blocker: '-', walls: 0, poseReady: false, surface: '?' },
   setDebug: (d) => set((st) => ({ debug: { ...st.debug, ...d } })),

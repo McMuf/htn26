@@ -34,7 +34,7 @@ export function PaintScreen() {
   const painter = useStore((s) => s.painter);
   const online = useStore((s) => s.online);
   const location = useStore((s) => s.location);
-  const setSettingsOpen = useStore((s) => s.setSettingsOpen);
+  const setTab = useStore((s) => s.setTab);
   const debug = useStore((s) => s.debug);
   const setDebug = useStore((s) => s.setDebug);
   const engineRef = useRef<ReturnType<typeof useSprayEngine> | null>(null);
@@ -45,7 +45,7 @@ export function PaintScreen() {
   const discoveryRef = useRef(discovery);
   discoveryRef.current = discovery;
 
-  useVolumeTrigger(!settings.onScreenButtons, { onHoldStart: engine.start, onHoldEnd: engine.end });
+  useVolumeTrigger(settings.volumeButtons, { onHoldStart: engine.start, onHoldEnd: engine.end });
 
   // cheap UI poll for spray state (engine runs off refs to stay at 30Hz without re-rendering)
   const [ui, setUi] = useState<{ spraying: boolean; blocker: Blocker; yaw: number }>({ spraying: false, blocker: null, yaw: 0 });
@@ -91,18 +91,16 @@ export function PaintScreen() {
       <CanMeter />
       <DiscoveryOverlay d={discovery} onReport={onReport} />
       <BlockerBanner blocker={ui.blocker} />
-      {settings.onScreenButtons && <HoldButtons onStart={engine.start} onEnd={engine.end} />}
+      <HoldButtons onStart={engine.start} onEnd={engine.end} />
 
       <View style={styles.topBar} pointerEvents="box-none">
-        <Text style={styles.brand}>TAGGED</Text>
+        <Text style={styles.brand}>FRESCO</Text>
         <Text style={styles.status}>{painter?.name ?? '—'} · {online ? 'live' : 'offline'} · {ui.yaw}°</Text>
-        <Pressable onPress={() => setSettingsOpen(true)} hitSlop={10} style={styles.gear}><Text style={styles.gearText}>⚙︎</Text></Pressable>
+        <Pressable onPress={() => setTab('settings')} hitSlop={10} style={styles.gear}><Text style={styles.gearText}>⚙︎</Text></Pressable>
       </View>
-      {!settings.onScreenButtons && (
-        <View style={styles.hint} pointerEvents="none">
-          <Text style={styles.hintText}>hold VOL+ / VOL− to spray · shake to charge</Text>
-        </View>
-      )}
+      <View style={styles.hint} pointerEvents="none">
+        <Text style={styles.hintText}>{settings.volumeButtons ? 'hold the buttons or VOL+ / VOL− to spray · shake to charge' : 'hold the buttons to spray · shake to charge'}</Text>
+      </View>
       <View style={styles.debug} pointerEvents="none">
         <Text style={styles.debugText}>
           vol events {debug.volEvents} (last {debug.lastVol}) · held {debug.held} · block {debug.blocker} · walls {debug.walls} · pose {debug.poseReady ? 'ok' : '…'} · gps {location ? `±${Math.round(location.accuracy)}m` : '…'} · surface {debug.surface}
@@ -123,8 +121,8 @@ const styles = StyleSheet.create({
   status: { color: '#ffffffaa', fontSize: 11, flex: 1 },
   gear: { backgroundColor: '#0008', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   gearText: { color: '#fff', fontSize: 18 },
-  debug: { position: 'absolute', bottom: 84, left: 12, right: 12, alignItems: 'center' },
+  debug: { position: 'absolute', top: 92, left: 12, right: 12, alignItems: 'center' },
   debugText: { color: '#ffffff99', fontSize: 9, textAlign: 'center' },
-  hint: { position: 'absolute', bottom: 104, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
+  hint: { position: 'absolute', bottom: 194, alignSelf: 'center', backgroundColor: '#0006', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
   hintText: { color: '#ffffffcc', fontSize: 11 },
 });

@@ -196,6 +196,20 @@ export async function fetchAllCanvases(): Promise<Canvas[]> {
   return data as Canvas[];
 }
 
+/** Strokes for canvases that aren't nearby, for thumbnails only (no raster replay). */
+export async function fetchPreviewStrokes(ids: string[]) {
+  if (!hasBackend || !ids.length) return;
+  const st = useStore.getState();
+  const want = ids.filter((id) => !st.strokes[id] && !st.previewStrokes[id]).slice(0, 40);
+  if (!want.length) return;
+  const { data, error } = await supabase.from('strokes').select('*').in('canvas_id', want).order('created_at');
+  if (error) throw error;
+  const by: Record<string, Stroke[]> = {};
+  for (const id of want) by[id] = [];
+  for (const s of data as Stroke[]) (by[s.canvas_id] ??= []).push(s);
+  useStore.getState().setPreviewStrokes(by);
+}
+
 function isLocalId(id: string | null) { return !id || id.startsWith('local-'); }
 
 // ---- AR world maps (Supabase Storage bucket "worldmaps") ---------------------------------
