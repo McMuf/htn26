@@ -57,9 +57,9 @@ export const SHAKE_GAIN_PER_EVENT = 0.18;
 // ---- spray ----------------------------------------------------------------
 export type Cap = 'fat' | 'skinny';
 export type SprayOption = { color: string; cap: Cap; name: string };
-export const DEFAULT_OPTION_A: SprayOption = { color: '#ff2d95', cap: 'fat', name: 'Hot pink · fat cap' };
-export const DEFAULT_OPTION_B: SprayOption = { color: '#19e6ff', cap: 'skinny', name: 'Cyan · skinny cap' };
-export const PALETTE = ['#ff2d95', '#19e6ff', '#ffe600', '#7cff3a', '#ff5c1a', '#b26bff', '#ffffff', '#111111'];
+export const DEFAULT_OPTION_A: SprayOption = { color: '#59d92d', cap: 'fat', name: 'Neon green · fat cap' };
+export const DEFAULT_OPTION_B: SprayOption = { color: '#4a22b8', cap: 'skinny', name: 'Dark purple · skinny cap' };
+export const PALETTE = ['#59d92d', '#4a22b8', '#ff2d95', '#19e6ff', '#ffe600', '#7cff3a', '#ff5c1a', '#b26bff', '#ffffff', '#111111'];
 export const CAP_RADIUS_DEG: Record<Cap, number> = { fat: 2.6, skinny: 1.15 };
 export const DWELL_POOL_SECONDS = 1.1;
 export const DWELL_RADIUS_DEG = 1.2;

@@ -1,18 +1,12 @@
 /* Tagged — mobile web. Dark theme, accent pink, mobile-first, 100dvh, safe-area aware. */
 
 :root {
-  --bg: #0b0b0f;
   --fg: #ffffff;
-  --accent: #ff2d95;
-  --secondary: #19e6ff;
-  --hi: #ffe600;
-  --warn: #ff5c1a;
-  --ok: #7cff3a;
-  --sat: env(safe-area-inset-top, 0px);
-  --sab: env(safe-area-inset-bottom, 0px);
-  --sal: env(safe-area-inset-left, 0px);
-  --sar: env(safe-area-inset-right, 0px);
-  color-scheme: dark;
+  --accent: #59d92d;
+  --secondary: #7a45ff;
+  --hi: #9cff6b;
+  --warn: #ff3d55;
+  --ok: #59d92d;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -27,7 +21,7 @@ body {
   min-height: 100dvh;
   background: var(--bg);
   color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-display);
   overflow-x: hidden;
   overscroll-behavior: none;
   -webkit-user-select: none;
@@ -59,25 +53,27 @@ input { -webkit-user-select: text; user-select: text; }
   background: var(--bg);
 }
 .form { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 10px; }
-.brand { font-weight: 900; font-size: 44px; letter-spacing: 6px; line-height: 1; }
-.sub { color: #ffffffaa; font-size: 14px; margin-bottom: 20px; }
-.label { color: var(--hi); font-weight: 800; letter-spacing: 2px; font-size: 12px; text-transform: uppercase; }
+.form .wordmark { margin-bottom: 6px; }
+.brand { font-family: var(--font-arcade); font-size: 30px; letter-spacing: 2px; line-height: 1; text-shadow: 0 3px 0 var(--green-lo), 0 6px 0 var(--purple-lo), 0 9px 0 var(--ink); }
+.sub { color: var(--dim); font-size: 14px; margin-bottom: 20px; }
+.label { color: var(--green); font-weight: 700; letter-spacing: 1.2px; font-size: 12px; text-transform: uppercase; }
 .input {
-  width: 100%; border: 2px solid var(--secondary); border-radius: 14px; background: transparent;
-  color: #fff; font-size: 18px; font-weight: 700; padding: 14px; outline: none; appearance: none;
+  width: 100%; border: 3px solid var(--ink); border-radius: 0; background: var(--well);
+  color: #fff; font-family: var(--font-display); font-size: 20px; font-weight: 700; padding: 12px 14px; outline: none; appearance: none;
+  clip-path: var(--notch);
 }
-.input::placeholder { color: #ffffff44; }
-.input:focus { border-color: #fff; }
-.input--pink { border-color: var(--accent); font-size: 22px; font-weight: 800; text-transform: uppercase; }
-.input--pink:focus { border-color: #fff; }
-.msg { color: var(--hi); font-size: 13px; }
-.err { color: var(--warn); font-size: 13px; }
-.btn {
-  width: 100%; background: var(--accent); border-radius: 14px; padding: 16px; margin-top: 8px;
-  text-align: center; color: #fff; font-weight: 900; letter-spacing: 2px;
+.input::placeholder { color: var(--faint); }
+.input:focus { box-shadow: inset 0 0 0 3px var(--green); }
+.input--pink { text-transform: uppercase; }
+.msg { color: var(--green-hi); font-size: 13px; }
+.err { color: var(--red-hi); font-size: 13px; }
+.form .btn, .form-screen .btn {
+  width: 100%; background: var(--green); color: var(--green-ink); border: 3px solid var(--ink); border-radius: 0; padding: 14px; margin-top: 8px;
+  text-align: center; font-weight: 700; font-size: 18px; letter-spacing: 0.5px; box-shadow: 0 5px 0 0 var(--ink); clip-path: var(--notch6);
 }
-.btn:disabled { opacity: 0.4; }
-.hint { color: #ffffff66; font-size: 12px; text-align: center; }
+.form .btn:active { transform: translateY(5px); box-shadow: none; }
+.form .btn:disabled { opacity: 0.4; }
+.hint { color: var(--faint); font-size: 12px; text-align: center; }
 
 /* ---- tab bar ------------------------------------------------------------- */
 .tabs {
@@ -292,16 +288,9 @@ input { -webkit-user-select: text; user-select: text; }
    notched corners, hard shadows, no blur. Mirrors src/ui/theme.ts + PixelBox.
    ========================================================================== */
 :root {
-  --ink: #0a0620;        /* outline + hard shadow */
-  --plate: #120a2e;      /* camera overlay plate: colourless, so the only colour is paint */
-  --plate-hi: #2a1c5c;
-  --panel: #2c1868;
-  --panel-hi: #4327a8;
-  --pix-green: #59d92d; --pix-green-hi: #9cff6b;
-  --pix-red: #ff3d55;
-  --dim: #cdbff5;
-  --font-display: 'Pixelify Sans', system-ui, sans-serif;
-  --font-label: 'Silkscreen', ui-monospace, monospace;
+  --pix-green: var(--green); --pix-green-hi: var(--green-hi);
+  --pix-red: var(--red);
+  --font-label: var(--font-display);
 }
 
 /* The building block: PixelBox as one element — hard border, notched corners, slab underneath. */
@@ -428,3 +417,97 @@ input { -webkit-user-select: text; user-select: text; }
   box-shadow: 0 4px 0 0 var(--ink); padding: 6px 14px;
 }
 .tools-done:active { transform: translateY(4px); box-shadow: 0 0 0 0 var(--ink); }
+
+
+/* ==========================================================================
+   Cospray shell: side drawer nav, the Create deck, the ported tabs
+   ========================================================================== */
+.navkey { position: fixed; left: calc(var(--sal) + 12px); top: calc(var(--sat) + 12px); z-index: 30; width: 46px; height: 46px; padding: 0; display: grid; place-items: center; background: var(--plate-cam); --hi: var(--plate-cam-hi); }
+.navkey .bars { display: flex; flex-direction: column; gap: 4px; }
+.navkey .bars i { display: block; width: 22px; height: 4px; background: #fff; }
+.nav-backdrop { position: fixed; inset: 0; z-index: 31; background: #07030fb0; }
+.sidebar {
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 32; width: min(300px, 84vw);
+  padding: calc(var(--sat) + 18px) 14px calc(var(--sab) + 18px); display: flex; flex-direction: column; gap: 10px;
+  background: var(--dock); border-right: 3px solid var(--ink); box-shadow: inset -3px 0 0 var(--panel-hi);
+  transform: translateX(-104%); transition: transform 180ms ease-out; overflow-y: auto;
+}
+.sidebar.open { transform: none; }
+.sidebar-head { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px 14px; }
+.navitem { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; text-align: left; background: var(--key); --hi: var(--panel-hi); --lo: transparent; }
+.navitem-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.navitem-label { font-weight: 700; font-size: 17px; letter-spacing: 0.5px; }
+.navitem-hint { font-size: 12px; color: var(--dim); }
+.navitem.green .navitem-hint { color: var(--green-ink); opacity: 0.8; }
+.navitem.green { --hi: var(--green-hi); --lo: var(--green-lo); }
+.navitem.purple { background: var(--purple); --hi: var(--purple-hi); --lo: var(--purple-lo); }
+.navcan { width: 14px; height: 24px; background: #fff; flex: 0 0 auto; clip-path: polygon(30% 0, 70% 0, 70% 20%, 100% 20%, 100% 100%, 0 100%, 0 20%, 30% 20%); }
+.navitem.green .navcan { background: var(--green-ink); }
+.sidebar-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; }
+@media (min-width: 900px) {
+  .sidebar { transform: none; }
+  .nav-backdrop, .navkey { display: none; }
+  .screen, .paint { margin-left: min(300px, 84vw); }
+  .deck { left: calc(min(300px, 84vw) + 12px); }
+}
+
+/* ---- Create deck ------------------------------------------------------------ */
+.deck { position: fixed; left: 12px; right: 12px; bottom: calc(var(--sab) + 12px); z-index: 3; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--plate-cam); --hi: var(--plate-cam-hi); }
+.charge { position: static; transform: none; width: auto; padding: 0; display: flex; flex-direction: row; align-items: center; gap: 8px; pointer-events: auto; }
+.charge-can { width: 14px; height: 22px; background: #fff; flex: 0 0 auto; }
+.charge-bar { flex: 1; display: flex; flex-direction: row; gap: 2px; padding: 2px; background: var(--ink); width: auto; }
+.charge-bar .seg { flex: 1; height: 10px; background: var(--line); }
+.charge-bar .seg.on { background: var(--green); }
+.charge-bar .seg.on.low { background: var(--purple-hi); }
+.charge-text { width: 44px; text-align: right; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; color: #fff; }
+.charge-text.low { color: var(--purple-hi); }
+.tools-btn { width: 44px; height: 36px; flex: 0 0 auto; display: grid; place-items: center; background: var(--key); }
+.hold-row { position: static; display: flex; gap: 8px; }
+.hold-btn { min-height: 64px; background: var(--key); --hi: var(--plate-cam-hi); --lo: transparent; }
+.hold-btn.down { background: var(--key); }
+.hold-swatch { width: 30px; height: 30px; }
+.hold-name { font-size: 17px; text-shadow: 0 2px 0 var(--ink); }
+.hold-sub { font-size: 12px; }
+.hud-stack { top: calc(var(--sat) + 70px); }
+.topbar { position: fixed; top: calc(var(--sat) + 22px); right: 14px; left: auto; background: none; padding: 0; }
+.topbar-status { font-size: 12px; color: var(--dim); }
+.gear { display: none; }
+.hintline { display: none; }
+.tools-tray { bottom: calc(var(--sab) + 140px); }
+.paint.hidden { display: none; }
+.gate { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-height: 100dvh; padding: 24px; text-align: center; }
+.gate .sub { max-width: 320px; }
+
+/* ---- ported tabs ------------------------------------------------------------ */
+.card { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.card .thumb { width: 100%; height: auto; display: block; border: 3px solid var(--ink); }
+.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gauge { display: flex; flex-direction: column; gap: 4px; }
+.quest { display: flex; flex-direction: column; gap: 6px; }
+.rank { position: absolute; left: 4px; top: 4px; width: 30px; height: 28px; display: grid; place-items: center; font-weight: 700; border: 3px solid var(--ink); background: #1a0f3a; clip-path: var(--notch); }
+.rank.r1 { background: var(--green); color: var(--green-ink); } .rank.r2 { background: #fff; color: var(--bg2); } .rank.r3 { background: var(--red); }
+.podium-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; }
+.podium-block { width: 100%; display: flex; justify-content: center; padding-top: 8px; font-weight: 700; font-size: 28px; }
+.mapframe { height: 260px; border: 3px solid var(--ink); background: var(--well); }
+.mapframe .leaflet-container { background: var(--bg2); font-family: var(--font-display); }
+.purple-tiles { filter: grayscale(1) brightness(0.55) sepia(1) hue-rotate(220deg) saturate(2.2) brightness(0.8); }
+.pxpin-wrap { background: none; border: 0; }
+.pxpin { width: 16px; height: 24px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 0 3px var(--green)); }
+.pxpin .head { width: 16px; height: 16px; background: var(--ink); display: grid; place-items: center; }
+.pxpin .head b { width: 10px; height: 10px; background: var(--green); box-shadow: inset 2px 2px 0 #ffffffcc; }
+.pxpin .tail { width: 8px; height: 8px; background: var(--ink); clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.leaflet-popup-content-wrapper { background: var(--panel); color: #fff; border: 3px solid var(--ink); border-radius: 0; box-shadow: 0 4px 0 0 var(--ink); font-family: var(--font-display); }
+.leaflet-popup-tip { background: var(--ink); }
+.leaflet-popup-close-button { color: #fff !important; }
+
+/* ---- settings sheet in the theme --------------------------------------------- */
+.sheet { background: var(--bg2); border-top: 3px solid var(--ink); border-radius: 0; box-shadow: inset 0 3px 0 var(--panel-hi); font-family: var(--font-display); }
+.sheet .h1 { font-weight: 700; letter-spacing: 1px; }
+.sheet-close { background: var(--green); color: var(--green-ink); border: 3px solid var(--ink); border-radius: 0; box-shadow: 0 4px 0 var(--ink); font-weight: 700; padding: 6px 12px; }
+.section-label { color: var(--green); font-weight: 700; letter-spacing: 1px; font-size: 12px; text-transform: uppercase; }
+.swatch { border-radius: 0; border: 3px solid var(--ink); }
+.swatch.on { outline: 3px solid #fff; outline-offset: -3px; }
+.switch { border-radius: 0; background: #3a2a78; border: 3px solid var(--ink); }
+.switch::after { border-radius: 0; }
+.switch.on { background: var(--green); }
+.btn.danger, .sheet .danger { background: var(--red); }

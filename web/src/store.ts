@@ -9,6 +9,12 @@ export type Settings = {
   hfov: number;
   haptics: boolean;
   sound: boolean;
+  /** local economy, as on the phone */
+  crew: string | null;
+  claimed: Record<string, true>;
+  bonus: number;
+  spent: number;
+  avatarColor: string;
 };
 export type Loc = { lat: number; lng: number; accuracy: number };
 
@@ -25,7 +31,8 @@ type State = {
   discovered: Record<string, true>;
   wallVersion: number; // bumps whenever any wall raster changes
   online: boolean;
-  tab: 'paint' | 'map' | 'board';
+  tab: 'paint' | 'profile' | 'vault' | 'explore' | 'social';
+  navOpen: boolean;
   settingsOpen: boolean;
   debug: Debug;
 
@@ -42,6 +49,7 @@ type State = {
   bumpWalls: () => void;
   setOnline: (b: boolean) => void;
   setTab: (t: State['tab']) => void;
+  setNavOpen: (b: boolean) => void;
   setSettingsOpen: (b: boolean) => void;
   setDebug: (d: Partial<Debug>) => void;
 };
@@ -53,6 +61,11 @@ const DEFAULT_SETTINGS: Settings = {
   hfov: HFOV_DEG,
   haptics: true,
   sound: true,
+  crew: null,
+  claimed: {},
+  bonus: 0,
+  spent: 0,
+  avatarColor: '#59d92d',
 };
 
 function load<T>(key: string, fallback: T): T {
@@ -84,6 +97,7 @@ export const useStore = create<State>((set, get) => ({
   wallVersion: 0,
   online: false,
   tab: 'paint',
+  navOpen: false,
   settingsOpen: false,
   debug: { held: '-', blocker: '-', walls: 0, poseReady: false, sensors: '?', camera: '?' },
 
@@ -108,7 +122,8 @@ export const useStore = create<State>((set, get) => ({
   markDiscovered: (id) => { const discovered = { ...get().discovered, [id]: true as const }; set({ discovered }); persist('discovered', discovered); },
   bumpWalls: () => set((st) => ({ wallVersion: st.wallVersion + 1 })),
   setOnline: (online) => set({ online }),
-  setTab: (tab) => set({ tab }),
+  setTab: (tab) => set({ tab, navOpen: false }),
+  setNavOpen: (navOpen) => set({ navOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setDebug: (d) => set((st) => ({ debug: { ...st.debug, ...d } })),
 }));

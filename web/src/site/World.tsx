@@ -30,7 +30,7 @@ export function World() {
     const map = L.map(el, { center: CAMPUS, zoom: 15, minZoom: 3, maxZoom: 19, zoomControl: false });
     L.tileLayer(TILE_URL, { maxZoom: 19, attribution: ATTR, className: 'dark-tiles' }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
-    L.circle([GEOFENCE.lat, GEOFENCE.lng], { radius: GEOFENCE.radiusM, color: '#ff2d95', opacity: 0.35, weight: 1, fillColor: '#ff2d95', fillOpacity: 0.04, interactive: false }).addTo(map);
+    L.circle([GEOFENCE.lat, GEOFENCE.lng], { radius: GEOFENCE.radiusM, color: '#59d92d', opacity: 0.35, weight: 2, fillColor: '#59d92d', fillOpacity: 0.04, interactive: false }).addTo(map);
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; markers.current.clear(); };
   }, []);
@@ -43,7 +43,7 @@ export function World() {
       seen.add(c.id);
       const strokes = w.strokesFor(c.id);
       const cv = document.createElement('canvas');
-      renderPiece(cv, strokes, THUMB, THUMB, '#0f0f17');
+      renderPiece(cv, strokes, THUMB, THUMB, '#150a36');
       const wrap = document.createElement('div');
       wrap.className = `pin${isSample(c.id) ? ' sample' : ''}${strokes.length ? '' : ' empty'}`;
       wrap.append(cv);

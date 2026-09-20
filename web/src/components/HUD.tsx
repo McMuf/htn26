@@ -24,21 +24,20 @@ export function Reticle({ spraying, offWall = false }: { spraying: boolean; offW
   );
 }
 
-/** Can charge as a slim rail down the left edge — shake to refill, like the phone's. */
-export function CanMeter() {
+/** Can charge as a strip across the deck, with the tools key at its end — shake to refill, like the phone's. */
+export function CanMeter({ onTools }: { onTools?: () => void }) {
   const shake = useStore((s) => s.shake);
   const low = shake < SHAKE_MIN_TO_SPRAY;
-  const segs = 8;
+  const segs = 12;
   const lit = Math.round(Math.max(0, Math.min(1, shake)) * segs);
   return (
-    <div className="charge px-box" aria-hidden="true">
-      <div className={`charge-can${low ? ' wobble' : ''}`} />
-      <div className="charge-bar">
-        {Array.from({ length: segs }, (_, i) => (
-          <span key={i} className={segs - 1 - i < lit ? 'seg on' : 'seg'} />
-        ))}
+    <div className="charge">
+      <div className={`charge-can${low ? ' wobble' : ''}`} aria-hidden="true" />
+      <div className="charge-bar" aria-hidden="true">
+        {Array.from({ length: segs }, (_, i) => <span key={i} className={i < lit ? `seg on${low ? ' low' : ''}` : 'seg'} />)}
       </div>
-      <div className="charge-text">{low ? 'SHAKE' : `${Math.round(shake * 100)}%`}</div>
+      <div className={`charge-text${low ? ' low' : ''}`}>{low ? 'SHAKE' : `${Math.round(shake * 100)}%`}</div>
+      {onTools ? <button type="button" className="tools-btn pxbox dark flat press" aria-label="Colours and settings" onClick={onTools}><span className="tools-glyph" aria-hidden="true" /></button> : null}
     </div>
   );
 }
@@ -55,7 +54,7 @@ const NO_COMPASS_FIX_MSG = { title: 'NO COMPASS FIX YET', sub: 'HOLD IT UPRIGHT 
 /** One status plate. The phone stacks these in the middle of the screen; so do we. */
 export function Line({ title, sub, tone }: { title: string; sub?: string; tone?: 'warn' }) {
   return (
-    <div className={`hud-line px-box${tone === 'warn' ? ' warn' : ''}`} role="status">
+    <div className={`hud-line pxbox plate flat${tone === 'warn' ? ' warn' : ''}`} role="status">
       <div className="hud-line-title">{title}</div>
       {sub ? <div className="hud-line-sub">{sub}</div> : null}
     </div>
@@ -112,7 +111,7 @@ export function ToolsTray({ onClose }: { onClose: () => void }) {
     </div>
   );
   return (
-    <div className="tools-tray px-box">
+    <div className="tools-tray pxbox plate">
       {row('optionA')}
       {row('optionB')}
       <button type="button" className="tools-done" onClick={onClose}>DONE</button>
@@ -126,8 +125,8 @@ export function ToolsTray({ onClose }: { onClose: () => void }) {
  * Pointer events cover touch, mouse and pen; ArrowUp / ArrowDown hold on a keyboard for desktop
  * testing. Everything releases if the page hides or loses focus so a stroke can't get stuck on.
  */
-export function HoldButtons({ onStart, onEnd, keyboard = true, onTools }: {
-  onStart: (s: Side) => void; onEnd: (s: Side) => void; keyboard?: boolean; onTools?: () => void;
+export function HoldButtons({ onStart, onEnd, keyboard = true }: {
+  onStart: (s: Side) => void; onEnd: (s: Side) => void; keyboard?: boolean;
 }) {
   const settings = useStore((s) => s.settings);
   const paint = useStore((s) => s.paint);
@@ -169,7 +168,8 @@ export function HoldButtons({ onStart, onEnd, keyboard = true, onTools }: {
           <button
             key={side}
             type="button"
-            className={`hold-btn px-box${pressed[side] ? ' pressed' : ''}`}
+            className={`hold-btn pxbox press${pressed[side] ? ' down' : ''}`}
+            style={pressed[side] ? { borderColor: opt.color } : undefined}
             aria-label={`Hold to spray option ${side} (${opt.name})`}
             onPointerDown={(e) => { e.preventDefault(); (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); press(side, true); }}
             onPointerUp={() => press(side, false)}
@@ -186,11 +186,6 @@ export function HoldButtons({ onStart, onEnd, keyboard = true, onTools }: {
           </button>
         );
       })}
-      {onTools ? (
-        <button type="button" className="tools-btn px-box" aria-label="Colours and settings" onClick={onTools}>
-          <span className="tools-glyph" aria-hidden="true" />
-        </button>
-      ) : null}
     </div>
   );
 }
