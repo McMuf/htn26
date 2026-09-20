@@ -30,11 +30,11 @@ export function T({ v = 'body', color, style, ...rest }: TextProps & { v?: V; co
   return <Text {...rest} style={[TEXT[v], color ? { color } : null, style]} />;
 }
 
-/** The COSPRAY wordmark: pixel display face with a stacked hard shadow (green -> purple -> ink). */
+/** The COSPRAY wordmark: arcade face (Press Start 2P) with a stacked hard shadow (green -> purple -> ink). */
 export function Wordmark({ size = 'lg', style }: { size?: 'lg' | 'sm'; style?: StyleProp<TextStyle> }) {
   const lg = size === 'lg';
-  const fs = lg ? 56 : 22, ls = lg ? 8 : 3, px = lg ? 4 : 2;
-  const base: TextStyle = { fontFamily: F.display, fontSize: fs, letterSpacing: ls, color: C.white };
+  const fs = lg ? 34 : 14, ls = lg ? 2 : 1, px = lg ? 3 : 2;
+  const base: TextStyle = { fontFamily: F.arcade, fontSize: fs, letterSpacing: ls, color: C.white, includeFontPadding: false };
   return (
     <View style={style}>
       <Text style={[base, styles.abs, { top: px * 3, color: C.ink }]}>COSPRAY</Text>

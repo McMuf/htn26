@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { PixelifySans_500Medium, PixelifySans_700Bold } from '@expo-google-fonts/pixelify-sans';
 import { VT323_400Regular } from '@expo-google-fonts/vt323';
+import { PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
 import { hydrateStore, useStore } from './src/store';
 import { useLocation } from './src/hooks/useLocation';
 import { useArBrightness } from './src/hooks/useArBrightness';
@@ -33,7 +34,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [launched, setLaunched] = useState(false); // the app is mounted underneath…
   const [launchGone, setLaunchGone] = useState(false); // …and the launch page unmounts once its zoom has faded
-  const [fontsLoaded, fontError] = useFonts({ PixelifySans_500Medium, PixelifySans_700Bold, VT323_400Regular });
+  const [fontsLoaded, fontError] = useFonts({ PixelifySans_500Medium, PixelifySans_700Bold, VT323_400Regular, PressStart2P_400Regular });
   useEffect(() => {
     (async () => {
       await hydrateStore();

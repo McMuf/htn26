@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions } from 'react-native';
 import { AlphaType, Canvas, ColorType, Fill, FilterMode, ImageShader, MipmapMode, Path, Rect, Shader, Skia, useClock } from '@shopify/react-native-skia';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { Backdrop } from '../ui/Backdrop';
-import { PixelCan } from '../ui/PixelCan';
+import { LOGO_CAN_H, LOGO_CAN_W, LogoCan } from '../ui/LogoCan';
 import { Wordmark } from '../ui/kit';
 import { haptic } from '../ui/haptics';
 import { C, F, uiLabel } from '../ui/theme';
@@ -65,20 +65,14 @@ half4 main(float2 p) {
   float u = fract(lng / (2.0 * PI) + 0.5);
   float v = 0.5 - lat / PI;
   bool isLand = land.eval(float2(u * ${LAND_W}.0, v * ${LAND_H}.0)).r > 0.5;
-  // cities: a lit pixel where a city projects to the front, blinking on its own phase; Waterloo pulses
+  // cities: a single neon-green pixel where a city projects to the front, each blinking on its own phase
   for (int i = 0; i < ${CITIES.length}; i++) {
     float clat = cities[i].x, clng = cities[i].y + spin;
     float cx = cos(clat) * sin(clng), cy0 = sin(clat), cz0 = cos(clat) * cos(clng);
     float cy = cy0 * cos(TILT) - cz0 * sin(TILT), cz = cy0 * sin(TILT) + cz0 * cos(TILT);
     if (cz < 0.05) continue;
     float2 sp = float2(c.x + R * cx, c.y - R * cy);
-    float dist = length(q - sp);
-    if (i == 0) {
-      float pulse = 1.0 + 1.6 * abs(sin(t * 3.0));
-      if (dist < cell * 0.8) return ${f('#ffffff')};
-      if (dist < cell * pulse && checker < 0.5) return ${f('#ffd21f')};
-      if (dist < cell * pulse) return ${f('#fff07a')};
-    } else if (dist < cell * 0.8 && fract(t * 0.9 + float(i) * 0.37) < 0.65) return ${f('#ffd21f')};
+    if (length(q - sp) < cell * 0.8 && fract(t * 0.7 + float(i) * 0.37) < 0.6) return ${f('#59d92d')};
   }
   // three-step lighting from the upper left, dithered at the boundaries
   float shade = dot(float3(x, y, z), normalize(float3(-0.45, 0.55, 0.7)));
@@ -123,18 +117,24 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
     cities: CITIES.map((c) => [c.lat * d2r, c.lng * d2r]),
   }));
 
-  // Waterloo chip follows the beacon; the can orbits on an inclined ring, dimmer behind the globe
+  // the zoom still lands on Waterloo, but nothing marks it on the sphere
   const wl = useDerivedValue(() => project(WATERLOO.lat, WATERLOO.lng, spin.value, CX, CY, R));
-  const chipStyle = useAnimatedStyle(() => ({ opacity: wl.value.z > 0.15 ? 1 - enteringSV.value : 0, transform: [{ translateX: wl.value.sx + 10 }, { translateY: wl.value.sy - 14 }] }));
-  const canStyle = useAnimatedStyle(() => {
+  // the logo can orbits on an inclined ring. Two copies: one drawn under the globe (shown on the far
+  // half, so the Earth really occludes it) and one over it (near half), never both.
+  const CAN_CELL = 2, CAN_W = LOGO_CAN_W * CAN_CELL, CAN_H = LOGO_CAN_H * CAN_CELL;
+  const orbit = useDerivedValue(() => {
     const a = spin.value * 2.2;
-    const x = CX + R * 1.42 * Math.cos(a), y = CY + R * 0.46 * Math.sin(a) - R * 0.06, z = Math.sin(a);
-    const front = z > 0;
+    return { x: CX + R * 1.45 * Math.cos(a), y: CY + R * 0.5 * Math.sin(a) - R * 0.05, z: Math.sin(a), a };
+  });
+  const canLayer = (front: boolean) => useAnimatedStyle(() => {
+    const o = orbit.value;
+    const show = front ? o.z >= 0 : o.z < 0;
     return {
-      opacity: (front ? 1 : 0.38) * (1 - enteringSV.value),
-      transform: [{ translateX: x - 32 }, { translateY: y - 52 }, { rotate: `${-28 * Math.cos(a)}deg` }, { scale: front ? 1 : 0.82 }],
+      opacity: show ? 1 - enteringSV.value : 0,
+      transform: [{ translateX: o.x - CAN_W / 2 }, { translateY: o.y - CAN_H / 2 }, { rotate: `${-22 * Math.cos(o.a)}deg` }, { scale: 0.86 + 0.14 * Math.max(0, o.z) }],
     };
   });
+  const canFront = canLayer(true), canBack = canLayer(false);
 
   const enter = () => {
     if (entering) return;
@@ -165,6 +165,7 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
     <Pressable style={styles.root} onPress={enter}>
       <Backdrop tone="night" />
       <Twinkle width={W} height={H} clock={clock} />
+      <Animated.View style={[styles.can, canBack]} pointerEvents="none"><LogoCan cell={CAN_CELL} /></Animated.View>
       <Animated.View style={[StyleSheet.absoluteFill, globeStyle]}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Fill>
@@ -173,12 +174,9 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
             </Shader>
           </Fill>
         </Canvas>
-        <Animated.View style={[styles.chip, chipStyle]} pointerEvents="none">
-          <View style={styles.chipBox}><Text style={styles.chipText}>WATERLOO</Text></View>
-        </Animated.View>
         <Burst origin={target} progress={burst} />
       </Animated.View>
-      <Animated.View style={[styles.can, canStyle]} pointerEvents="none"><PixelCan color={C.green} cell={4} /></Animated.View>
+      <Animated.View style={[styles.can, canFront]} pointerEvents="none"><LogoCan cell={CAN_CELL} /></Animated.View>
       <Animated.View style={[styles.copy, { bottom: H * 0.1 }, copyStyle]} pointerEvents="none">
         <Halo width={W} />
         <Wordmark />
@@ -191,7 +189,7 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
 
 /** A dithered green spray cloud behind the wordmark. */
 function Halo({ width }: { width: number }) {
-  const w = Math.min(width, 380), h = 96;
+  const w = Math.min(width, 320), h = 72;
   const paths = useMemo(() => {
     const rng = seededRng('halo');
     const p = [Skia.Path.Make(), Skia.Path.Make(), Skia.Path.Make()];
@@ -242,9 +240,6 @@ function Particle({ p, origin, progress }: { p: { a: number; r: number; s: numbe
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  chip: { position: 'absolute', left: 0, top: 0 },
-  chipBox: { backgroundColor: C.ink, borderWidth: 2, borderColor: C.green, paddingHorizontal: 6, paddingVertical: 2 },
-  chipText: { ...uiLabel(9, 1), color: C.green },
   can: { position: 'absolute', left: 0, top: 0 },
   particle: { position: 'absolute', left: 0, top: 0 },
   copy: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 8 },

@@ -35,6 +35,8 @@ export const F = {
   display: 'PixelifySans_700Bold',
   body: 'PixelifySans_500Medium',
   mono: 'VT323_400Regular',
+  /** Wordmark only: the classic arcade face, whose C can't be mistaken for an O. */
+  arcade: 'PressStart2P_400Regular',
 };
 
 export type Tone = 'green' | 'red' | 'purple' | 'dark' | 'white' | 'panel' | 'tile';
