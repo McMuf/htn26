@@ -8,9 +8,11 @@ import { useStore, type Side } from '../store';
 /**
  * Turns the hardware volume rocker into two spray triggers.
  *
- * iOS has no public "volume button pressed" API. The hack: pin the system volume to 0.5, hide
- * the native volume HUD, and watch the volume observer — a press moves it up or down, which
- * tells us the side; we immediately snap it back to 0.5 so the next press is detectable again.
+ * iOS has no public "volume button pressed" API. The hack: pin the system volume where the user
+ * already had it (clamped so both buttons still have somewhere to go), hide the native volume
+ * HUD, and watch the volume observer — a press moves it up or down, which tells us the side; we
+ * immediately snap it back so the next press is detectable again. The user's own level is restored
+ * when the trigger disarms, so opening the app never turns the phone up.
  * iOS auto-repeats volume changes while the button is HELD, so "held" = events keep arriving;
  * "released" = no event for VOLUME_HOLD_TIMEOUT_MS. That gives instant press-on and ~0.4s
  * release latency, which reads as a nozzle letting go.
@@ -58,13 +60,21 @@ export function useVolumeTrigger(
       if (held) { const s = held; held = null; h.current.onHoldEnd(s); }
       timer = null;
     };
-    const reset = () => VolumeManager.setVolume(VOLUME_BASELINE, { showUI: false }).catch(() => {});
+    // the user's level is the baseline (clamped so a press in either direction still registers); restored on disarm
+    let baseline = VOLUME_BASELINE, original: number | null = null;
+    const reset = () => VolumeManager.setVolume(baseline, { showUI: false }).catch(() => {});
 
     // iOS only reports outputVolume changes while an audio session is active.
     VolumeManager.enable(true).catch(() => {});
     VolumeManager.setActive(true).catch(() => {});
     VolumeManager.showNativeVolumeUI({ enabled: false }).catch(() => {});
-    reset();
+    VolumeManager.getVolume().then((v) => {
+      if (disposed) return;
+      const cur = typeof v === 'number' ? v : (v as { volume: number }).volume;
+      original = cur;
+      baseline = Math.min(0.8, Math.max(0.2, Math.round(cur * 16) / 16));
+      reset();
+    }).catch(reset);
     // expo-audio players deactivate the session when they stop, which silences volume events; re-arm often
     const keepAlive = setInterval(() => { VolumeManager.setActive(true).catch(() => {}); reset(); }, 1500);
 
@@ -72,7 +82,7 @@ export function useVolumeTrigger(
       if (disposed) return;
       const dbg = useStore.getState().debug;
       useStore.getState().setDebug({ volEvents: dbg.volEvents + 1, lastVol: Math.round(volume * 100) / 100 });
-      const delta = volume - VOLUME_BASELINE;
+      const delta = volume - baseline;
       if (Math.abs(delta) < 0.02) return; // our own reset echoing back
       const side: Side = delta > 0 ? 'A' : 'B';
       if (held !== side) {
@@ -92,6 +102,7 @@ export function useVolumeTrigger(
       release();
       sub.remove();
       VolumeManager.showNativeVolumeUI({ enabled: true }).catch(() => {});
+      if (original !== null) VolumeManager.setVolume(original, { showUI: false }).catch(() => {});
     };
   }, [enabled]);
 }

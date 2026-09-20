@@ -1,4 +1,8 @@
-"""Procedurally generates the spray-can SFX as 44.1kHz mono WAVs (no external assets).
+"""Builds the spray-can SFX as 44.1kHz mono WAVs.
+
+The hiss and the nozzle press come from a real aerosol recording ("Can of compressed air" by
+stilgar, Wikimedia Commons, public domain — mobile/assets/sfx/src/), looped and EQ'd; the shakes
+are synthesised (see rattle). Needs ffmpeg on PATH to decode the .ogg.
 
   rattle.wav        one shake of the can: two or three ball hits + the can ringing (~0.32s)
   hiss.wav          seamless atomiser loop (1.0s)
@@ -65,25 +69,38 @@ def level(x, rms=0.1, peak=0.6):
     return x * (peak / p) if p > peak else x
 
 
+def load_ogg(path):
+    """Decode with ffmpeg to 44.1k mono float."""
+    import subprocess
+    raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', path, '-f', 's16le', '-ac', '1', '-ar', str(SR), '-'], capture_output=True, check=True).stdout
+    return np.frombuffer(raw, '<i2').astype(np.float64) / 32768
+
+
+AIR = load_ogg(os.path.join(OUT, 'src', 'can_of_compressed_air.ogg'))
+
+
 def hiss():
-    """An atomiser: a jet formant around 2kHz over pressurised air, with the sizzle rolled off."""
-    n = SR  # 1s loop
-    w = rng.standard_normal(n)
-    # pink-ish base: summed lowpasses give the 1/f tilt white noise lacks
-    pink = lowpass(w, 2500) * 0.6 + lowpass(w, 600) * 1.1 + w * 0.2
-    jet = band(pink, 900, 2800, poles=3)          # the nozzle's voice
-    body = lowpass(w, 450, poles=2) * 0.9         # pressure behind it
-    air = band(rng.standard_normal(n), 2800, 5200, poles=2) * 0.11  # a little top, not a hiss
-    x = jet + 0.35 * body + air  # a phone speaker can't reproduce much body, so don't spend level on it
-    # slow breathing rather than a tremolo: three slow rates, none of them rhythmic
-    tt = np.arange(n) / SR
-    x *= 1 + 0.06 * np.sin(2 * np.pi * 3.1 * tt) + 0.04 * np.sin(2 * np.pi * 6.7 * tt + 1.1) + 0.03 * np.sin(2 * np.pi * 11.3 * tt + 2.3)
-    # equal-power crossfade so the loop point doesn't dip
-    f = int(0.06 * SR)
+    """The real aerosol jet: a steady 0.42s slice of the recording, looped with an equal-power
+    crossfade, the sizzle above ~7kHz shelved down and a little pressurised body added underneath
+    (phone speakers make raw compressed air sound thin)."""
+    x = AIR[int(0.36 * SR):int(0.78 * SR)].copy()
+    x = x - np.mean(x)
+    x = lowpass(x, 7000) * 0.85 + band(x, 300, 1800, poles=1) * 0.5
+    f = int(0.08 * SR)
     a = np.sqrt(np.linspace(0, 1, f)); b = np.sqrt(np.linspace(1, 0, f))
     x[:f] = x[:f] * a + x[-f:] * b
     x = x[:-f]
-    return level(x, rms=0.17, peak=0.72)
+    return level(x, rms=0.16, peak=0.7)
+
+
+def click():
+    """The nozzle going down: the recording's own attack (the first 90ms of the burst), tucked
+    into a short tail so it reads as a press, not a spray."""
+    x = AIR[int(0.27 * SR):int(0.40 * SR)].copy()
+    n = len(x); t = np.arange(n) / SR
+    x = lowpass(x, 6500) * env(n, 0.004, 0.035)
+    x += 0.25 * np.sin(2 * np.pi * 1300 * t) * np.exp(-t / 0.008)  # the plastic cap
+    return level(x, rms=0.12, peak=0.55)
 
 
 def impact(modes, amp=1.0, chiff=0.35, bright=4000):
@@ -97,23 +114,30 @@ def impact(modes, amp=1.0, chiff=0.35, bright=4000):
 
 
 def rattle():
-    """One shake: the ball crossing the can and back, then the can itself ringing."""
-    dur = 0.32; n = int(SR * dur); out = np.zeros(n)
-    t = 0.012
-    for k in range(3):
+    """One shake of a full can: the steel pea hits one end then the other (a sharp tick with a
+    thin-tin ring), and the paint sloshes behind it. Short, because it retriggers on every shake."""
+    dur = 0.30; n = int(SR * dur); out = np.zeros(n)
+    t = 0.010
+    for k in range(2):
         modes = [
-            (rng.uniform(1150, 1500), 0.42, 0.030),
-            (rng.uniform(2000, 2500), 0.24, 0.016),
-            (rng.uniform(3100, 3700), 0.10, 0.009),
+            (rng.uniform(880, 1080), 0.40, 0.045),    # the can's cylinder ring
+            (rng.uniform(1900, 2300), 0.30, 0.020),
+            (rng.uniform(3300, 3900), 0.16, 0.011),
+            (rng.uniform(5200, 6400), 0.10, 0.005),   # the pea's own tick
         ]
-        c = impact(modes, amp=rng.uniform(0.7, 1.0) * (1.0 - 0.15 * k), bright=3600)
+        c = impact(modes, amp=rng.uniform(0.8, 1.0) * (1.0 - 0.2 * k), chiff=0.45, bright=6500)
         i = int(t * SR); m = min(len(c), n - i)
         if m > 0: out[i:i + m] += c[:m]
-        t += rng.uniform(0.055, 0.085)
+        # paint slosh right after the hit: a soft, low, wet burst
+        sl = int(0.07 * SR); ts = np.arange(sl) / SR
+        slosh = band(rng.standard_normal(sl), 250, 900, poles=2) * np.exp(-ts / 0.03) * 0.55
+        j = i + int(0.012 * SR); m2 = min(sl, n - j)
+        if m2 > 0: out[j:j + m2] += slosh[:m2]
+        t += rng.uniform(0.09, 0.12)
     tt = np.arange(n) / SR
-    out += 0.10 * np.sin(2 * np.pi * 430 * tt) * np.exp(-tt / 0.10)  # the can body, briefly
-    out *= env(n, 0.003, 0.18)
-    return level(out, rms=0.20, peak=0.80)
+    out += 0.08 * np.sin(2 * np.pi * 410 * tt) * np.exp(-tt / 0.09)
+    out *= env(n, 0.002, 0.16)
+    return level(out, rms=0.17, peak=0.75)
 
 
 def empty_rattle():
