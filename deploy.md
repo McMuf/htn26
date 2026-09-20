@@ -16,14 +16,15 @@ Android needs **no** paid developer account and no Mac, unlike iOS.
 
 | Step | State |
 |---|---|
+| 1. Supabase project | **done** — `xevbnegilqjyjzxhrcwo`, SQL run, anonymous sign-in on, keys written here |
 | 2. PC environment variables | set (`ANDROID_HOME`, `JAVA_HOME`) |
 | 4. `android/` project | generated, Gradle cache warm |
 | 5. keystore fingerprint | computed, pasted into the step for you |
 | 6. the build | `android/app/build/outputs/apk/debug/app-debug.apk` is current (101 MB, arm64) |
 | 9. push the branch | pushed to `origin/adarsh-samsung` |
 
-What's left genuinely needs your accounts or your phone: the Supabase project (1), the phone
-itself (3), the optional Google Cloud key (5), and installing + testing (6-8).
+What's left genuinely needs your phone: phone setup (3), the optional Google Cloud key (5), and
+installing + testing (6-8).
 
 Two things are worth understanding before you type anything:
 
@@ -33,7 +34,28 @@ Two things are worth understanding before you type anything:
 
 ---
 
-## 1. Your own Supabase project
+## 1. Your own Supabase project — done
+
+I set this up in your dashboard: ran `setup_all.sql` against the project you created
+(`xevbnegilqjyjzxhrcwo`), turned on anonymous sign-ins, and wrote the publishable key into `.env`,
+`web/.env`, `web/.env.production` and `eas.json`. Verified from here:
+
+```
+ok    schema.sql ran (strokes table reachable)
+ok    migration_ar.sql ran (anchor_id, transform, viewer)
+ok    canvases carry a world map pointer
+ok    nearby_canvases RPC exists
+ok    worldmaps storage bucket exists
+ok    anonymous sign-in enabled
+```
+
+The three seed pieces around E7 are in `canvases`, and `Authentication → Users` holds one
+anonymous user that the check created — delete it whenever, nothing refers to it.
+
+`npm run supabase:check` re-runs those checks any time. The rest of this section is the recipe, if
+you ever point the app at a different project.
+
+### Recipe
 
 ### 1.1 Create it
 
