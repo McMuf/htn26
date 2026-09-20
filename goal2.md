@@ -102,6 +102,8 @@ should outlive the demo:
 
 ## 3. Install and run
 
+Short version, if you just want it on the phone: [run-android.md](run-android.md).
+
 The Expo app lives in `mobile/` since the repo was split, so the dev server runs from there. The
 debug APK built before the split is still at the **repo root**, not under `mobile/` — and it is a
 *dev client*, so the ARCore module is compiled into it while the JavaScript comes from Metro at
