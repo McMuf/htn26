@@ -246,9 +246,18 @@ export function Row({ leading, title, meta, trailing, onPress, style }: {
   );
 }
 
-/** Segmented (chunky) meter. value 0..1. */
-export function SegBar({ value, color, segs = 10, h = 16, bg = C.ink }: { value: number; color: string; segs?: number; h?: number; bg?: string }) {
+/** Segmented (chunky) meter, or a continuous fill with `smooth`. value 0..1. */
+export function SegBar({ value, color, segs = 10, h = 16, bg = C.ink, smooth }: { value: number; color: string; segs?: number; h?: number; bg?: string; smooth?: boolean }) {
   const lit = Math.round(Math.max(0, Math.min(1, value)) * segs);
+  if (smooth) {
+    return (
+      <View style={{ backgroundColor: C.ink, padding: 3 }}>
+        <View style={{ height: h, backgroundColor: bg + '55' }}>
+          <View style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%`, height: h, backgroundColor: color }}><View style={{ height: 3, backgroundColor: '#ffffff44' }} /></View>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={{ backgroundColor: C.ink, padding: 3, flexDirection: 'row', gap: 2 }}>
       {Array.from({ length: segs }, (_, i) => (

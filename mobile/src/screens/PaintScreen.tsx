@@ -10,7 +10,6 @@ import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
 import { CreateHud, Reticle } from '../components/HUD';
 import { GUTTER } from '../ui/theme';
-import { DiscoveryCues } from '../components/DiscoveryOverlay';
 import { PieceDetail } from '../components/SpatialViewer';
 import { laEnd } from '../lib/liveActivity';
 import { useStore } from '../store';
@@ -85,7 +84,6 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
       <CameraView style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute />
       <PaintLayer yawSV={yawSV} pitchSV={pitchSV} rollSV={rollSV} walls={discovery.walls} />
       <Reticle spraying={ui.spraying} />
-      <DiscoveryCues d={discovery} />
       <CreateHud
         found={found}
         onOpenFound={() => found && setDetail(found)}

@@ -48,7 +48,7 @@ export function VaultScreen() {
     <Screen loading={loading} onRefresh={load}>
       <Header title="VAULT" sub={`${mine.length} walls · ${totals.views} views · ${totals.strokes} strokes`} right={<CoinPill />} />
       {mine.length === 0 && (
-        <Empty icon="cube" title="Nothing saved yet." sub="Every wall you spray lands here, ready to walk around in 3D."
+        <Empty icon="vault" title="Nothing saved yet." sub="Every wall you spray lands here, ready to walk around in 3D."
           action={<Btn label="PAINT SOMETHING" icon="create" tone="green" onPress={() => setTab('create')} />} />
       )}
       <View style={styles.grid}>
