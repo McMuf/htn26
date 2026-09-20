@@ -8,7 +8,10 @@ import SceneKit
 /// the anchor's plane (u = anchor +X, v = anchor −Z), which is what gets persisted and shared.
 final class PaintNode {
   static let sizeM: CGFloat = 5.0
-  static let px = 2048
+  /// 1024 over 5 m is ~5 mm per pixel, which is finer than the spray can resolve — and a quarter of
+  /// the memory of 2048, which matters because every quad on a wall holds one of these plus the
+  /// texture uploaded from it.
+  static let px = 1024
   static var pxPerM: CGFloat { CGFloat(px) / sizeM }
 
   let id: String
