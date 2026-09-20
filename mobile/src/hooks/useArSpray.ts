@@ -22,6 +22,9 @@ import { OPACITY, THICKNESS } from '../lib/economy';
  * the native props (spraying / colour / radius / flow), and turns finished native strokes into
  * records for the shared canvas.
  */
+/** Round to a step, so 10Hz jitter doesn't count as a change. */
+const q = (v: number, step: number) => Math.round(v / step) * step;
+
 export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeSaved?: (s: Stroke) => void }) {
   const held = useRef<Side | null>(null);
   const blocker = useRef<Blocker>(null);
@@ -102,7 +105,12 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     const th = THICKNESS[st.settings.thickness]?.mult ?? 1;
     const op = OPACITY[st.settings.opacity]?.mult ?? 1;
     const mist = Math.max(0, Math.min(1, (dist.current - 0.5) / 1.2));
-    setNative({ spraying: true, color: opt.color, radius: SPRAY_RADIUS_M * th * (0.8 + 0.9 * mist), flow: Math.max(0.05, flow * op * (1 - 0.45 * mist)) });
+    // This runs at 10Hz while you hold. Quantise, and keep the same object when nothing really
+    // moved: a fresh object here re-renders the whole camera overlay ten times a second.
+    const radius = q(SPRAY_RADIUS_M * th * (0.8 + 0.9 * mist), 0.002);
+    const nextFlow = q(Math.max(0.05, flow * op * (1 - 0.45 * mist)), 0.05);
+    setNative((n) => (n.spraying && n.color === opt.color && n.radius === radius && n.flow === nextFlow
+      ? n : { spraying: true, color: opt.color, radius, flow: nextFlow }));
     return { flow, th };
   };
 
