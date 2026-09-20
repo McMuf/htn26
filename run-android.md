@@ -14,7 +14,7 @@ only if you ever repoint it at a different Supabase project.
 | The Expo app | `mobile/` — every `expo` command runs from there |
 | The ARCore module | `mobile/modules/ar-paint/android/` (Kotlin, ~1,900 lines) |
 | The website | `web/` — nothing to do with this document |
-| The already-built APK | `android/app/build/outputs/apk/debug/app-debug.apk` at the **repo root** |
+| An old APK | `android/app/build/outputs/apk/debug/app-debug.apk` at the **repo root** — stale, see §2 |
 | A fresh native build | writes `mobile/android/` — a different folder from the one above |
 
 ---
@@ -34,24 +34,45 @@ only if you ever repoint it at a different Supabase project.
 adb devices        # your phone should be listed as "device", not "unauthorized"
 ```
 
-## 2. Install and run — no build needed
+## 2. Install and run
 
-There is already a debug APK at `android/app/build/outputs/apk/debug/app-debug.apk` (101 MB,
-arm64). It was built before the repo was split, which doesn't matter: it is a **dev client**, so
-the ARCore module is compiled into it and the JavaScript is served by Metro at run time. Install
-it and it runs today's code.
+A dev client has the native modules **compiled in** and pulls the JavaScript from Metro at run
+time. So JS changes never need a rebuild — but a *native* dependency added since the last build
+does, and the app dies on launch if one is missing rather than degrading.
 
-From the repo root:
+That is what happened to the old APK at the repo root
+(`android/app/build/outputs/apk/debug/app-debug.apk`, built 19 Sep 20:20). Commits later that
+evening added `expo-brightness` for the AR brightness boost, so installing it and opening it gives:
+
+```
+E ReactNativeJS: [runtime not ready]: Error: Cannot find native module 'ExpoBrightness'
+F DEBUG      : Abort message: 'terminating due to uncaught exception ... JavascriptException'
+```
+
+— a SIGABRT on the JS thread, straight back to the launcher, with nothing on screen to explain it.
+**Build a current one instead.** From `mobile/`:
 
 ```powershell
-adb install -r android\app\build\outputs\apk\debug\app-debug.apk
 cd mobile
+npm install                                 # in case a commit added a dependency
+npx expo prebuild -p android --no-install   # writes mobile/android/
+npx expo run:android --device SM_S931W      # device NAME from `adb devices -l`, not the serial
+```
+
+`--device` takes the `model:` field `adb devices -l` prints. Passing the serial (`RFCY70RR4WB`)
+fails with `Could not find device with name`. With exactly one phone attached you can leave the
+value off entirely.
+
+That builds, installs and launches it, and starts Metro. To run the dev server separately instead
+— useful when you want to restart bundling without rebuilding — add `--no-bundler` to the build
+and then:
+
+```powershell
 npx expo start --dev-client
 ```
 
 Then open **Fresco** on the phone. It finds Metro by itself; if it asks for a URL, scan the QR
-code the dev server prints. `mobile/`'s dependencies are already installed, so the server starts
-straight away.
+code the dev server prints.
 
 Phone and PC need to be on the same Wi-Fi. On a network that isolates clients (campus, most
 hackathon Wi-Fi), go over the cable instead:
@@ -60,7 +81,16 @@ hackathon Wi-Fi), go over the cable instead:
 adb reverse tcp:8081 tcp:8081
 ```
 
-or start the server with `npx expo start --dev-client --tunnel`.
+or start the server with `npx expo start --dev-client --tunnel`. Over the cable the phone wants
+`http://127.0.0.1:8081`, which you can hand it directly:
+
+```powershell
+adb shell am start -a android.intent.action.VIEW -d "tagged://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+```
+
+**Rebuild natively whenever a commit touches `modules/`, `targets/`, `app.json`, the native
+dependencies, or adds the ARCore key.** After a `git pull`, the tell that you need one is the app
+crashing on launch with `Cannot find native module '<Something>'`.
 
 ## 3. The ARCore API key — so saved pieces come back exactly
 
@@ -200,6 +230,10 @@ and that is all anyone can say for it. So:
 | `adb devices` shows `unauthorized` | The prompt on the phone wasn't accepted — unplug, replug, watch the screen |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | An older build with the same package id is installed: `adb uninstall com.hamzakhan.tagged` first |
 | App opens but hangs on a blank screen | Metro isn't reachable — same Wi-Fi, or use `adb reverse tcp:8081 tcp:8081` |
+| App closes instantly; logcat says `Cannot find native module '…'` | The installed dev client predates a commit that added a native dependency — rebuild (§2) |
+| Metro says `Unable to resolve module …` | A commit added a JS dependency: `npm install` in `mobile/`, then restart Metro with `--clear` |
+| `Port 8081 is being used by another process` | An earlier Metro is still alive. `Get-NetTCPConnection -LocalPort 8081 -State Listen` gives the PID for `Stop-Process` |
+| `Could not find device with name: RFCY70RR4WB` | `--device` wants the `model:` name from `adb devices -l` (`SM_S931W`), not the serial |
 | Create tab shows the compass painter, not AR | Google Play Services for AR isn't installed (§1.3), or the install prompt was declined |
 | Camera stays black on the Create tab | Camera permission denied — Settings → Apps → Fresco → Permissions |
 | `Cloud Anchors not configured` in the logs | No ARCore API key — §3, or live with placed-from-memory |
