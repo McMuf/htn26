@@ -10,5 +10,6 @@ Split into two, so they can be finished one at a time:
 
 They're independent; both paint into the same Supabase project.
 
-The deployed website builds from a third branch, **`web-deploy`** (`main` + `web/` only) — see
-goal1.md.
+**Branches:** `main` is the web app and what Vercel deploys. `samsung-adarsh` is the Android /
+ARCore line. `pixel-ui` is the iPhone line (the pixel-arcade UI on top of `main`). Each native
+branch starts from `main`, so the web app rides along on all of them.

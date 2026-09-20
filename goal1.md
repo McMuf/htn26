@@ -45,21 +45,22 @@ actually spraying — camera, compass and GPS need the real thing.
 
 ## What's left for you
 
-The site now has its own branch: **`web-deploy`** — `main` plus the `web/` directory and nothing
-else, so native work can never break the deployed site and merging it never drags the ARCore
-module along. It's pushed:
-<https://github.com/McMuf/htn26/tree/web-deploy>.
+**`main` is the web app** — it carries the QR flow, anonymous sign-in and the live Supabase keys,
+and a root `vercel.json` that pins the build to `web/`. Native work sits on `samsung-adarsh`
+(Android) and `pixel-ui` (iPhone) and is merged in deliberately.
 
-In the Vercel project (whoever's account it's on):
+In the Vercel project:
 
-1. **Production Branch → `web-deploy`**, **Root Directory → `web`**. This is the step that matters:
-   Vercel defaults to `main`, which has neither the QR flow nor the new backend keys, so a deploy
-   from it serves the old login-required client wired to the project that refuses AR strokes.
-2. **Environment variables:** none needed — the publishable key is committed in
-   `web/.env.production` on that branch. But if `VITE_SUPABASE_*` *are* set in the dashboard, Vite
-   prioritises them over the committed file, so they must hold the new project's values or be
-   deleted.
-3. **Redeploy**, then open the site on a laptop — the landing page carries the QR.
+1. **Production Branch → `main`.** If it's already `main`, nothing to change — that's the point of
+   the reshuffle.
+2. **Root Directory → `web`** (or leave it at the repo root; the root `vercel.json` covers that).
+   What must *not* happen is a deploy with no build step: served raw, `/` resolves to `index.ts`,
+   the browser calls it `video/mp2t` and downloads it. That was the "download" file.
+3. **Environment variables:** none needed — the publishable key is committed in
+   `web/.env.production`. But if `VITE_SUPABASE_*` *are* set in the dashboard, Vite prioritises
+   them over the committed file, so they must hold the new project's values or be deleted.
+4. **Redeploy** with the build cache off, then open the site on a laptop — the landing page carries
+   the QR.
 
 iOS Safari only grants camera and motion over HTTPS, so phones need the deployed URL; `localhost`
 won't do.
@@ -67,8 +68,8 @@ won't do.
 **Later web changes** go out with:
 
 ```powershell
-git checkout web-deploy
-git checkout adarsh-samsung -- web/    # or whichever branch has the change
+git checkout main
+git checkout samsung-adarsh -- web/    # or whichever branch has the change
 git commit -am "web: ..." && git push
 ```
 

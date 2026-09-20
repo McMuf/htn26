@@ -17,7 +17,7 @@ build onto the phone and see whether the AR holds up.
 | `android/` project + Gradle cache | generated, warm |
 | Debug APK | built and current: `android\app\build\outputs\apk\debug\app-debug.apk` (101 MB, arm64) |
 | Keystore SHA-1 | read out for the API-key step below |
-| Branch | pushed to `origin/adarsh-samsung` |
+| Branch | pushed to `origin/samsung-adarsh` |
 | Emulator smoke test | boots, bundles, renders the UI, no crashes |
 | **Never run on real hardware** | every AR behaviour below is unverified |
 
@@ -190,8 +190,9 @@ Android builds need **no** paid developer account and no Mac, unlike iOS.
 
 ## Notes
 
-- The branch is at <https://github.com/McMuf/htn26/tree/adarsh-samsung>; later commits go up with
-  a plain `git push`, and `git push origin --delete adarsh-samsung` removes it entirely.
+- The branch is at <https://github.com/McMuf/htn26/tree/samsung-adarsh>; later commits go up with
+  a plain `git push`. It is `main` (the web app) plus the ARCore module and the Android fixes, so
+  merging it into `main` would also publish the native work — merge deliberately, not by habit.
 - The App Group behind the widget (`group.com.hamzakhan.tagged` in `src/lib/widget.ts`) is an Apple
   thing — Android ignores it. On iOS, building with `FRESCO_NO_WIDGET=1` (see `app.config.js`)
   drops the widget target and that entitlement, which is what a free Apple "Personal Team" account
