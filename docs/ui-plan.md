@@ -102,3 +102,8 @@ COSPRAY in the wordmark, "Cospray" in prose. Bundle id / App Group / slug keep `
 - **Reticle** is a pixel crosshair (brackets + ticks), the last rounded control on a live screen.
 - Not done: on-device screenshots for `docs/screens/` — `idevicescreenshot` needs a developer tunnel
   on iOS 26; screenshots were checked by eye on the phone instead.
+- **`plugins/withoutPushEntitlement.js`**: expo-notifications' autolinked plugin adds the `aps-environment`
+  (remote push) entitlement unconditionally, which the team provisioning profile cannot carry; the
+  plugin strips it after all other iOS mods since only local notifications are used.
+- **Building to the phone**: `npx expo run:ios --device 00008150-000178393A10C01C --no-bundler` from
+  `mobile/` (the Xcode UDID, not the CoreDevice id). Metro stays on 8082.
