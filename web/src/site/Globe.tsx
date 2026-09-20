@@ -43,7 +43,7 @@ export function Globe({ size = 360 }: { size?: number }) {
       ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(171,140,255,0.12)'; for (const l of meridians) line(l, false);
       ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(171,140,255,0.55)'; for (const l of meridians) line(l, true);
       ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(171,140,255,0.8)'; ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.stroke();
-      CITIES.forEach((c, i) => {
+      CITIES.forEach((c) => {
         const p = project(c.lat, c.lng, spin); if (p.z < 0) return;
         ctx.globalAlpha = 0.5 + 0.5 * p.z; ctx.fillStyle = '#59d92d';
         ctx.beginPath(); ctx.arc(p.sx, p.sy, 2.2 + p.z * 1.5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
