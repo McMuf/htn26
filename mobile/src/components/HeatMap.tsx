@@ -1,15 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import type { Region } from 'react-native-maps'; // type-only, so it is erased and never loads the module
 import { GEOFENCE } from '../config';
 import { useStore } from '../store';
-import { heatLevel, heatWeights } from '../lib/heat';
+import { heatWeights } from '../lib/heat';
 import { renderHeat } from '../lib/heatImage';
-import { C, HEAT, uiLabel } from '../ui/theme';
-import { rgb } from '../ui/color';
+import { C, uiLabel } from '../ui/theme';
 import type { Canvas } from '../types';
-
-const rgba = (hex: string, a: number) => { const [r, g, b] = rgb(hex); return `rgba(${r},${g},${b},${a})`; };
 
 /**
  * Google Maps on Android refuses to run without an API key - and it does not degrade, it throws
@@ -74,20 +71,26 @@ function GoogleHeat({ canvases, height, interactive }: Props) {
   );
 }
 
-/** Metres per degree of latitude; longitude shrinks by cos(lat). Good enough over a campus. */
-const M_PER_DEG = 111_320;
+/** Metres per degree of latitude; longitude shrinks by cos(lat). Matches lib/heatImage. */
+const M_PER_LAT = 110574, M_PER_LNG_EQ = 111320;
 const D2R = Math.PI / 180;
-/** Never zoom in past this, so two pieces a metre apart don't fly to opposite corners. */
-const MIN_SPAN_M = 400;
+/** Never zoom in past this, so two pieces a metre apart don't fill the screen. */
+const MIN_REACH_M = 200;
 
 /**
- * The map without tiles: pieces plotted on their real bearing and distance from where you stand,
- * as stepped pixel rings in the same heat ramp. Square, aliased and gridded on purpose — it reads
- * as radar rather than as a map that failed to load.
+ * The same heat, with no tiles under it.
+ *
+ * It renders through [renderHeat], exactly as the map does, so Android-without-a-key gets the
+ * design rather than a substitute for it: the same gaussians, the same quantised purple→green
+ * ramp, the same dithered edges, under the same tint layers. What it cannot borrow is the map's
+ * sense of scale, so it supplies its own — range rings and a caption — because without tiles
+ * there is otherwise nothing on screen to say whether a blob is ten metres away or a kilometre.
+ *
+ * The heat image is square in metres, so it is laid out square at the container's larger side and
+ * centred. Stretching it to a non-square container would shear the gaussians.
  */
 function PixelHeat({ canvases, height, interactive }: Props) {
   const loc = useStore((s) => s.location);
-  const discovered = useStore((s) => s.discovered);
   const weights = useMemo(() => heatWeights(canvases), [canvases]);
   const [box, setBox] = useState({ w: 0, h: height });
   const onLayout = (e: LayoutChangeEvent) => {
@@ -95,66 +98,55 @@ function PixelHeat({ canvases, height, interactive }: Props) {
     setBox((p) => (p.w === width && p.h === h ? p : { w: width, h }));
   };
 
-  const centre = { lat: loc?.lat ?? canvases[0]?.lat ?? GEOFENCE.lat, lng: loc?.lng ?? canvases[0]?.lng ?? GEOFENCE.lng };
+  const lat = loc?.lat ?? canvases[0]?.lat ?? GEOFENCE.lat;
+  const lng = loc?.lng ?? canvases[0]?.lng ?? GEOFENCE.lng;
 
-  /** Work in metres from the centre, then scale to fit the widest piece with a margin. */
-  const plotted = useMemo(() => {
-    const mPerLng = M_PER_DEG * Math.cos(centre.lat * D2R);
-    const pts = canvases.map((c) => ({
-      c,
-      east: (c.lng - centre.lng) * mPerLng,
-      north: (c.lat - centre.lat) * M_PER_DEG,
-      w: weights[c.id] ?? 0.12,
-    }));
-    const reach = Math.max(MIN_SPAN_M / 2, ...pts.map((p) => Math.max(Math.abs(p.east), Math.abs(p.north)) * 1.25));
-    return { pts, reach };
-  }, [canvases, weights, centre.lat, centre.lng]);
+  /** A square region centred on you, wide enough to hold every piece with room to spare. */
+  const { region, reach } = useMemo(() => {
+    const cosLat = Math.cos(lat * D2R);
+    const reach = Math.max(MIN_REACH_M, ...canvases.map((c) =>
+      Math.hypot((c.lng - lng) * M_PER_LNG_EQ * cosLat, (c.lat - lat) * M_PER_LAT) * 1.25));
+    return {
+      reach,
+      region: {
+        latitude: lat, longitude: lng,
+        latitudeDelta: (2 * reach) / M_PER_LAT,
+        longitudeDelta: (2 * reach) / (M_PER_LNG_EQ * cosLat),
+      },
+    };
+  }, [lat, lng, canvases]);
+
+  const points = useMemo(() => canvases.map((c) => ({ lat: c.lat, lng: c.lng, w: weights[c.id] ?? 0.12 })), [canvases, weights]);
+  const heat = useMemo(() => renderHeat(points, region, interactive ? 192 : 128), [points, region, interactive]);
 
   const { w, h } = box;
+  const side = Math.max(w, h);
   const half = Math.min(w, h) / 2;
-  const scale = half > 0 ? half / plotted.reach : 0;
 
   return (
     <View style={interactive ? styles.fill : { height }} onLayout={onLayout}>
-      <View style={styles.pixelBg}>
-        {/* range rings, so distance is readable without a scale bar */}
+      <View style={styles.noMapBg}>
+        {heat ? (
+          <Image
+            source={{ uri: heat.uri }}
+            style={{ position: 'absolute', left: (w - side) / 2, top: (h - side) / 2, width: side, height: side }}
+            resizeMode="stretch"
+          />
+        ) : null}
+        {/* range rings: the scale cue the tiles would otherwise give */}
         {[1, 0.66, 0.33].map((f) => (
           <View key={f} pointerEvents="none" style={[styles.ring, {
             width: half * 2 * f, height: half * 2 * f, marginLeft: -half * f, marginTop: -half * f,
           }]} />
         ))}
-        {scale > 0 && plotted.pts.map(({ c, east, north, w: weight }) => {
-          const lvl = Math.max(1, heatLevel(weight));
-          const size = Math.round(10 + weight * 22);
-          const x = w / 2 + east * scale;
-          const y = h / 2 - north * scale;
-          // off the edge: pin to the rim so a distant piece still shows a direction
-          const cx = Math.max(size, Math.min(w - size, x));
-          const cy = Math.max(size, Math.min(h - size, y));
-          const found = !!discovered[c.id];
-          return (
-            <React.Fragment key={c.id}>
-              <View pointerEvents="none" style={[styles.blob, {
-                left: cx - size, top: cy - size, width: size * 2, height: size * 2,
-                backgroundColor: rgba(HEAT[Math.max(1, lvl - 1)], 0.22),
-              }]} />
-              <View pointerEvents="none" style={[styles.blob, {
-                left: cx - size / 2, top: cy - size / 2, width: size, height: size,
-                backgroundColor: rgba(HEAT[lvl], 0.55),
-              }]} />
-              <View pointerEvents="none" style={[styles.blob, {
-                left: cx - 3, top: cy - 3, width: 6, height: 6,
-                backgroundColor: found ? C.green : HEAT[lvl], borderWidth: 1, borderColor: C.ink,
-              }]} />
-            </React.Fragment>
-          );
-        })}
-        {/* you, dead centre */}
         <View pointerEvents="none" style={[styles.me, { left: w / 2 - 5, top: h / 2 - 5 }]} />
         <Text style={styles.caption}>
-          {canvases.length ? `${canvases.length} PIECE${canvases.length === 1 ? '' : 'S'} · ${Math.round(plotted.reach)} M OUT` : 'NOTHING PAINTED NEARBY YET'}
+          {canvases.length ? `${canvases.length} PIECE${canvases.length === 1 ? '' : 'S'} · ${Math.round(reach)} M OUT` : 'NOTHING PAINTED NEARBY YET'}
         </Text>
       </View>
+      {/* the same two tint layers the map wears, so both routes read as one design */}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.tint]} />
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.deepen]} />
     </View>
   );
 }
@@ -164,9 +156,8 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   tint: { backgroundColor: '#3a1a8a', mixBlendMode: 'color' },
   deepen: { backgroundColor: C.bg, opacity: 0.45, mixBlendMode: 'multiply' },
-  pixelBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: C.bg2, overflow: 'hidden' },
+  noMapBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: C.bg2, overflow: 'hidden' },
   ring: { position: 'absolute', left: '50%', top: '50%', borderWidth: 1, borderColor: C.line, opacity: 0.5 },
-  blob: { position: 'absolute' },
   me: { position: 'absolute', width: 10, height: 10, backgroundColor: C.white, borderWidth: 2, borderColor: C.ink },
   caption: { position: 'absolute', left: 8, bottom: 6, ...uiLabel(9, 0.4), color: C.white, opacity: 0.7 },
 });
