@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Btn, Header, Panel, Pill, Screen, T } from '../ui/kit';
-import { PixelBox } from '../ui/PixelBox';
+import { Dimensions, StyleSheet, View } from 'react-native';
+import { Btn, Card, Empty, Header, Pill, Screen, T } from '../ui/kit';
 import { PixelIcon } from '../ui/PixelIcon';
 import { PieceImage } from '../ui/StrokeThumb';
-import { C, F, ui } from '../ui/theme';
+import { C, GUTTER } from '../ui/theme';
 import { useStore } from '../store';
 import { fetchAllCanvases, fetchPreviewStrokes } from '../data/sync';
 import { timeAgo } from '../components/DiscoveryOverlay';
@@ -14,7 +13,7 @@ import type { Canvas } from '../types';
 export { PieceDetail };
 
 const W = Dimensions.get('window').width;
-const CELL = (W - 18 * 2 - 14) / 2;
+const CELL = (W - GUTTER * 2 - 14) / 2;
 
 /** Every wall you painted or added to. Tap one to walk around it in the 3D viewer. */
 export function VaultScreen() {
@@ -46,30 +45,25 @@ export function VaultScreen() {
   const totals = mine.reduce((a, c) => ({ views: a.views + c.views, strokes: a.strokes + c.stroke_count }), { views: 0, strokes: 0 });
 
   return (
-    <Screen tone="terminal" loading={loading} onRefresh={load}>
-      <Header title="VAULT" sub={`${mine.length} walls · ${totals.views} views · ${totals.strokes} strokes`} right={<Pill icon="cube" value={mine.length} iconColor={C.phosphor} alt={C.phosDim} />} />
+    <Screen loading={loading} onRefresh={load}>
+      <Header title="VAULT" sub={`${mine.length} walls · ${totals.views} views · ${totals.strokes} strokes`} right={<Pill icon="cube" value={mine.length} />} />
       {mine.length === 0 && (
-        <Panel title="EMPTY VAULT">
-          <T v="h">Nothing saved yet.</T>
-          <T v="sub">Every wall you spray lands here, ready to walk around in 3D.</T>
-          <Btn label="PAINT SOMETHING" icon="create" tone="green" onPress={() => setTab('create')} />
-        </Panel>
+        <Empty icon="cube" title="Nothing saved yet." sub="Every wall you spray lands here, ready to walk around in 3D."
+          action={<Btn label="PAINT SOMETHING" icon="create" tone="green" onPress={() => setTab('create')} />} />
       )}
       <View style={styles.grid}>
         {mine.map((c) => (
-          <Pressable key={c.id} onPress={() => setOpen(c)}>
-            <PixelBox n={6} depth={5} fill="#0f2a22" hi="#1d4a3a" lo="#0a1c17" style={{ width: CELL }} contentStyle={{ padding: 8, gap: 8 }}>
-              <View>
-                <PieceImage canvasId={c.id} width={CELL - 16} height={Math.round((CELL - 16) * 0.78)} />
-                <View style={styles.badge}><PixelIcon name="cube" size={24} color={C.white} alt={C.phosphor} /></View>
-              </View>
-              <View style={{ gap: 2 }}>
-                <Text style={styles.title} numberOfLines={1}>{c.title ?? timeAgo(c.created_at)}</Text>
-                <Text style={styles.meta} numberOfLines={1}>{c.views} views · {c.stroke_count} strokes</Text>
-                {c.author_id !== me?.id && <T v="label" color={C.phosphor} style={{ fontSize: 10.5 }}>CONTRIBUTED</T>}
-              </View>
-            </PixelBox>
-          </Pressable>
+          <Card key={c.id} onPress={() => setOpen(c)} style={{ width: CELL }}>
+            <View>
+              <PieceImage canvasId={c.id} width={CELL - 16} height={Math.round((CELL - 16) * 0.78)} />
+              <View style={styles.badge}><PixelIcon name="cube" size={24} color={C.white} alt={C.yellow} /></View>
+            </View>
+            <View style={{ gap: 2 }}>
+              <T v="card" numberOfLines={1}>{c.title ?? timeAgo(c.created_at)}</T>
+              <T v="small" numberOfLines={1}>{c.views} views · {c.stroke_count} strokes</T>
+              {c.author_id !== me?.id && <T v="micro" color={C.greenHi}>CONTRIBUTED</T>}
+            </View>
+          </Card>
         ))}
       </View>
       {open && <PieceDetail canvas={open} onClose={() => setOpen(null)} />}
@@ -79,7 +73,5 @@ export function VaultScreen() {
 
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  badge: { position: 'absolute', right: 4, bottom: 4, backgroundColor: '#0a0620cc', padding: 2 },
-  title: { fontFamily: F.display, fontSize: 17, color: '#fff' },
-  meta: { ...ui(12.5, '500'), color: C.dim },
+  badge: { position: 'absolute', right: 4, bottom: 4, backgroundColor: C.ink + 'cc', padding: 2 },
 });

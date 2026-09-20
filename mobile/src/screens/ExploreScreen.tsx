@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Btn, Chip, Header, IconBtn, Panel, Pill, Rank, Screen, T } from '../ui/kit';
-import { PixelBox } from '../ui/PixelBox';
+import { Modal, ScrollView, StyleSheet, View } from 'react-native';
+import { Btn, Card, Chip, Header, Panel, Pill, Rank, Row, Screen, SheetHeader, T } from '../ui/kit';
+import { Backdrop } from '../ui/Backdrop';
 import { PieceImage } from '../ui/StrokeThumb';
-import { C, F, ui } from '../ui/theme';
+import { C, GUTTER } from '../ui/theme';
 import { useStore } from '../store';
 import { fetchAllCanvases, fetchPreviewStrokes } from '../data/sync';
 import { MOCK_CANVASES, isMock } from '../data/mock';
@@ -62,28 +62,26 @@ export function ExploreScreen() {
   }, [shown, loc]);
 
   return (
-    <Screen tone="terminal" loading={loading} onRefresh={load}>
-      <Header title="EXPLORE" sub={usingSamples ? 'no pieces yet · showing sample spots' : `${all.length} walls across Waterloo`} right={<Pill icon="eye" value={all.reduce((a, c) => a + c.views, 0)} iconColor={C.phosphor} alt={C.phosDim} />} />
+    <Screen loading={loading} onRefresh={load}>
+      <Header title="EXPLORE" sub={usingSamples ? 'no pieces yet · showing sample spots' : `${all.length} walls across Waterloo`} right={<Pill icon="eye" value={all.reduce((a, c) => a + c.views, 0)} />} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 18 }} style={styles.bleed}>
         {FILTERS.map((f) => <Chip key={f.key} label={f.label} on={filter === f.key} onPress={() => setFilter(f.key)} />)}
       </ScrollView>
 
-      <T v="label">TRENDING FRESCOS</T>
+      <T v="label">TRENDING PIECES</T>
       {trending.length === 0 ? <T v="sub">Nothing matches this filter yet.</T> : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingRight: 18, paddingBottom: 6 }} style={styles.bleed}>
           {trending.map((c, i) => (
-            <Pressable key={c.id} onPress={() => setOpen(c)}>
-              <PixelBox n={6} depth={5} fill="#0f2a22" hi="#1d4a3a" lo="#0a1c17" style={{ width: 188 }} contentStyle={{ padding: 8, gap: 8 }}>
-                <View>
-                  <PieceImage canvasId={c.id} width={172} height={124} />
-                  <View style={styles.rank}><Rank n={i + 1} /></View>
-                </View>
-                <View>
-                  <Text style={styles.title} numberOfLines={1}>{c.title ?? `${c.author_name}'s piece`}</Text>
-                  <Text style={styles.meta}>{c.views} views · {c.stroke_count} strokes</Text>
-                </View>
-              </PixelBox>
-            </Pressable>
+            <Card key={c.id} onPress={() => setOpen(c)} style={{ width: 188 }}>
+              <View>
+                <PieceImage canvasId={c.id} width={172} height={124} />
+                <View style={styles.rank}><Rank n={i + 1} /></View>
+              </View>
+              <View>
+                <T v="card" numberOfLines={1}>{c.title ?? `${c.author_name}'s piece`}</T>
+                <T v="small">{c.views} views · {c.stroke_count} strokes</T>
+              </View>
+            </Card>
           ))}
         </ScrollView>
       )}
@@ -96,28 +94,23 @@ export function ExploreScreen() {
       <T v="label">NEARBY CANVASES</T>
       {!loc && <T v="sub">waiting for GPS…</T>}
       {nearby.map(({ c, d }) => (
-        <Pressable key={c.id} onPress={() => setOpen(c)}>
-          <PixelBox n={6} depth={4} fill="#0f2a22" hi="#1d4a3a" lo="#0a1c17" contentStyle={styles.row}>
-            <PieceImage canvasId={c.id} width={64} height={64} cell={2} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title} numberOfLines={1}>{c.title ?? `${c.author_name}'s piece`}</Text>
-              <Text style={styles.meta} numberOfLines={1}>{c.author_name} · {timeAgo(c.updated_at)} · {c.stroke_count} strokes</Text>
-            </View>
+        <Row key={c.id} onPress={() => setOpen(c)}
+          leading={<PieceImage canvasId={c.id} width={64} height={64} cell={2} />}
+          title={c.title ?? `${c.author_name}'s piece`}
+          meta={`${c.author_name} · ${timeAgo(c.updated_at)} · ${c.stroke_count} strokes`}
+          trailing={
             <View style={{ alignItems: 'flex-end', gap: 2 }}>
-              <Text style={styles.dist}>{d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`}</Text>
-              <T v="label" color={discovered[c.id] ? C.greenHi : isMock(c.id) ? C.faint : C.yellow} style={{ fontSize: 10.5 }}>{discovered[c.id] ? 'FOUND' : isMock(c.id) ? 'SAMPLE' : 'UNDISCOVERED'}</T>
+              <T v="card" style={{ fontSize: 16 }}>{d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`}</T>
+              <T v="micro" color={discovered[c.id] ? C.greenHi : isMock(c.id) ? C.faint : C.yellow}>{discovered[c.id] ? 'FOUND' : isMock(c.id) ? 'SAMPLE' : 'UNDISCOVERED'}</T>
             </View>
-          </PixelBox>
-        </Pressable>
+          } />
       ))}
       {open && <PieceDetail canvas={open} onClose={() => setOpen(null)} />}
       <Modal visible={mapOpen} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setMapOpen(false)}>
-        <View style={{ flex: 1, backgroundColor: '#03100b' }}>
-          <HeatMap canvases={all} interactive />
-          <View style={styles.mapTop}>
-            <PixelBox fill="#160b36" depth={3} contentStyle={{ height: 40, paddingHorizontal: 12, justifyContent: 'center' }}><T v="label" color={C.white}>{all.length} WALLS · TAP A PIN</T></PixelBox>
-            <IconBtn icon="x" onPress={() => setMapOpen(false)} />
-          </View>
+        <View style={{ flex: 1, backgroundColor: C.bg }}>
+          <Backdrop />
+          <View style={styles.mapTop}><SheetHeader title="HOT ZONES" sub={`${all.length} walls · tap a pin`} onClose={() => setMapOpen(false)} /></View>
+          <View style={styles.mapFull}><HeatMap canvases={all} interactive /></View>
         </View>
       </Modal>
     </Screen>
@@ -127,12 +120,9 @@ export function ExploreScreen() {
 function score(c: Canvas) { const age = (Date.now() - new Date(c.updated_at).getTime()) / 3600e3; return (c.views + c.stroke_count * 2) / Math.pow(age + 2, 0.6); }
 
 const styles = StyleSheet.create({
-  bleed: { marginHorizontal: -18, paddingHorizontal: 18, flexGrow: 0 },
+  bleed: { marginHorizontal: -GUTTER, paddingHorizontal: GUTTER, flexGrow: 0 },
   rank: { position: 'absolute', left: 4, top: 4 },
-  title: { fontFamily: F.display, fontSize: 17, color: '#fff' },
-  meta: { ...ui(12.5, '500'), color: C.dim },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 8 },
-  dist: { fontFamily: F.display, fontSize: 16, color: '#fff' },
   mapFrame: { borderWidth: 3, borderColor: C.ink },
-  mapTop: { position: 'absolute', top: 56, left: 14, right: 14, flexDirection: 'row', justifyContent: 'space-between' },
+  mapTop: { paddingTop: 62, paddingHorizontal: GUTTER, paddingBottom: 12 },
+  mapFull: { flex: 1, borderTopWidth: 3, borderColor: C.ink },
 });
