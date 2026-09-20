@@ -12,6 +12,19 @@ optional or reference.
 
 Android needs **no** paid developer account and no Mac, unlike iOS.
 
+**Already done on this machine**, so skip past them when you see them:
+
+| Step | State |
+|---|---|
+| 2. PC environment variables | set (`ANDROID_HOME`, `JAVA_HOME`) |
+| 4. `android/` project | generated, Gradle cache warm |
+| 5. keystore fingerprint | computed, pasted into the step for you |
+| 6. the build | `android/app/build/outputs/apk/debug/app-debug.apk` is current (101 MB, arm64) |
+| 9. push the branch | pushed to `origin/adarsh-samsung` |
+
+What's left genuinely needs your accounts or your phone: the Supabase project (1), the phone
+itself (3), the optional Google Cloud key (5), and installing + testing (6-8).
+
 Two things are worth understanding before you type anything:
 
 - **The shared Supabase project is missing the AR columns**, so every AR stroke is refused and
@@ -32,15 +45,19 @@ Two things are worth understanding before you type anything:
 
 ### 1.2 Run the SQL, in this order
 
-**SQL Editor** → **New query** → paste the whole file → **Run**. All three are safe to re-run.
+**SQL Editor** → **New query** → paste **`supabase/setup_all.sql`** → **Run**. That one file is
+the three below concatenated, in order, and it is safe to re-run.
 
 | # | File | What it makes |
 |---|---|---|
 | 1 | `supabase/schema.sql` | `painters`, `canvases`, `strokes`, `reports`, the counter triggers, the RLS policies, the `nearby_canvases` + `increment_views` RPCs, and realtime on `strokes` / `canvases` |
 | 2 | `supabase/migration_ar.sql` | **the AR half**: `strokes.anchor_id`, `transform`, `viewer`, the `worldmaps` storage bucket + its policies, `set_world_map`, and the `delete own stroke` policy that undo needs |
-| 3 | `supabase/seed.sql` | *optional* — three pieces around E7 so there's something to discover without a second phone |
+| 3 | `supabase/seed.sql` | three demo pieces around E7 so there's something to discover without a second phone |
 
-Skipping file 2 is exactly the state you're in now: painting works locally, uploads fail, nothing
+(If you edit any of those three, `node scripts/gen_setup_sql.mjs` rebuilds the combined file.)
+
+Skipping file 2 is exactly the state you're in now. I checked the shared project from here and it
+answers `column strokes.anchor_id does not exist` — painting works locally, uploads fail, nothing
 syncs. Don't skip it.
 
 ### 1.3 Turn on anonymous sign-in
@@ -63,30 +80,39 @@ Use the publishable key, never `service_role`. The publishable key is meant to s
 RLS is what protects writes. `service_role` bypasses RLS entirely — if it ends up in the app
 bundle, anyone can read and delete everything.
 
-`.env` in the repo root:
+One command writes all four places the keys live (`.env`, `web/.env`, `web/.env.production`, and
+`eas.json`'s development env) and then checks the project end to end:
 
-```sh
-EXPO_PUBLIC_SUPABASE_URL=https://<your-ref>.supabase.co
-EXPO_PUBLIC_SUPABASE_KEY=<your publishable key>
+```powershell
+node scripts/use_supabase.mjs https://<your-ref>.supabase.co <your publishable key>
 ```
 
-`eas.json` → `build.development.env` — the same two values, for cloud builds:
+It refuses a `service_role` key on sight. Expect:
 
-```json
-"env": {
-  "EXPO_PUBLIC_SUPABASE_URL": "https://<your-ref>.supabase.co",
-  "EXPO_PUBLIC_SUPABASE_KEY": "<your publishable key>"
-}
 ```
+  ok    schema.sql ran (strokes table reachable)
+  ok    migration_ar.sql ran (anchor_id, transform, viewer)
+  ok    canvases carry a world map pointer
+  ok    nearby_canvases RPC exists
+  ok    worldmaps storage bucket exists
+```
+
+Any `FAIL` means that SQL didn't run — paste `setup_all.sql` again and re-check with
+`node scripts/use_supabase.mjs --check`. Add `--anon` to test anonymous sign-in as well; that one
+creates a throwaway auth user, which is why it's off by default.
+
+By hand instead: `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_KEY` in `.env`, the same pair
+under `eas.json` → `build.development.env`, and `VITE_SUPABASE_URL` / `VITE_SUPABASE_KEY` in
+`web/.env` and `web/.env.production`.
 
 If Metro is already running, restart it with `npx expo start --dev-client -c`. `-c` matters:
 `EXPO_PUBLIC_*` is baked into the bundle at transform time, so a plain reload can keep serving the
 old URL from cache. (Starting fresh in step 6? Nothing to restart.)
 
-## 2. PC setup (Windows, once)
+## 2. PC setup (Windows, once) — done
 
-Android Studio, the SDK and JDK 17 are already on this machine, and I used them to build the app,
-so the only thing missing is the environment variables for your own terminals:
+I already ran these, so this is only for a different machine. Android Studio, the SDK and JDK 17
+were already installed; these set them up for your terminals:
 
 ```powershell
 setx ANDROID_HOME "$env:LOCALAPPDATA\Android\Sdk"
@@ -113,15 +139,15 @@ NDK 27, CMake). They're in `%LOCALAPPDATA%\Android\Sdk` now; nothing else to ins
    from the Play Store ("Google Play Services for AR"). Without it, Fresco falls back to the
    compass painter instead of real surface tracking — no crash, just the older mode.
 
-## 4. Generate the Android project
+## 4. Generate the Android project — done
+
+`android/` and its debug keystore already exist. Only re-run this after changing `app.json`,
+native dependencies or anything under `modules/`:
 
 ```powershell
 npm install
 npx expo prebuild -p android --no-install
 ```
-
-This writes the `android/` folder and, with it, the debug keystore that step 5 needs. It takes a
-few seconds — it isn't the build.
 
 ## 5. Optional: Cloud Anchors, so saved pieces come back exactly
 
@@ -141,7 +167,13 @@ To turn it on:
 3. **APIs & Services → Credentials → Create credentials → API key.**
 4. Restrict the key (recommended): **Application restrictions → Android apps**, then add
    - package name: `com.hamzakhan.tagged`
-   - SHA-1 fingerprint of the debug keystore step 4 just generated:
+   - SHA-1 fingerprint — I read it out of the keystore for you:
+     ```
+     5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
+     ```
+     That is the debug keystore Expo ships in every project, not one unique to you, so this
+     restriction keeps honest apps out and little else. Fine for a demo; for anything real,
+     generate your own keystore and re-read it with:
      ```powershell
      keytool -list -v -keystore android\app\debug.keystore -alias androiddebugkey -storepass android -keypass android | findstr SHA1
      ```
@@ -162,11 +194,20 @@ if pieces should outlive the demo. Docs:
 
 ## 6. Build and run
 
+A current debug APK is already built, so the fastest path with the phone plugged in is:
+
+```powershell
+adb install -r android\app\build\outputs\apk\debug\app-debug.apk
+npx expo start --dev-client      # then open Fresco on the phone
+```
+
+Or build and install in one go (also what you want after changing native code):
+
 ```powershell
 npx expo run:android --device
 ```
 
-The first build takes about 10 minutes; later JS-only changes just reload. After the first install
+A from-scratch build takes about 10 minutes; later JS-only changes just reload. After the first install
 you can start the dev server on its own:
 
 ```powershell
@@ -198,6 +239,7 @@ Paint one stroke, then check the dashboard:
 | **Metro terminal** | no `uploadStroke failed, queued` warnings |
 
 If those are right, a second phone (or `/world` on the web app) sees your paint live.
+`node scripts/use_supabase.mjs --check` re-runs the schema half of this from the terminal.
 
 ## 8. Test it on the phone (do this, don't trust the build)
 
@@ -226,13 +268,11 @@ behaviour has run on real hardware. In rough order of what's most likely to need
    the painter's viewpoint — so stand roughly where the other person stood.
 9. **Widgets are iPhone-only** — the Android build simply has none.
 
-## 9. Push the branch
+## 9. Push the branch — done
 
-I committed the work locally on `adarsh-samsung` but didn't push:
-
-```powershell
-git push -u origin adarsh-samsung
-```
+`adarsh-samsung` is on GitHub: <https://github.com/McMuf/htn26/tree/adarsh-samsung>. Later commits
+go up with a plain `git push`. If you would rather it had never been pushed,
+`git push origin --delete adarsh-samsung` removes it.
 
 ## 10. Known limits on Android
 
