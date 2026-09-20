@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import * as Location from 'expo-location';
 import { DeviceMotion } from 'expo-sensors';
 import { useCameraPermissions } from 'expo-camera';
-import * as Haptics from 'expo-haptics';
 import { supabase } from '../lib/supabase';
 import { ensurePainter } from '../data/sync';
 import { useStore } from '../store';
 import { PALETTE } from '../config';
 import { CREWS } from '../lib/economy';
 import { Backdrop } from '../ui/Backdrop';
-import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon, type IconName } from '../ui/PixelIcon';
-import { Avatar, Btn, Chip, IconBtn, Panel, T } from '../ui/kit';
-import { C, F, outline } from '../ui/theme';
+import { Avatar, Btn, Chip, Field, IconBtn, Panel, PressBox, T, Wordmark } from '../ui/kit';
+import { haptic } from '../ui/haptics';
+import { C, DOCK_INSET, GUTTER } from '../ui/theme';
+import { isLight } from '../ui/color';
 
 /**
  * Three quick steps: 1) sign in, 2) handle + avatar colour + crew, 3) permissions.
@@ -42,7 +42,7 @@ export function OnboardingScreen({ session }: { session: { user: { id: string } 
   useEffect(() => { if (session) setUid(session.user.id); }, [session?.user.id]);
   useEffect(() => { Location.getForegroundPermissionsAsync().then((p) => setLoc(p.granted)).catch(() => {}); DeviceMotion.getPermissionsAsync().then((p) => setMotion(p.granted)).catch(() => {}); }, []);
 
-  const ok = () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  const ok = haptic.success;
 
   const signIn = async () => {
     setBusy(true); setErr(null);
@@ -93,25 +93,25 @@ export function OnboardingScreen({ session }: { session: { user: { id: string } 
         <View style={styles.top}>
           {step > 1 ? <IconBtn icon="left" size={40} onPress={() => { setErr(null); setStep((s) => (s - 1) as 1 | 2 | 3); }} /> : <View style={{ width: 40 }} />}
           <View style={styles.steps}>{[1, 2, 3].map((n) => <View key={n} style={[styles.step, n <= step && styles.stepOn]} />)}</View>
-          <T v="label" color="#fff">{step}/3</T>
+          <T v="eyebrow">{step}/3</T>
         </View>
-        <Text style={styles.brand}>FRESCO</Text>
+        <Wordmark style={{ alignSelf: 'center' }} />
 
         {step === 1 && (
           <>
             <T v="sub" style={{ textAlign: 'center' }}>The world is your wall. Sign in to start spraying.</T>
             <Panel title="STEP 1 · SIGN IN">
               <Btn label={busy ? '…' : needEmail ? 'SIGN IN / CREATE' : 'PLAY AS GUEST'} tone="green" size="lg" disabled={busy} onPress={signIn} />
-              <T v="label" color={C.faint}>OR SIGN IN WITH</T>
+              <T v="label" color={C.faint}>SOON</T>
               <View style={styles.socials}>
-                {['APPLE', 'GOOGLE', 'SNAP'].map((s) => <Btn key={s} label={s} tone="dark" size="sm" disabled style={{ flex: 1 }} />)}
+                {['APPLE', 'GOOGLE', 'SNAP'].map((s) => <Chip key={s} label={s} icon="lock" />)}
               </View>
               <T v="small">Social sign-in is coming soon. Guest accounts keep their tag and stats.</T>
             </Panel>
             {needEmail && (
               <Panel title="ACCOUNT">
-                <Field value={email} onChangeText={setEmail} placeholder="you@uwaterloo.ca" keyboardType="email-address" autoCapitalize="none" />
-                <Field value={password} onChangeText={setPassword} placeholder="password (6+)" secureTextEntry onSubmitEditing={signIn} />
+                <Field value={email} onChangeText={setEmail} placeholder="you@uwaterloo.ca" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} returnKeyType="done" />
+                <Field value={password} onChangeText={setPassword} placeholder="password (6+)" secureTextEntry onSubmitEditing={signIn} autoCorrect={false} returnKeyType="done" />
               </Panel>
             )}
           </>
@@ -121,17 +121,15 @@ export function OnboardingScreen({ session }: { session: { user: { id: string } 
           <>
             <Panel title="STEP 2 · YOUR TAG">
               <View style={styles.rowC}>
-                <Avatar name={name || 'F'} color={color} size={60} />
-                <View style={{ flex: 1 }}><Field value={name} onChangeText={setName} placeholder="YOUR_HANDLE" autoCapitalize="characters" maxLength={20} /></View>
+                <Avatar name={name || 'C'} color={color} size={60} />
+                <View style={{ flex: 1 }}><Field value={name} onChangeText={setName} placeholder="YOUR_HANDLE" autoCapitalize="characters" autoCorrect={false} maxLength={20} returnKeyType="done" /></View>
               </View>
               <T v="label">AVATAR COLOUR</T>
               <View style={styles.swatches}>
                 {PALETTE.filter((c) => c !== '#111111').map((c) => (
-                  <Pressable key={c} onPress={() => { setColor(c); Haptics.selectionAsync().catch(() => {}); }}>
-                    <PixelBox fill={c} border={color === c ? '#fff' : C.ink} depth={2} style={{ width: 38 }} contentStyle={{ height: 36, alignItems: 'center', justifyContent: 'center' }}>
-                      {color === c ? <PixelIcon name="check" size={24} color={c === '#ffffff' ? C.ink : '#fff'} /> : null}
-                    </PixelBox>
-                  </Pressable>
+                  <PressBox key={c} fill={c} depth={color === c ? 4 : 2} onPress={() => setColor(c)} style={{ width: 38 }} contentStyle={{ height: 36, alignItems: 'center', justifyContent: 'center' }}>
+                    {color === c ? <PixelIcon name="check" size={24} color={isLight(c) ? C.ink : C.white} /> : null}
+                  </PressBox>
                 ))}
               </View>
             </Panel>
@@ -161,20 +159,12 @@ export function OnboardingScreen({ session }: { session: { user: { id: string } 
   );
 }
 
-function Field(props: React.ComponentProps<typeof TextInput>) {
-  return (
-    <PixelBox fill="#150a36" hi={null} depth={0} contentStyle={{ height: 50, justifyContent: 'center' }}>
-      <TextInput {...props} autoCorrect={false} placeholderTextColor={C.faint} selectionColor={C.yellow} style={styles.input} returnKeyType="done" />
-    </PixelBox>
-  );
-}
-
 function Perm({ icon, label, hint, ok, onPress }: { icon: IconName; label: string; hint: string; ok: boolean; onPress: () => void }) {
   return (
     <View style={styles.perm}>
-      <PixelIcon name={icon} size={24} color="#fff" />
+      <PixelIcon name={icon} size={24} color={C.white} />
       <View style={{ flex: 1 }}>
-        <Text style={styles.permLabel}>{label}</Text>
+        <T v="card">{label}</T>
         <T v="small">{hint}</T>
       </View>
       <Btn label={ok ? 'ALLOWED' : 'ALLOW'} size="sm" tone={ok ? 'dark' : 'yellow'} icon={ok ? 'check' : undefined} disabled={ok} onPress={onPress} />
@@ -183,17 +173,14 @@ function Perm({ icon, label, hint, ok, onPress }: { icon: IconName; label: strin
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#12082b' },
-  scroll: { padding: 20, paddingTop: 64, paddingBottom: 60, gap: 16 },
+  root: { flex: 1, backgroundColor: C.bg },
+  scroll: { padding: GUTTER, paddingTop: 62, paddingBottom: DOCK_INSET, gap: 16 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   steps: { flex: 1, flexDirection: 'row', gap: 6 },
-  step: { flex: 1, height: 12, backgroundColor: '#ffffff22', borderWidth: 3, borderColor: C.ink },
+  step: { flex: 1, height: 12, backgroundColor: C.line, borderWidth: 3, borderColor: C.ink },
   stepOn: { backgroundColor: C.yellow },
-  brand: { fontFamily: F.display, fontSize: 56, color: '#fff', textAlign: 'center', letterSpacing: 6, ...outline('#4a22b8', 4) },
   socials: { flexDirection: 'row', gap: 8 },
   rowC: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  input: { fontFamily: F.display, fontSize: 20, color: '#fff', paddingHorizontal: 12, height: 50 },
   perm: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  permLabel: { fontFamily: F.display, fontSize: 17, color: '#fff' },
 });
