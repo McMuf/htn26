@@ -20,7 +20,8 @@ export type Settings = {
   hfov: number;
   haptics: boolean;
   sound: boolean;
-  showPlanes: boolean; // AR: tint detected surfaces
+  showPlanes: boolean; // AR: draw the guide grid over detected surfaces
+  settingsVersion: number; // bumped when a default changes and stored settings must follow
   // ---- local-only (no backend): crew pick, market wallet + unlocks, Create tools
   crew: string | null;
   owned: string[]; // market item ids
@@ -89,7 +90,8 @@ const DEFAULT_SETTINGS: Settings = {
   hfov: HFOV_DEG,
   haptics: true,
   sound: true,
-  showPlanes: true,
+  showPlanes: false, // the guide grid is a tool, not the look — off unless asked for
+  settingsVersion: 1,
   crew: null,
   owned: [],
   spent: 0,
@@ -176,7 +178,12 @@ function persist(key: string, value: unknown) {
 function migrateSettings(s: Settings): Settings {
   const a = LEGACY_DEFAULTS.includes(s.optionA.color) ? DEFAULT_OPTION_A : s.optionA;
   const b = LEGACY_DEFAULTS.includes(s.optionB.color) ? DEFAULT_OPTION_B : s.optionB;
-  return a === s.optionA && b === s.optionB ? s : { ...s, optionA: a, optionB: b };
+  const out = a === s.optionA && b === s.optionB ? s : { ...s, optionA: a, optionB: b };
+  // v2: the surface guide grid is off by default. Changing the default alone would not reach
+  // anyone who already has it stored as on, which is every existing install, so flip it once and
+  // record that we have. Toggling it back on persists version 2 and is never overridden again.
+  if ((out.settingsVersion ?? 1) < 2) return { ...out, showPlanes: false, settingsVersion: 2 };
+  return out;
 }
 
 export async function hydrateStore() {

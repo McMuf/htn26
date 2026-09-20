@@ -25,7 +25,7 @@ export function SettingsScreen() {
         <Row label="Volume buttons also spray" sub="on-screen hold buttons are always on" value={settings.volumeButtons} onChange={(v) => setSettings({ volumeButtons: v })} />
         <Row label="Haptics" value={settings.haptics} onChange={(v) => setSettings({ haptics: v })} />
         <Row label="Sound" value={settings.sound} onChange={(v) => setSettings({ sound: v })} />
-        <Row label="Show detected AR surfaces" value={settings.showPlanes} onChange={(v) => setSettings({ showPlanes: v })} />
+        <Row label="Surface guide grid" sub="green and blue lines over the floors and walls AR has found" value={settings.showPlanes} onChange={(v) => setSettings({ showPlanes: v })} />
         <Row label="Debug line in Create" sub="tracking, planes, GPS accuracy" value={settings.debugHud} onChange={(v) => setSettings({ debugHud: v })} />
         <Row label="Paint anywhere" sub="bypass the Waterloo Region geofence" value={settings.geofenceBypass} onChange={(v) => setSettings({ geofenceBypass: v })} />
       </Panel>
