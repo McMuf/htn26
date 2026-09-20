@@ -5,6 +5,8 @@ import { Backdrop } from './Backdrop';
 import { PixelBox } from './PixelBox';
 import { PixelIcon, type IconName } from './PixelIcon';
 import { haptic } from './haptics';
+import { useStore } from '../store';
+import { coinsOf } from '../lib/economy';
 import { BACKDROPS, C, DOCK_INSET, F, GUTTER, PLATE_HI, outline, TONES, ui, uiLabel, type BackdropName, type Tone } from './theme';
 
 /** Kept for old call sites; prefer `haptic.tap`. */
@@ -297,6 +299,14 @@ export function Pill({ icon, value, iconColor = C.green, alt = C.greenLo, onPres
   return onPress
     ? <PressBox fill={C.plate} hi={PLATE_HI} depth={3} n={3} onPress={onPress} contentStyle={content}>{inner}</PressBox>
     : <PixelBox fill={C.plate} hi={PLATE_HI} depth={3} n={3} contentStyle={content}>{inner}</PixelBox>;
+}
+
+/** The one coin counter every tab shows top-right; tapping it opens the Market. */
+export function CoinPill() {
+  const painter = useStore((s) => s.painter);
+  const settings = useStore((s) => s.settings);
+  const setSheet = useStore((s) => s.setSheet);
+  return <Pill icon="coin" value={coinsOf(painter, settings)} onPress={() => setSheet('market')} />;
 }
 
 export function Avatar({ name, color, size = 48 }: { name?: string | null; color: string; size?: number }) {

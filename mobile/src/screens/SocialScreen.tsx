@@ -3,7 +3,7 @@ import { Dimensions, Platform, Share, StyleSheet, Text, View } from 'react-nativ
 import { makeImageFromView } from '@shopify/react-native-skia';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { Avatar, Btn, Chip, Header, Panel, Pill, Rank, Row, Screen, T, Tile, Wordmark } from '../ui/kit';
+import { Avatar, Btn, Chip, Header, Panel, CoinPill, Rank, Row, Screen, T, Tile, Wordmark } from '../ui/kit';
 import { Bands } from '../ui/Bands';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
@@ -69,7 +69,7 @@ export function SocialScreen() {
 
   return (
     <Screen loading={loading} onRefresh={loadBoard}>
-      <Header title="SOCIAL" right={<Pill icon="flame" value={stats.streak} />} />
+      <Header title="SOCIAL" right={<CoinPill />} />
 
       {/* the shareable card: this exact view is snapshotted to a PNG */}
       <View ref={cardRef} collapsable={false}>
