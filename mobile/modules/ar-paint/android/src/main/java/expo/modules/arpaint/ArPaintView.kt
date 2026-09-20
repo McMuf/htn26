@@ -628,7 +628,12 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     if (hit != null && overlays) {
       val t = hit.transform
       val n = M.col(t, 1).normalized()
-      val scale = max(0.5f, min(3f, cameraPos.distance(M.pos(t)) / 0.8f))
+      // Scale with distance so the reticle keeps one apparent size on screen. This used to be
+      // capped at 3, i.e. 2.4 m, past which the world size froze and the thing shrank away with
+      // range — at eight metres it was a third of the size it should be, which is exactly when
+      // you most need to see where you are pointing. The remaining limits only stop it swelling
+      // absurdly when pressed against a wall or aimed across a car park.
+      val scale = max(0.45f, min(14f, cameraPos.distance(M.pos(t)) / 0.8f))
       val m = M.withPos(t, M.pos(t) + n * 0.006f)
       for (i in 0..10) if (i % 4 != 3) m[i] *= scale
       quadRenderer.drawReticle(viewProj, m, hit.kind != HitKind.ESTIMATED)

@@ -217,13 +217,31 @@ internal class QuadRenderer {
       precision highp float;
       varying vec2 v_L;
       uniform vec4 u_Color;
+      // Square brackets, edge ticks and a square pip — the same crosshair the compass-mode HUD
+      // draws in React views, so the two modes look like one app. No circle, and only a sliver of
+      // softening at each edge: enough to stop the diagonals crawling as the phone moves, far less
+      // than it takes to read as anti-aliased. Everything is in half-extents, so it is identical at
+      // every distance once the quad is scaled.
+      float bar(vec2 q, vec2 lo, vec2 hi, float e) {
+        vec2 a = smoothstep(lo - e, lo + e, q);
+        vec2 b = 1.0 - smoothstep(hi - e, hi + e, q);
+        return a.x * a.y * b.x * b.y;
+      }
       void main() {
-        float d = length(v_L);
-        float ring = smoothstep(0.033, 0.035, d) * (1.0 - smoothstep(0.045, 0.047, d));
-        float dotA = 1.0 - smoothstep(0.0035, 0.0045, d);
-        float a = max(ring * u_Color.a, dotA);
-        vec3 c = mix(u_Color.rgb, vec3(1.0), dotA);
-        gl_FragColor = vec4(c * a, a);
+        vec2 q = abs(v_L) / 0.05;   // ret, so q is 0..1 inside the reticle
+        float e = 0.02;
+        float T = 0.12;             // stroke thickness
+        float L = 0.42;             // bracket arm length, in from each corner
+        // four corners, both arms, by symmetry on |x|,|y|
+        float m = max(bar(q, vec2(1.0 - L, 1.0 - T), vec2(1.0, 1.0), e),
+                      bar(q, vec2(1.0 - T, 1.0 - L), vec2(1.0, 1.0), e));
+        // ticks at the middle of each edge
+        m = max(m, bar(q, vec2(0.0, 0.72), vec2(T * 0.75, 1.0), e));
+        m = max(m, bar(q, vec2(0.72, 0.0), vec2(1.0, T * 0.75), e));
+        // centre pip, always white so the exact aim point reads against any wall
+        float pip = bar(q, vec2(0.0), vec2(0.1), e);
+        float a = max(m * u_Color.a, pip);
+        gl_FragColor = vec4(mix(u_Color.rgb, vec3(1.0), pip) * a, a);
       }
       """.trimIndent(),
     )
@@ -263,7 +281,9 @@ internal class QuadRenderer {
     GLES20.glUseProgram(reticleProgram)
     Matrix.multiplyMM(mvp, 0, viewProj, 0, model, 0)
     GLES20.glUniformMatrix4fv(rMvp, 1, false, mvp, 0)
-    if (locked) GLES20.glUniform4f(rColor, 1f, 1f, 1f, 0.9f) else GLES20.glUniform4f(rColor, 1f, 0.9f, 0f, 0.9f)
+    // white when it has a surface, the UI's purple when it is only guessing — the palette the rest
+    // of the app uses, rather than the amber that belonged to no theme
+    if (locked) GLES20.glUniform4f(rColor, 1f, 1f, 1f, 0.92f) else GLES20.glUniform4f(rColor, 0.67f, 0.55f, 1f, 0.92f)
     reticlePos.position(0)
     GLES20.glVertexAttribPointer(rPos, 3, GLES20.GL_FLOAT, false, 0, reticlePos)
     GLES20.glEnableVertexAttribArray(rPos)
