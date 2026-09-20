@@ -22,6 +22,7 @@ import com.google.ar.core.ArCoreApk
 import com.google.ar.core.Camera
 import com.google.ar.core.Config
 import com.google.ar.core.Coordinates2d
+import com.google.ar.core.DepthPoint
 import com.google.ar.core.Frame
 import com.google.ar.core.Plane
 import com.google.ar.core.ResolveCloudAnchorFuture
@@ -60,8 +61,9 @@ import kotlin.math.min
  * extension within an overhang that scales per axis with that plane's own extents, so a wall stays
  * paintable past the patch ARCore has found while a chair seat stays chair-sized. Nothing else:
  * ceilings, and the depth/feature points ARCore also offers, are rejected. Upward-facing surfaces
- * are all paintable, so that includes tables and seats as well as the floor — what is excluded is
- * geometry that was never detected as a plane. See [raycastCenter].
+ * are all paintable, so that includes tables and seats as well as the floor. Where ARCore has no
+ * plane at all — a wall in one flat colour can defeat it for a long time — a depth hit is taken as
+ * a last resort, but only one oriented like a wall or a floor. See [raycastCenter].
  *
  * ANCHORING: every quad rides an ARCore anchor (attached to its plane when it has one), is snapped
  * onto a real plane when one appears (< 15 cm, < 14°) and re-snapped as ARCore refines it.
@@ -1070,8 +1072,34 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       }
     }
     val best = edge ?: guess
-    stickyPlane = best?.plane
-    return best
+    if (best != null) {
+      stickyPlane = best.plane
+      return best
+    }
+
+    // Nothing here has a plane. A wall in one flat colour gives ARCore almost no features to fit
+    // one to, and depth-from-motion is itself a stereo match, so it can go a long time with no
+    // plane at all — and refusing everything else meant the commonest surface in the building was
+    // simply ignored. The depth map still has the wall, so take a depth hit as a last resort.
+    //
+    // Gated to keep the failure that got this removed in the first place away: back then any
+    // depth point counted, so paint landed on people, glass and chair backs, and `locked` called
+    // them surfaces. Now it must be oriented like a wall or a floor — anything tilted between the
+    // two is something else in the room — and lie in the range depth is worth trusting. It is
+    // also last, so a real plane always wins, and paint put down this way is not stranded:
+    // tryAdopt binds it to a plane the moment ARCore finds one.
+    for (h in hits) {
+      if (h.trackable !is DepthPoint) continue
+      val t = M.fromPose(h.hitPose)
+      val d = cameraPos.distance(M.pos(t))
+      if (d < DEPTH_NEAR_M || d > DEPTH_FAR_M) continue
+      val vertical = M.isVertical(t)
+      if (!vertical && M.col(t, 1).normalized().y < 0.75f) continue
+      stickyPlane = null
+      return Hit(t, null, HitKind.MESH, vertical)
+    }
+    stickyPlane = null
+    return null
   }
 
   // ---- paint loop --------------------------------------------------------------------------
