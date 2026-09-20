@@ -13,8 +13,8 @@ Cut from the 36h scope on purpose:
 - Stencils
 - Glitter / textures
 - Distance-based spray focus
-- Dynamic Island controls
-- Home-screen paint widget
+- ~~Dynamic Island controls~~ (built: paint Live Activity)
+- ~~Home-screen paint widget~~ (built: heat radar widget)
 - Battle-royale servers
 - Paintable-surface edge cases (painting on people / moving objects — canvases are fixed locations)
 
