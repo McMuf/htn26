@@ -1,76 +1,80 @@
 import { Platform, type TextStyle } from 'react-native';
 import { initialWindowMetrics } from 'react-native-safe-area-context';
 
-// Fresco "pixel arcade" look: Subway-Surfers chunky buttons x Kahoot purple/primary shapes x
+// Cospray "pixel arcade" look: Subway-Surfers chunky slabs x Kahoot purple/primary shapes x
 // early-2000s CRT / vaporwave pixel nostalgia. Flat colours, hard edges, hard shadows, no blur.
+// The contract lives in docs/ui-plan.md; every colour a screen uses comes from here.
 export const C = {
+  // base
   bg: '#12082b',
   bg2: '#1c0f42',
   ink: '#0a0620', // outline / hard shadow colour
-  panel: '#2c1868',
-  panelHi: '#4327a8',
-  panelLo: '#1b0f45',
-  card: '#221252',
+  // surfaces
+  panel: '#2c1868', panelHi: '#4327a8', panelLo: '#1b0f45',
+  tile: '#2b2059', tileHi: '#3a2d78', tileLo: '#1c1440',
+  plate: '#160b36', // pills, deep plates
+  well: '#150a36', // inputs, preview / image wells
+  key: '#1f1348', // tray keys, segment buttons
+  dockBar: '#0d062b',
+  // text ranks
   white: '#ffffff',
   text: '#ffffff',
   dim: '#cdbff5',
   faint: '#8f80c8',
   line: '#ffffff1a',
-
+  // accents (roles in docs/ui-plan.md)
+  yellow: '#ffd21f', yellowHi: '#fff07a', yellowLo: '#c48f00', yellowInk: '#2a1a00',
   green: '#59d92d', greenHi: '#9cff6b', greenLo: '#2b8a17',
-  yellow: '#ffd21f', yellowHi: '#fff07a', yellowLo: '#c48f00',
+  blue: '#3d6cff', blueHi: '#8fb0ff', blueLo: '#1f3fb8',
+  blueDeep: '#2444b8', blueDeepHi: '#3d6cff', blueDeepLo: '#182f8a',
   red: '#ff3d55', redHi: '#ff8a99', redLo: '#a8162c',
-  blue: '#2f80ff', blueHi: '#86b8ff', blueLo: '#1748b5',
   purple: '#7a45ff', purpleHi: '#ab8cff', purpleLo: '#4a22b8',
-  pink: '#ff4fa3',
-  phosphor: '#57ffa0', phosDim: '#1fae62',
-  // legacy names still used by a few overlays
-  cyan: '#19e6ff', lime: '#7cff3a', orange: '#ff8a1f', violet: '#b26bff',
 };
+
+/** Heat ramp for maps / the widget: cold -> ember -> warm -> blazing. */
+export const HEAT = [C.bg2, C.yellowLo, C.yellow, C.red] as const;
 
 export const F = {
   display: 'PixelifySans_700Bold',
-  displayMd: 'PixelifySans_600SemiBold',
   body: 'PixelifySans_500Medium',
-  bodyReg: 'PixelifySans_400Regular',
-  label: 'Silkscreen_400Regular',
-  labelBold: 'Silkscreen_700Bold',
   mono: 'VT323_400Regular',
 };
 
-export type Tone = 'green' | 'yellow' | 'red' | 'blue' | 'purple' | 'dark' | 'white' | 'panel';
-/** fill / bevel-highlight / bevel-shade for the chunky buttons and panels. */
+export type Tone = 'green' | 'yellow' | 'red' | 'blue' | 'blueDeep' | 'purple' | 'dark' | 'white' | 'panel' | 'tile';
+/** fill / bevel-highlight / bevel-shade / text for the chunky buttons and panels. */
 export const TONES: Record<Tone, { fill: string; hi: string; lo: string; text: string }> = {
-  green: { fill: C.green, hi: C.greenHi, lo: C.greenLo, text: '#ffffff' },
-  yellow: { fill: C.yellow, hi: C.yellowHi, lo: C.yellowLo, text: '#2a1a00' },
-  red: { fill: C.red, hi: C.redHi, lo: C.redLo, text: '#ffffff' },
-  blue: { fill: C.blue, hi: C.blueHi, lo: C.blueLo, text: '#ffffff' },
-  purple: { fill: C.purple, hi: C.purpleHi, lo: C.purpleLo, text: '#ffffff' },
-  dark: { fill: '#1a0f3a', hi: '#3a2a78', lo: '#0f0826', text: '#ffffff' },
-  white: { fill: '#ffffff', hi: '#ffffff', lo: '#b9aee0', text: '#1c0f42' },
-  panel: { fill: C.panel, hi: C.panelHi, lo: C.panelLo, text: '#ffffff' },
+  green: { fill: C.green, hi: C.greenHi, lo: C.greenLo, text: C.white },
+  yellow: { fill: C.yellow, hi: C.yellowHi, lo: C.yellowLo, text: C.yellowInk },
+  red: { fill: C.red, hi: C.redHi, lo: C.redLo, text: C.white },
+  blue: { fill: C.blue, hi: C.blueHi, lo: C.blueLo, text: C.white },
+  blueDeep: { fill: C.blueDeep, hi: C.blueDeepHi, lo: C.blueDeepLo, text: C.white },
+  purple: { fill: C.purple, hi: C.purpleHi, lo: C.purpleLo, text: C.white },
+  dark: { fill: '#1a0f3a', hi: '#3a2a78', lo: '#0f0826', text: C.white },
+  white: { fill: C.white, hi: C.white, lo: '#b9aee0', text: C.bg2 },
+  panel: { fill: C.panel, hi: C.panelHi, lo: C.panelLo, text: C.white },
+  tile: { fill: C.tile, hi: C.tileHi, lo: C.tileLo, text: C.white },
 };
 
-/** Screen background tones (top -> bottom) used by <Backdrop>. */
+/** Screen background tones (top -> bottom) used by <Backdrop>. `purple` is every screen; `night` is the launch page. */
 export const BACKDROPS = {
   purple: { top: '#3a1a8a', bottom: '#12082b', star: '#a889ff' },
   night: { top: '#1c0f42', bottom: '#07030f', star: '#7a45ff' },
-  terminal: { top: '#0c3a2a', bottom: '#03100b', star: '#57ffa0' },
-  magenta: { top: '#5a1466', bottom: '#150626', star: '#ff8fd0' },
-  blue: { top: '#1a3fa8', bottom: '#0b0a2e', star: '#86b8ff' },
 } as const;
 export type BackdropName = keyof typeof BACKDROPS;
 
 /**
- * Legibility: the pixel faces (Pixelify Sans, Silkscreen, VT323) only read well big. Anything under
- * ~16px — labels, captions, meta, HUD subtitles — uses the system face instead, so the arcade look
- * comes from the boxes, colours and headings rather than from text nobody can read.
+ * Legibility: the pixel faces (Pixelify Sans, VT323) only read well big. Anything under ~16px —
+ * labels, captions, meta, HUD subtitles — uses the system face instead, so the arcade look comes
+ * from the boxes, colours and headings rather than from text nobody can read.
  */
 export const ui = (size: number, weight: TextStyle['fontWeight'] = '600', letterSpacing = 0): TextStyle => ({ fontSize: size, fontWeight: weight, letterSpacing });
 /** All-caps section label / chip text. */
 export const uiLabel = (size = 11.5, letterSpacing = 0.9): TextStyle => ({ fontSize: size, fontWeight: '800', letterSpacing, textTransform: 'uppercase' });
 
-export const PX = 3; // one "pixel" of UI
+/** Spacing scale. */
+export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20 } as const;
+export const GUTTER = 18;
+
 export const DOCK_H = 66;
 // iPhone: padding for the home indicator. Android: clear the navigation bar too (3-button nav is
 // ~48 dp, gesture nav ~20 dp), or the dock's buttons sit under the system buttons.
@@ -78,7 +82,6 @@ export const DOCK_PAD = Platform.OS === 'android' ? Math.max(24, (initialWindowM
 export const DOCK_TOTAL = DOCK_H + DOCK_PAD;
 /** Space to leave under scrolling content so the dock never covers it. */
 export const DOCK_INSET = DOCK_TOTAL + 20;
-export const DOCK_BOTTOM = 0;
 /** Create-tab layout: the hold buttons sit just above the dock; the tools tray opens above them. */
 export const HOLD_BOTTOM = DOCK_TOTAL + 10;
 export const HOLD_H = 60;

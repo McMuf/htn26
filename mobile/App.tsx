@@ -3,9 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
-import { PixelifySans_400Regular, PixelifySans_500Medium, PixelifySans_600SemiBold, PixelifySans_700Bold } from '@expo-google-fonts/pixelify-sans';
+import { PixelifySans_500Medium, PixelifySans_700Bold } from '@expo-google-fonts/pixelify-sans';
 import { VT323_400Regular } from '@expo-google-fonts/vt323';
-import { Silkscreen_400Regular, Silkscreen_700Bold } from '@expo-google-fonts/silkscreen';
 import { hydrateStore, useStore } from './src/store';
 import { useLocation } from './src/hooks/useLocation';
 import { sfx } from './src/audio/sfx';
@@ -30,7 +29,7 @@ import { C } from './src/ui/theme';
 export default function App() {
   const [ready, setReady] = useState(false);
   const [launched, setLaunched] = useState(false);
-  const [fontsLoaded, fontError] = useFonts({ PixelifySans_400Regular, PixelifySans_500Medium, PixelifySans_600SemiBold, PixelifySans_700Bold, VT323_400Regular, Silkscreen_400Regular, Silkscreen_700Bold });
+  const [fontsLoaded, fontError] = useFonts({ PixelifySans_500Medium, PixelifySans_700Bold, VT323_400Regular });
   useEffect(() => {
     (async () => {
       await hydrateStore();

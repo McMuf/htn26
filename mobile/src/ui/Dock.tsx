@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { PixelBox } from './PixelBox';
 import { PixelIcon, type IconName } from './PixelIcon';
+import { haptic } from './haptics';
 import { C, DOCK_H, DOCK_PAD, TONES, uiLabel } from './theme';
 import { useStore, type Tab } from '../store';
 
@@ -16,11 +16,7 @@ const RIGHT: Item[] = [{ key: 'explore', label: 'EXPLORE', icon: 'explore' }, { 
 export function Dock() {
   const tab = useStore((s) => s.tab);
   const setTab = useStore((s) => s.setTab);
-  const haptics = useStore((s) => s.settings.haptics);
-  const go = (k: Tab) => {
-    if (haptics) Haptics.selectionAsync().catch(() => {});
-    setTab(k);
-  };
+  const go = (k: Tab) => { haptic.tap(); setTab(k); };
   const item = (t: Item) => <DockItem key={t.key} label={t.label} icon={t.icon} active={tab === t.key} onPress={() => go(t.key)} />;
   return (
     <View style={styles.wrap} pointerEvents="box-none">
@@ -34,19 +30,21 @@ export function Dock() {
   );
 }
 
+/** Side keys: lift when active, squash while pressed. */
 function DockItem({ label, icon, active, onPress }: { label: string; icon: IconName; active: boolean; onPress: () => void }) {
   const s = useSharedValue(active ? 1 : 0);
+  const d = useSharedValue(0);
   useEffect(() => { s.value = withSpring(active ? 1 : 0, { damping: 12, stiffness: 220 }); }, [active]);
-  const lift = useAnimatedStyle(() => ({ transform: [{ translateY: -6 * s.value }] }));
+  const lift = useAnimatedStyle(() => ({ transform: [{ translateY: -6 * s.value + 3 * d.value }] }));
   const t = TONES.yellow;
   return (
-    <Pressable onPress={onPress} style={styles.item} hitSlop={2}>
+    <Pressable onPress={onPress} onPressIn={() => { d.value = withSpring(1, { damping: 20, stiffness: 400 }); }} onPressOut={() => { d.value = withSpring(0, { damping: 14, stiffness: 300 }); }} style={styles.item} hitSlop={2}>
       <Animated.View style={[styles.itemInner, lift]}>
         {active ? (
           <PixelBox fill={t.fill} hi={t.hi} lo={t.lo} depth={4} style={StyleSheet.absoluteFill} contentStyle={{ flex: 1 }}><View style={{ flex: 1 }} /></PixelBox>
         ) : null}
-        <PixelIcon name={icon} size={24} color={active ? '#2a1a00' : C.dim} alt={active ? '#7a5200' : '#6f5fb0'} />
-        <Text style={[styles.label, { color: active ? '#2a1a00' : C.dim }]} numberOfLines={1}>{label}</Text>
+        <PixelIcon name={icon} size={24} color={active ? C.yellowInk : C.dim} alt={active ? C.yellowLo : C.faint} />
+        <Text style={[styles.label, { color: active ? C.yellowInk : C.dim }]} numberOfLines={1}>{label}</Text>
       </Animated.View>
     </Pressable>
   );
@@ -56,13 +54,12 @@ function DockItem({ label, icon, active, onPress }: { label: string; icon: IconN
 function CreateKey({ active, onPress }: { active: boolean; onPress: () => void }) {
   const [down, setDown] = useState(false);
   const t = TONES[active ? 'yellow' : 'green'];
-  const ink = active ? '#2a1a00' : '#ffffff';
   return (
     <Pressable onPress={onPress} onPressIn={() => setDown(true)} onPressOut={() => setDown(false)} hitSlop={4} style={styles.item}>
       <PixelBox fill={t.fill} hi={t.hi} lo={t.lo} n={6} depth={down ? 1 : 4} style={{ marginTop: down ? 3 : 0, marginHorizontal: 3 }}
         contentStyle={styles.keyIn}>
-        <PixelIcon name="create" size={24} color={ink} alt={active ? '#7a5200' : C.greenLo} />
-        <Text style={[styles.keyLabel, { color: ink }]}>CREATE</Text>
+        <PixelIcon name="create" size={24} color={t.text} alt={active ? C.yellowLo : C.greenLo} />
+        <Text style={[styles.keyLabel, { color: t.text }]}>CREATE</Text>
       </PixelBox>
     </Pressable>
   );
@@ -70,8 +67,8 @@ function CreateKey({ active, onPress }: { active: boolean; onPress: () => void }
 
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  edge: { height: 6, backgroundColor: '#4327a8', borderTopWidth: 3, borderTopColor: C.ink },
-  bar: { height: DOCK_H + DOCK_PAD - 6, backgroundColor: '#0d062b', flexDirection: 'row', paddingHorizontal: 4, paddingTop: 10 },
+  edge: { height: 6, backgroundColor: C.panelHi, borderTopWidth: 3, borderTopColor: C.ink },
+  bar: { height: DOCK_H + DOCK_PAD - 6, backgroundColor: C.dockBar, flexDirection: 'row', paddingHorizontal: 4, paddingTop: 10 },
   item: { flex: 1, height: 54 },
   itemInner: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, marginHorizontal: 3 },
   label: { ...uiLabel(10, 0.4) },
