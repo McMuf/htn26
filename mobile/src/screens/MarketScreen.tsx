@@ -84,7 +84,7 @@ export function MarketScreen() {
 
 function Card({ it, preview, children }: { it: Item; preview: React.ReactNode; children: React.ReactNode }) {
   return (
-    <PixelBox n={6} depth={5} fill={TONES.purple.fill} hi={TONES.purple.hi} lo={TONES.purple.lo} style={{ width: CARD }} contentStyle={{ padding: 10, gap: 8 }}>
+    <PixelBox n={6} depth={5} fill={TONES.tile.fill} hi={TONES.tile.hi} lo={TONES.tile.lo} style={{ width: CARD }} contentStyle={{ padding: 10, gap: 8 }}>
       <View style={styles.preview}>{preview}</View>
       <View>
         <Text style={styles.name} numberOfLines={1}>{it.name}</Text>

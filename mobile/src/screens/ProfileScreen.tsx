@@ -78,7 +78,7 @@ function Missions({ stats }: { stats: ReturnType<typeof dayStats> }) {
   const setSettings = useStore((s) => s.setSettings);
   const day = dayKey();
   return (
-    <Panel title="DAILY QUESTS" tone="purple" right={<T v="eyebrow">RESETS AT MIDNIGHT</T>}>
+    <Panel title="DAILY QUESTS" right={<T v="eyebrow">RESETS AT MIDNIGHT</T>}>
       {MISSIONS.map((m) => {
         const key = `${day}:${m.id}`;
         const got = Math.min(m.goal, m.get(stats));
@@ -113,6 +113,6 @@ const styles = StyleSheet.create({
   canBox: { width: 112, height: 150, alignItems: 'center', justifyContent: 'center', backgroundColor: C.well, borderWidth: 3, borderColor: C.ink },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   tiles: { flexDirection: 'row', gap: 8 },
-  mTitle: { flex: 1, fontFamily: F.display, fontSize: 17, color: C.white, ...outline(C.purpleLo) },
+  mTitle: { flex: 1, fontFamily: F.display, fontSize: 17, color: C.white, ...outline(C.ink) },
   mReward: { fontFamily: F.display, fontSize: 16, color: C.green },
 });

@@ -172,13 +172,14 @@ struct CanIcon: View {
     "....#.###########d#####.#..."
   ]
   static let bodyTop = 25, bodyBottom = 58 // sprite rows that hold paint
-  /// `logo` draws the icon exactly as the app icon (puff included, original colours); otherwise the body is recoloured and filled.
+  /// `logo` draws the icon in the app icon's own colours (no recolour / level fill); `puff` includes the spray cloud.
   var logo = false
+  var puff = false
   var body: some View {
     let rows = CanIcon.rows
     let (r, g, b) = rgb(color)
     let filled = Int((max(0, min(100, level)) / 100 * Double(CanIcon.bodyBottom - CanIcon.bodyTop + 1)).rounded())
-    let skip = logo ? 0 : 24 // the spray puff rows
+    let skip = puff ? 0 : 24 // the spray puff rows
     Canvas { ctx, _ in
       for (y, row) in rows.enumerated() {
         if y < skip { continue }

@@ -165,7 +165,7 @@ function Podium({ rows, me }: { rows: Painter[]; me?: string }) {
     );
   };
   return (
-    <Panel title="TOP PAINTERS" tone="purple" right={<T v="eyebrow">LIVE</T>}>
+    <Panel title="TOP PAINTERS" right={<T v="eyebrow">LIVE</T>}>
       {rows.length === 0 ? <T v="sub">No painters yet. Go tag something.</T> : (
         <>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>{col(second, 2)}{col(first, 1)}{col(third, 3)}</View>
