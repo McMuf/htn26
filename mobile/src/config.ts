@@ -39,7 +39,10 @@ export const SHAKE_ACCEL_THRESHOLD = 2.4; // g, user acceleration magnitude
 export const SHAKE_GAIN_PER_EVENT = 0.18;
 
 // ---- Volume trigger --------------------------------------------------------
-export const VOLUME_BASELINE = 0.5;
+// The rocker is pinned here so a press reads as a delta either way — which also fixes the phone's
+// media volume, since you can't turn it up without spraying. High enough to actually hear the can,
+// with room left above for VOL+ to register (iOS steps in 1/16ths).
+export const VOLUME_BASELINE = 0.75;
 export const VOLUME_HOLD_TIMEOUT_MS = 380; // no repeat event for this long = released
 
 // ---- Spray ----------------------------------------------------------------

@@ -39,9 +39,9 @@ class Sfx {
     } catch {}
   }
 
-  click() { this.oneShot(this.clickP, 0.45, 0.94 + Math.random() * 0.12); }
-  rattle(strength = 1) { this.oneShot(this.rattleP, 0.34 + 0.3 * strength, 0.94 + Math.random() * 0.12); }
-  emptyRattle() { this.oneShot(this.emptyP, 0.6, 1); }
+  click() { this.oneShot(this.clickP, 0.6, 0.94 + Math.random() * 0.12); }
+  rattle(strength = 1) { this.oneShot(this.rattleP, 0.55 + 0.35 * strength, 0.94 + Math.random() * 0.12); }
+  emptyRattle() { this.oneShot(this.emptyP, 0.85, 1); }
 
   /** strength 0..1 (can charge × paint), near 0..1 (aim pitch proxy for distance to surface). */
   setHiss(on: boolean, strength: number, near: number) {
@@ -59,7 +59,7 @@ class Sfx {
     }
     try {
       if (!this.hissing) { p.play(); this.hissing = true; }
-      p.volume = Math.min(0.8, 0.14 + 0.4 * strength);
+      p.volume = Math.min(0.95, 0.34 + 0.36 * strength);
       p.setPlaybackRate(0.92 + 0.16 * strength + 0.1 * near, 'low');
     } catch {}
   }
