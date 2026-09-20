@@ -125,6 +125,11 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     const val EXTENSION_MIN_INCIDENCE = 0.2f
     /** Normals this far from parallel mean two different surfaces meeting — a corner, not a gap. */
     const val PERPENDICULAR_DOT = 0.5f // 60 degrees apart
+    // ---- steadying a depth-derived reticle (no plane behind it, so no steadiness of its own) ----
+    const val MESH_SMOOTH_K = 0.25f
+    const val MESH_DEADBAND_M = 0.012f
+    const val MESH_DEADBAND_RAD = 0.035f // ~2 degrees
+    const val MESH_JUMP_M = 0.4f
     val CROSS_X = intArrayOf(0, -1, 1, 0, 0)
     val CROSS_Y = intArrayOf(0, 0, 0, -1, 1)
 
@@ -844,6 +849,9 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
 
   /** The plane the reticle was on last frame; it gets a wider margin, see raycastCenter. */
   private var stickyPlane: Plane? = null
+  /** Last depth-derived reticle pose, and when — depth hits are eased rather than followed raw. */
+  private var meshPose: M4? = null
+  private var meshAt = 0L
 
   private var lastVerify = 0L
   /** Pieces eligible for the check, and how many are currently hidden — reported to the debug HUD. */
@@ -1090,11 +1098,35 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     // tryAdopt binds it to a plane the moment ARCore finds one.
     for (h in hits) {
       if (h.trackable !is DepthPoint) continue
-      val t = M.fromPose(h.hitPose)
-      val d = cameraPos.distance(M.pos(t))
+      val raw = M.fromPose(h.hitPose)
+      val d = cameraPos.distance(M.pos(raw))
       if (d < DEPTH_NEAR_M || d > DEPTH_FAR_M) continue
-      val vertical = M.isVertical(t)
-      if (!vertical && M.col(t, 1).normalized().y < 0.75f) continue
+      val vertical = M.isVertical(raw)
+      val n0 = M.col(raw, 1).normalized()
+      if (!vertical && n0.y < 0.75f) continue
+
+      // A depth point has none of a plane's steadiness: on a blank wall the map is reconstructed
+      // from frame to frame, so its normal and its distance both wobble, and the reticle chases
+      // the wobble. Two corrections make it sit still.
+      //
+      // First, take the world's word over the measurement's: walls are plumb and floors are
+      // level, so a wall's normal is forced horizontal and a floor's straight up. Most of the
+      // visible jitter is orientation, and this removes it outright.
+      val n = if (vertical) V3(n0.x, 0f, n0.z).normalized() else V3(0f, 1f, 0f)
+      var t = quadFrame(M.pos(raw), n)
+
+      // Second, ease position frame to frame, with the same dead-band-and-jump rule that stops
+      // painted quads shimmering. A genuinely new aim point is a jump and arrives at once; noise
+      // around a still one is ignored. Dropped if the surface has been lost for a moment, so it
+      // never eases across the room from somewhere stale.
+      val nowMs = SystemClock.elapsedRealtime()
+      val prev = meshPose
+      if (prev != null && nowMs - meshAt < 300) {
+        t = M.settle(prev, t, MESH_SMOOTH_K, MESH_DEADBAND_M, MESH_DEADBAND_RAD, MESH_JUMP_M)
+      }
+      meshPose = t
+      meshAt = nowMs
+
       stickyPlane = null
       return Hit(t, null, HitKind.MESH, vertical)
     }
