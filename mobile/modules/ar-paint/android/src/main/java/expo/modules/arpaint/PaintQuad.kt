@@ -65,6 +65,17 @@ class PaintQuad(val id: String, var transform: M4) {
   var lastSnap = 0L
   /** Placed from memory (no shared map): allow a wider snap radius onto real planes. */
   var loose = false
+
+  /**
+   * This piece is on something that can be carried off — a chair, a box — rather than on a wall or
+   * a floor. Set when the quad binds to a plane and refreshed as ARCore grows it, because a wall
+   * starts out looking small. Only these are depth-checked for having moved.
+   */
+  var onFurniture = false
+  /** Depth says there is nothing where this paint sits: the surface it was on has gone. Hidden, not deleted. */
+  var missing = false
+  /** Evidence for [missing], with hysteresis, so one noisy depth frame can't flick paint in and out. */
+  var missScore = 0f
   /** False while waiting for a saved map to resolve: painted into, but not drawn or hit-tested. */
   var placed = true
   /** Pose in the saving session's north-aligned frame, used to place it once a saved map aligns. */

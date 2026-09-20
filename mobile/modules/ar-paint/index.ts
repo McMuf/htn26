@@ -29,7 +29,10 @@ export type ArTrackingEvent = {
 /** What the reticle is on: plane = detected geometry (locked), extended = known plane's extension, mesh = LiDAR (iPhone) / depth (Android), estimated = feature points. */
 export type HitKind = 'plane' | 'extended' | 'mesh' | 'estimated' | 'none';
 /** `drip` is only sent by builds made before paint stopped running; it is ignored. */
-export type ArHitEvent = { hit: boolean; distance: number; drip?: boolean; kind?: HitKind; vertical?: boolean; locked?: boolean };
+/** `watched` / `moved`: pieces on furniture-sized planes, and how many of those the depth map
+ *  currently says are floating because the thing they were painted on has been carried off.
+ *  Android only — ARKit's world is just as static, but the iPhone has no equivalent check yet. */
+export type ArHitEvent = { hit: boolean; distance: number; drip?: boolean; kind?: HitKind; vertical?: boolean; locked?: boolean; watched?: number; moved?: number };
 
 export type ArPaintViewProps = ViewProps & {
   spraying?: boolean;

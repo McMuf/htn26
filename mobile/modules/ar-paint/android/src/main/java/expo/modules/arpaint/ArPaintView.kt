@@ -21,6 +21,7 @@ import com.google.ar.core.Anchor
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.Camera
 import com.google.ar.core.Config
+import com.google.ar.core.Coordinates2d
 import com.google.ar.core.Frame
 import com.google.ar.core.Plane
 import com.google.ar.core.ResolveCloudAnchorFuture
@@ -56,11 +57,17 @@ import kotlin.math.min
  * DETECTION: horizontal + vertical plane finding, plus ARCore's Depth API (depth-from-motion on
  * phones without a depth sensor, e.g. Galaxy S25), which lets planes form on walls too blank to
  * give up feature points. The reticle hit-tests detected plane polygons first, then a plane's
- * extension within 0.9 m of what has been seen — and nothing else. Only floors and walls count;
+ * extension — and nothing else. The overhang scales with the plane, so a wall stays paintable past
+ * the patch ARCore has found while a chair seat stays chair-sized. Only floors and walls count;
  * ceilings, and the depth/feature points ARCore also offers, are rejected. See [raycastCenter].
  *
  * ANCHORING: every quad rides an ARCore anchor (attached to its plane when it has one), is snapped
  * onto a real plane when one appears (< 15 cm, < 14°) and re-snapped as ARCore refines it.
+ *
+ * MOVED SURFACES: ARCore assumes nothing in the world moves, so paint on a chair that gets pushed
+ * away is left hanging in the air. [verifySurfaces] samples the depth map where each piece on a
+ * furniture-sized plane sits, and hides the ones the camera can now see straight through. Hidden,
+ * not deleted: bring the chair back and the paint comes back on it.
  *
  * FRAME: ARCore's yaw is arbitrary; [HeadingEstimator] recovers the north-aligned frame the iPhone
  * uses, and everything crossing to JS (stroke transforms, viewer positions) is expressed in it.
@@ -75,6 +82,21 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     const val TAG = "ArPaint"
     const val HOST_TTL_DAYS = 1 // the maximum with API-key auth
     const val SAVE_TIMEOUT_MS = 30_000L
+
+    // ---- surface verification (see verifySurfaces) ----
+    /** Anything whose smaller side is under this can be picked up and carried off: a chair, a box,
+     *  a laptop. A wall or a floor cannot, and is never subjected to the check. */
+    const val FURNITURE_MAX_M = 2f
+    const val VERIFY_INTERVAL_MS = 200L
+    /** Measured depth must be this far behind the paint before it counts as seeing through it. */
+    const val DEPTH_CLEAR_MARGIN_M = 0.25f
+    /** Consecutive contradicting samples needed to hide a piece: ~1.2 s at 5 Hz. */
+    const val MISS_TO_HIDE = 6f
+    /** Depth-from-motion is only trustworthy in this band. */
+    const val DEPTH_NEAR_M = 0.4f
+    const val DEPTH_FAR_M = 4f
+    val CROSS_X = intArrayOf(0, -1, 1, 0, 0)
+    val CROSS_Y = intArrayOf(0, 0, 0, -1, 1)
   }
 
   private val onTracking by EventDispatcher()
@@ -511,6 +533,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
 
     updatePlanes(frame, now)
     updateQuadPoses()
+    verifySurfaces(frame, now)
 
     val hit = raycastCenter(frame)
     if (hit != null) {
@@ -558,7 +581,8 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       }
     }
     quadRenderer.beginPaint()
-    for (q in quads.values) if (q.placed) quadRenderer.drawPaint(viewProj, q)
+    // q.missing: the surface this was painted on has been carried off, so the paint goes with it
+    for (q in quads.values) if (q.placed && !q.missing) quadRenderer.drawPaint(viewProj, q)
     if (hit != null && overlays) {
       val t = hit.transform
       val n = M.col(t, 1).normalized()
@@ -646,14 +670,21 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
   }
 
   /** Bind an estimated quad to a real plane and pull it onto that plane. */
+  /** Small enough to be picked up and carried off. A wall or a floor is not. */
+  private fun isFurniture(p: Plane?) = p != null && min(p.extentX, p.extentZ) <= FURNITURE_MAX_M
+
   private fun adopt(q: PaintQuad, plane: Plane, now: Long) {
     q.plane = plane
     q.loose = false
+    q.onFurniture = isFurniture(plane)
     snap(q, plane, now, force = true)
   }
 
   /** Move a quad onto its plane (position projected along the normal, orientation from the plane's normal). Debounced. */
   private fun snap(q: PaintQuad, plane: Plane, now: Long, force: Boolean = false) {
+    // ARCore grows a plane as it sees more of it, and a wall's first patch looks like a tabletop,
+    // so the furniture verdict is re-taken every time rather than latched at first contact.
+    q.onFurniture = isFurniture(plane)
     if (!force && now - q.lastSnap < 700) return
     val pn = planeNormal(plane)
     val pc = planeCenter(plane)
@@ -692,6 +723,103 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       if (p.trackingState != TrackingState.TRACKING || p.subsumedBy != null) continue
       if (tryAdopt(q, p, now)) return
     }
+  }
+
+  // ---- surface verification --------------------------------------------------------------
+
+  private var lastVerify = 0L
+  /** Pieces eligible for the check, and how many are currently hidden — reported to the debug HUD. */
+  @Volatile private var watchedCount = 0
+  @Volatile private var movedCount = 0
+  private val viewIn = FloatArray(2)
+  private val texOut = FloatArray(2)
+  private val depthSamples = FloatArray(5)
+
+  /**
+   * Notice when the thing you painted has been carried off, and take the paint with it.
+   *
+   * ARCore assumes the world holds still. Spray a chair, push the chair away, and the anchor stays
+   * where the chair was — the piece hangs in mid-air, which is the single most obviously fake
+   * thing the app can do. There is no callback for it: a plane that moved is not subsumed and not
+   * stopped, it simply stops describing reality, and ARCore goes on reporting it.
+   *
+   * The depth map is the one thing that can tell. Where the paint claims to sit, ARCore measures
+   * the distance to whatever is actually in front of the camera. If that measurement comes back
+   * well *behind* the paint, we are looking through the space the surface used to occupy. Hold
+   * that reading and the piece is hidden — hidden, not deleted, so wheeling the chair back brings
+   * the paint back with it, which is also what makes a false positive survivable.
+   *
+   * Deliberately timid, because depth-from-motion on a phone with no ToF sensor is noisy, and
+   * paint vanishing while you are painting it would be far worse than paint floating:
+   *  - only pieces on furniture-sized planes are eligible, so a wall or floor piece can never go;
+   *  - evidence accrues at 5 Hz and needs ~1.2 s of agreement, while confirming evidence counts
+   *    double against it, so returning is twice as easy as leaving;
+   *  - the sample must sit well inside the frame and inside depth's useful range;
+   *  - a five-texel median, so one dead pixel decides nothing.
+   */
+  private fun verifySurfaces(frame: Frame, now: Long) {
+    if (!depthEnabled || now - lastVerify < VERIFY_INTERVAL_MS) return
+    lastVerify = now
+    watchedCount = quads.values.count { it.placed && it.onFurniture }
+    movedCount = quads.values.count { it.missing }
+    if (watchedCount == 0) return
+    val img = try { frame.acquireDepthImage16Bits() } catch (e: Exception) { return } // usually NotYetAvailable
+    try {
+      val plane = img.planes[0]
+      val buf = plane.buffer.order(ByteOrder.nativeOrder()).asShortBuffer()
+      val stride = plane.rowStride / 2
+      for (q in quads.values) {
+        if (!q.placed || !q.onFurniture) continue
+        val delta = depthDelta(frame, q.center, img.width, img.height, buf, stride) ?: continue
+        q.missScore = (q.missScore + if (delta > DEPTH_CLEAR_MARGIN_M) 1f else -2f).coerceIn(0f, MISS_TO_HIDE)
+        val missing = q.missScore >= MISS_TO_HIDE
+        if (missing != q.missing) {
+          q.missing = missing
+          Log.i(TAG, "surface ${if (missing) "gone" else "back"}: ${q.id}")
+        }
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "depth verify failed", e)
+    } finally {
+      img.close()
+    }
+  }
+
+  /**
+   * How far the measured surface is behind this point, in metres, or null if the sample can't be
+   * trusted. Positive means free space where the paint is.
+   */
+  private fun depthDelta(frame: Frame, p: V3, dw: Int, dh: Int, buf: java.nio.ShortBuffer, stride: Int): Float? {
+    val m = viewProj
+    val cw = m[3] * p.x + m[7] * p.y + m[11] * p.z + m[15]
+    if (cw <= 0f) return null // behind the camera
+    val ndcX = (m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12]) / cw
+    val ndcY = (m[1] * p.x + m[5] * p.y + m[9] * p.z + m[13]) / cw
+    if (abs(ndcX) > 0.7f || abs(ndcY) > 0.7f) return null // edges are where depth is worst
+
+    // The depth map measures along the camera axis, not along the ray, so compare like with like.
+    val paintZ = -(viewM[2] * p.x + viewM[6] * p.y + viewM[10] * p.z + viewM[14])
+    if (paintZ < DEPTH_NEAR_M || paintZ > DEPTH_FAR_M) return null
+
+    viewIn[0] = (ndcX * 0.5f + 0.5f) * viewportW
+    viewIn[1] = (0.5f - ndcY * 0.5f) * viewportH // GL is y-up, the view is y-down
+    try {
+      frame.transformCoordinates2d(Coordinates2d.VIEW, viewIn, Coordinates2d.TEXTURE_NORMALIZED, texOut)
+    } catch (e: Exception) { return null }
+    val tx = (texOut[0] * dw).toInt()
+    val ty = (texOut[1] * dh).toInt()
+    if (tx < 1 || ty < 1 || tx >= dw - 1 || ty >= dh - 1) return null
+
+    var n = 0
+    for (i in 0 until 5) {
+      val raw = buf.get((ty + CROSS_Y[i]) * stride + (tx + CROSS_X[i])).toInt() and 0xFFFF
+      val mm = raw and 0x1FFF        // low 13 bits: millimetres
+      if (mm == 0 || (raw shr 13) == 0) continue // no reading, or zero confidence
+      depthSamples[n++] = mm / 1000f
+    }
+    if (n < 3) return null
+    java.util.Arrays.sort(depthSamples, 0, n)
+    return depthSamples[n / 2] - paintZ
   }
 
   // ---- hit testing -----------------------------------------------------------------------
@@ -797,6 +925,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     val id = "paint-a-" + UUID.randomUUID().toString().lowercase()
     val q = PaintQuad(id, quadFrame(p, hit.plane?.let { planeNormal(it) } ?: n))
     q.plane = hit.plane
+    q.onFurniture = isFurniture(hit.plane)
     quads[id] = q
     anchorQuad(q)
     emitSurface(mapOf("id" to id, "count" to quads.size, "kind" to hit.kind.js))
@@ -1037,7 +1166,9 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
   }
 
   private fun emitTracking(body: Map<String, Any>) = main.post { if (!destroyed) onTracking(body) }
-  private fun emitHit(body: Map<String, Any>) = main.post { if (!destroyed) onHit(body) }
+  /** Every hit event also carries how the moved-surface check is doing, for the debug HUD. */
+  private fun emitHit(body: Map<String, Any>) =
+    main.post { if (!destroyed) onHit(body + mapOf("watched" to watchedCount, "moved" to movedCount)) }
   private fun emitStrokeEnd(body: Map<String, Any>) = main.post { if (!destroyed) onStrokeEnd(body) }
   private fun emitSurface(body: Map<String, Any>) = main.post { if (!destroyed) onSurface(body) }
 }

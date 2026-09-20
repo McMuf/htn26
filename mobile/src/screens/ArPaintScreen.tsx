@@ -73,6 +73,8 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const [justFound, setJustFound] = useState<Canvas | null>(null);
   const [mapState, setMapState] = useState<'none' | 'loading' | 'relocalizing' | 'resolved' | 'approx'>('none');
   const [hitInfo, setHitInfo] = useState<{ kind: HitKind; vertical: boolean; locked: boolean; dist: number }>({ kind: 'none', vertical: false, locked: false, dist: 1 });
+  /** Moved-surface check: pieces watched, and how many are hidden because their surface left. */
+  const moved = useRef({ watched: 0, gone: 0 });
   const [hinted, setHinted] = useState(true); // first-run hint, hidden after the first spray
   const [detail, setDetail] = useState<Canvas | null>(null);
   const [mapNote, setMapNote] = useState<HudLine | null>(null);
@@ -285,6 +287,8 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const onHit = useCallback((e: { nativeEvent: ArHitEvent }) => {
     const ev = e.nativeEvent;
     engine.hit.current = ev.hit;
+    // how the moved-surface check is doing; debug HUD only, so keep it out of React state
+    moved.current = { watched: ev.watched ?? 0, gone: ev.moved ?? 0 };
     const kind = ev.kind ?? (ev.hit ? 'estimated' : 'none');
     if (ev.hit && ev.distance > 0) engine.dist.current = ev.distance;
     setHitInfo((p) => (p.kind === kind && p.vertical === !!ev.vertical && p.locked === !!ev.locked && Math.abs(p.dist - (ev.distance ?? p.dist)) < 0.1 ? p
@@ -350,7 +354,7 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
         found={found}
         onOpenFound={() => found && setDetail(found)}
         notice={notice}
-        debug={settings.debugHud ? `planes ${tracking.planes ?? 0} · quads ${surfaces} · ${arPlatform === 'arcore' ? `${tracking.depth ? 'depth' : 'no depth'} · compass ${tracking.heading ?? '…'}` : hasLidar ? 'lidar' : 'no lidar'} · hit ${hitInfo.kind} · held ${ui.held} · block ${ui.blocker ?? '-'} · gps ${location ? `±${Math.round(location.accuracy)}m` : '…'} · map ${tracking.mapping || '-'}` : null}
+        debug={settings.debugHud ? `planes ${tracking.planes ?? 0} · quads ${surfaces} · ${arPlatform === 'arcore' ? `${tracking.depth ? 'depth' : 'no depth'} · compass ${tracking.heading ?? '…'}` : hasLidar ? 'lidar' : 'no lidar'} · hit ${hitInfo.kind} · surf ${moved.current.gone}/${moved.current.watched} · held ${ui.held} · block ${ui.blocker ?? '-'} · gps ${location ? `±${Math.round(location.accuracy)}m` : '…'} · map ${tracking.mapping || '-'}` : null}
         onStart={engine.start}
         onEnd={engine.end}
         onUndo={canUndo ? onUndo : null}
