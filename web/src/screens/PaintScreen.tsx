@@ -258,9 +258,9 @@ export function PaintScreen({ active, locationStatus }: Props) {
     <div className={`paint${active ? '' : ' hidden'}`} aria-hidden={!active}>
       {!live ? (
         <div className="gate">
-          <div className="brand">FRESCO</div>
+          <div className="wordmark">COSPRAY</div>
           <div className="sub">Aim your phone at a wall. Hold A or B to spray. Shake the phone to charge the can.</div>
-          <button type="button" className="gate-btn" onClick={onGate} disabled={starting}>{starting ? 'STARTING…' : 'START PAINTING'}</button>
+          <button type="button" className="btn lg pxbox green press" onClick={onGate} disabled={starting}>{starting ? 'STARTING…' : 'PRESS START'}</button>
           <div className="hint">Uses your camera, motion sensors and location.</div>
           {locationStatus === 'denied' && <div className="err">{LOCATION_DENIED_MSG}</div>}
           <button type="button" className="gate-link" onClick={() => setSettingsOpen(true)}>settings</button>
@@ -270,7 +270,6 @@ export function PaintScreen({ active, locationStatus }: Props) {
           <video ref={videoRef} className="cam" playsInline muted autoPlay disablePictureInPicture />
           <PaintLayer walls={discovery.walls} />
           <Reticle spraying={ui.spraying} offWall={ui.offWall} />
-          <CanMeter />
           <DiscoveryOverlay d={discovery} onReport={onReport} />
           <div className="hud-stack">
             {ui.blocker ? <BlockerBanner blocker={ui.blocker} />
@@ -278,12 +277,13 @@ export function PaintScreen({ active, locationStatus }: Props) {
               : <WallChip state={wallState} />}
           </div>
           {tools && <ToolsTray onClose={() => setTools(false)} />}
-          <HoldButtons onStart={engine.start} onEnd={engine.end} keyboard={active} onTools={() => setTools((v) => !v)} />
+          <div className="deck pxbox plate">
+            <CanMeter onTools={() => setTools((v) => !v)} />
+            <HoldButtons onStart={engine.start} onEnd={engine.end} keyboard={active} />
+          </div>
 
           <div className="topbar">
-            <div className="topbar-brand">FRESCO</div>
             <div className="topbar-status">{painter?.name ?? '—'} · {online ? 'live' : 'offline'} · {ui.yaw}°</div>
-            <button type="button" className="gear" aria-label="Settings" onClick={() => setSettingsOpen(true)}>⚙︎</button>
           </div>
 
           {allNotices.length > 0 && (

@@ -9,7 +9,7 @@ export function Site({ path }: { path: string }) {
   return (
     <div className={`site site-${page}`}>
       <nav className="topnav">
-        <a href="/" className="logo"><span className="logo-f">F</span> FRESCO</a>
+        <a href="/" className="logo">COSPRAY</a>
         <div className="links">
           <a href="/world" className={page === 'world' ? 'on' : ''}>Live world</a>
           <a href="/gallery" className={page === 'gallery' ? 'on' : ''}>Gallery</a>

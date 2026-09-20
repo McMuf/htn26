@@ -1,6 +1,5 @@
 import WidgetKit
 import SwiftUI
-import MapKit
 
 // The app writes these keys into the shared App Group UserDefaults (see src/lib/widget.ts):
 //   paintA, paintB (0-100), shake (0-100), colorA, colorB (hex), tag (string), updatedAt (unix seconds),
@@ -36,9 +35,9 @@ struct CanEntry: TimelineEntry {
   let paintUsed: Int
   let heat: HeatPayload?
   let today: TodayPayload?
-  var map: MapSnap? = nil
+  let map: MapSnap?
 
-  static func load() -> CanEntry {
+  static func load(family: WidgetFamily = .systemSmall) -> CanEntry {
     let d = UserDefaults(suiteName: appGroup)
     let a = d?.object(forKey: "paintA") as? Double ?? 100
     let b = d?.object(forKey: "paintB") as? Double ?? 100
@@ -53,74 +52,27 @@ struct CanEntry: TimelineEntry {
       streak: d?.object(forKey: "streak") as? Int ?? 0,
       nameA: d?.string(forKey: "nameA") ?? "Neon green", nameB: d?.string(forKey: "nameB") ?? "Dark purple",
       strokes: d?.object(forKey: "strokes") as? Int ?? 0, paintUsed: d?.object(forKey: "paintUsed") as? Int ?? 0,
-      heat: HeatPayload.load(d), today: TodayPayload.load(d))
+      heat: HeatPayload.load(d), today: TodayPayload.load(d), map: MapSnap.load(d, wide: family == .systemLarge))
   }
 }
 
-/// A street-map snapshot of the user's vicinity plus every piece projected onto it (points, in the snapshot's coordinate space).
+/// A street-map snapshot the app rendered into the App Group (src/lib/widgetHeat.ts), plus every piece
+/// projected into it. `sq` for the square families, `wide` for the large one.
 struct MapSnap {
-  struct Pt { let x: CGFloat; let y: CGFloat; let w: Double; let id: String }
+  struct Pt: Decodable { let id: String; let x: CGFloat; let y: CGFloat; let w: Double }
+  struct Meta: Decodable { let w: CGFloat; let h: CGFloat; let pts: [Pt] }
+  struct Payload: Decodable { let at: Int; let sq: Meta; let wide: Meta }
   let image: UIImage
   let size: CGSize
   let pts: [Pt]
-}
-
-struct CanProvider: TimelineProvider {
-  func placeholder(in context: Context) -> CanEntry { CanEntry.load() }
-  func getSnapshot(in context: Context, completion: @escaping (CanEntry) -> Void) { completion(CanEntry.load()) }
-  func getTimeline(in context: Context, completion: @escaping (Timeline<CanEntry>) -> Void) {
-    // Paint regenerates ~2.2/s in the app; the app pushes fresh values whenever they change, and we
-    // also refresh every 15 minutes so a closed app still shows a filling can.
-    var entry = CanEntry.load()
-    let next = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
-    let size = mapSize(for: context.family, display: context.displaySize)
-    snapshotMap(heat: entry.heat, size: size) { snap in
-      entry.map = snap
-      completion(Timeline(entries: [entry], policy: .after(next)))
-    }
-  }
-
-  func mapSize(for family: WidgetFamily, display: CGSize) -> CGSize {
-    switch family {
-    case .systemSmall: return CGSize(width: display.width, height: display.height)
-    case .systemMedium: return CGSize(width: display.height, height: display.height)
-    case .systemLarge: return CGSize(width: display.width, height: 190)
-    default: return .zero
-    }
-  }
-
-  /// Apple's dark tiles, no labels or POIs, framed on the user at the payload's radius; the pieces are
-  /// projected with the snapshot's own transform. Times out to nil, and the view falls back to the radar.
-  func snapshotMap(heat: HeatPayload?, size: CGSize, done: @escaping (MapSnap?) -> Void) {
-    guard let h = heat, size.width > 0 else { done(nil); return }
-    let center = CLLocationCoordinate2D(latitude: h.lat, longitude: h.lng)
-    let opts = MKMapSnapshotter.Options()
-    let aspect = size.width / max(1, size.height)
-    // tight: a few blocks around you, whatever the payload's search radius was
-    let span = min(h.radiusM, 150) * 2
-    opts.region = MKCoordinateRegion(center: center, latitudinalMeters: span, longitudinalMeters: span * Double(max(1, aspect)))
-    opts.size = size
-    opts.scale = 1
-    opts.mapType = .mutedStandard
-    opts.pointOfInterestFilter = .excludingAll
-    opts.showsBuildings = false
-    opts.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
-    var finished = false
-    let snapper = MKMapSnapshotter(options: opts)
-    let timeout = DispatchWorkItem { if !finished { finished = true; snapper.cancel(); done(nil) } }
-    DispatchQueue.global().asyncAfter(deadline: .now() + 6, execute: timeout)
-    snapper.start { snap, _ in
-      guard !finished else { return }
-      finished = true; timeout.cancel()
-      guard let snap = snap else { done(nil); return }
-      let cosLat = cos(h.lat * .pi / 180)
-      let pts = h.spots.map { s -> MapSnap.Pt in
-        let c = CLLocationCoordinate2D(latitude: h.lat + s.dy / 111320, longitude: h.lng + s.dx / (111320 * cosLat))
-        let p = snap.point(for: c)
-        return MapSnap.Pt(x: p.x, y: p.y, w: s.w, id: s.id)
-      }
-      done(MapSnap(image: pixelate(snap.image, cell: 4), size: size, pts: pts))
-    }
+  static func load(_ d: UserDefaults?, wide: Bool) -> MapSnap? {
+    guard let s = d?.string(forKey: "map"), let data = s.data(using: .utf8), let p = try? JSONDecoder().decode(Payload.self, from: data),
+          let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) else { return nil }
+    let meta = wide ? p.wide : p.sq
+    let url = dir.appendingPathComponent(wide ? "widgetmap_wide.png" : "widgetmap_sq.png")
+    guard let img = UIImage(contentsOfFile: url.path) else { return nil }
+    // the look: streets as chunky pixels (each 4-point block becomes one flat pixel)
+    return MapSnap(image: pixelate(img, cell: 4), size: CGSize(width: meta.w, height: meta.h), pts: meta.pts)
   }
 }
 
@@ -131,6 +83,18 @@ func pixelate(_ img: UIImage, cell: CGFloat) -> UIImage {
   return UIGraphicsImageRenderer(size: CGSize(width: w, height: h), format: fmt).image { ctx in
     ctx.cgContext.interpolationQuality = .none
     img.draw(in: CGRect(x: 0, y: 0, width: w, height: h))
+  }
+}
+
+struct CanProvider: TimelineProvider {
+  func placeholder(in context: Context) -> CanEntry { CanEntry.load(family: context.family) }
+  func getSnapshot(in context: Context, completion: @escaping (CanEntry) -> Void) { completion(CanEntry.load(family: context.family)) }
+  func getTimeline(in context: Context, completion: @escaping (Timeline<CanEntry>) -> Void) {
+    // Paint regenerates ~2.2/s in the app; the app pushes fresh values whenever they change, and we
+    // also refresh every 15 minutes so a closed app still shows a filling can.
+    let entry = CanEntry.load(family: context.family)
+    let next = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
+    completion(Timeline(entries: [entry], policy: .after(next)))
   }
 }
 
@@ -223,7 +187,7 @@ struct CanSlot: View {
   let color: Color; let level: Double; let name: String; let cell: CGFloat
   var body: some View {
     VStack(spacing: 3) {
-      CanIcon(color: color, level: level, cell: cell, logo: true)
+      CanIcon(color: color, level: level, cell: cell, logo: true, puff: true)
       HStack(spacing: 4) {
         Notched(n: 1.5).fill(color).frame(width: 10, height: 10).overlay(Notched(n: 1.5).stroke(T.ink, lineWidth: 1.5))
         Text("\(Int(level))%").font(PF.display(11)).foregroundStyle(.white)

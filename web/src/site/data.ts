@@ -54,9 +54,9 @@ export function timeAgo(iso: string) {
 
 /** Sample spots so the pages never look dead before anyone paints. Marked as samples in the UI. */
 export const SAMPLE_CANVASES: Canvas[] = [
-  { id: 'sample-e7', lat: 43.4729, lng: -80.5397, heading: 200, title: 'E7 underpass', author_id: null, author_name: 'NEON_KID', views: 128, stroke_count: 41, flags: 0, flagged: false, created_at: ago(3), updated_at: ago(1) },
-  { id: 'sample-slc', lat: 43.4716, lng: -80.5451, heading: 90, title: 'SLC wall', author_id: null, author_name: 'sprayzilla', views: 96, stroke_count: 29, flags: 0, flagged: false, created_at: ago(8), updated_at: ago(2) },
-  { id: 'sample-dc', lat: 43.4727, lng: -80.5421, heading: 320, title: 'DC library', author_id: null, author_name: 'mira.wav', views: 61, stroke_count: 18, flags: 0, flagged: false, created_at: ago(20), updated_at: ago(5) },
+  { id: 'sample-e7', lat: 43.4729, lng: -80.5397, heading: 200, title: 'E7 underpass', author_id: null, author_name: 'NEON_KID', views: 128, upvotes: 0, stroke_count: 41, flags: 0, flagged: false, created_at: ago(3), updated_at: ago(1) },
+  { id: 'sample-slc', lat: 43.4716, lng: -80.5451, heading: 90, title: 'SLC wall', author_id: null, author_name: 'sprayzilla', views: 96, upvotes: 0, stroke_count: 29, flags: 0, flagged: false, created_at: ago(8), updated_at: ago(2) },
+  { id: 'sample-dc', lat: 43.4727, lng: -80.5421, heading: 320, title: 'DC library', author_id: null, author_name: 'mira.wav', views: 61, upvotes: 0, stroke_count: 18, flags: 0, flagged: false, created_at: ago(20), updated_at: ago(5) },
 ];
 export const isSample = (id: string) => id.startsWith('sample-');
 function ago(h: number) { return new Date(Date.now() - h * 3600e3).toISOString(); }

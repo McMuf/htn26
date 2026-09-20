@@ -9,6 +9,11 @@ import { AuthScreen } from './screens/AuthScreen';
 import { NameScreen } from './screens/NameScreen';
 import { PaintScreen } from './screens/PaintScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { ProfileScreen } from './screens/ProfileScreen';
+import { VaultScreen } from './screens/VaultScreen';
+import { ExploreScreen } from './screens/ExploreScreen';
+import { SocialScreen } from './screens/SocialScreen';
+import { Sidebar } from './ui/Sidebar';
 
 /**
  * The QR client: scan → type a tag → paint. One screen, no account and no tabs — anyone who scans
@@ -93,7 +98,7 @@ function Splash({ line }: { line: string }) {
   return (
     <div className="form-screen">
       <div className="form">
-        <div className="brand">FRESCO</div>
+        <div className="wordmark">COSPRAY</div>
         <div className="sub">{line}</div>
       </div>
     </div>
@@ -105,7 +110,7 @@ function RetryScreen({ message, onRetry }: { message?: string; onRetry: () => vo
   return (
     <div className="form-screen">
       <div className="form">
-        <div className="brand">FRESCO</div>
+        <div className="wordmark">COSPRAY</div>
         <div className="sub">Could not reach the server to load your tag.</div>
         {message && <div className="err" role="alert">{message}</div>}
         <button type="button" className="btn" onClick={onRetry}>RETRY</button>
@@ -116,10 +121,12 @@ function RetryScreen({ message, onRetry }: { message?: string; onRetry: () => vo
 }
 
 /**
- * One screen: the wall. The map and leaderboard tabs are gone. The settings sheet stays because it
- * is where the colours and caps live — the paint screen's own button opens it.
+ * The phone app's shell on the web: the paint screen (this client's own compass-anchored engine)
+ * plus Profile, Vault, Explore and Social, behind a side drawer instead of the dock. The paint
+ * screen stays mounted so the camera and sensors survive tab switches.
  */
 function Shell() {
+  const tab = useStore((s) => s.tab);
   const sound = useStore((s) => s.settings.sound);
   const location = useStore((s) => s.location);
   const locationStatus = useLocation();
@@ -145,7 +152,12 @@ function Shell() {
 
   return (
     <>
-      <PaintScreen active locationStatus={locationStatus} />
+      <Sidebar />
+      <PaintScreen active={tab === 'paint'} locationStatus={locationStatus} />
+      {tab === 'profile' && <ProfileScreen />}
+      {tab === 'vault' && <VaultScreen />}
+      {tab === 'explore' && <ExploreScreen />}
+      {tab === 'social' && <SocialScreen />}
       <SettingsScreen />
     </>
   );

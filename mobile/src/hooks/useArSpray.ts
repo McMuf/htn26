@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
   CANVAS_JOIN_RADIUS_M, GEOFENCE, PAINT_COST_PER_SEC, PAINT_EMPTY_THRESHOLD, PAINT_LOW_THRESHOLD, PAINT_MAX,
-  PAINT_REGEN_PER_SEC, SHAKE_DECAY_SECONDS, SHAKE_GAIN_PER_EVENT, SHAKE_MIN_TO_SPRAY, SPRAY_RADIUS_M, STROKE_CAP,
+  PAINT_REGEN_PER_SEC, SHAKE_ACCEL_THRESHOLD, SHAKE_DECAY_SECONDS, SHAKE_FLOOR_G, SHAKE_GAIN_PER_G_SEC, SHAKE_MIN_TO_SPRAY, SPRAY_RADIUS_M, STROKE_CAP,
 } from '../config';
 import { haversineM, wrap360 } from '../lib/geo';
 import { uuid } from '../lib/ids';
@@ -24,6 +24,9 @@ import { OPACITY, THICKNESS } from '../lib/economy';
  */
 /** Round to a step, so 10Hz jitter doesn't count as a change. */
 const q = (v: number, step: number) => Math.round(v / step) * step;
+
+/** Last time the rattle actually played, so continuous shaking does not machine-gun it. */
+let rattleAt = 0;
 
 export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeSaved?: (s: Stroke) => void }) {
   const held = useRef<Side | null>(null);
@@ -53,9 +56,15 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     return () => clearInterval(id);
   }, []);
 
-  const onShake = (mag: number) => {
+  const onShake = (mag: number, dt: number) => {
     const st = useStore.getState();
-    st.setShake(Math.min(1, st.shake + SHAKE_GAIN_PER_EVENT * Math.min(2, mag / 2.4)));
+    // Charge integrates the motion, so shaking steadily charges steadily.
+    const over = Math.max(0, mag - SHAKE_FLOOR_G);
+    if (over > 0 && st.shake < 1) st.setShake(Math.min(1, st.shake + SHAKE_GAIN_PER_G_SEC * over * dt));
+    // The rattle stays an event — played on every sample it would be a drone, not a can.
+    const now = Date.now() / 1000;
+    if (mag < SHAKE_ACCEL_THRESHOLD || now - rattleAt < 0.18) return;
+    rattleAt = now;
     const low = Math.min(st.paint.A, st.paint.B) < PAINT_LOW_THRESHOLD;
     if (st.settings.sound) low ? sfx.emptyRattle() : sfx.rattle(Math.min(1, mag / 4));
     if (st.settings.haptics) Haptics.impactAsync(low ? Haptics.ImpactFeedbackStyle.Rigid : Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});

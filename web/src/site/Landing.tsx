@@ -10,7 +10,7 @@ export function Landing() {
       <section className="hero">
         <div className="hero-copy">
           <div className="eyebrow">HACK THE NORTH 2026</div>
-          <h1>FRESCO</h1>
+          <h1>COSPRAY</h1>
           <p className="lede">The world is your wall. Aim your phone like a spray can, hold to paint, and your piece stays on that spot for everyone who walks up to it later.</p>
           <div className="cta-row">
             <a className="btn" href="/world">See the live world →</a>

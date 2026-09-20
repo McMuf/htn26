@@ -42,7 +42,7 @@ export function AuthScreen({ note }: { note?: string }) {
   return (
     <div className="form-screen">
       <form className="form" onSubmit={go} noValidate>
-        <div className="brand">FRESCO</div>
+        <div className="wordmark">COSPRAY</div>
         <div className="sub">r/place, but graffiti in the real world.</div>
         {note && <div className="hint">Could not start a guest session ({note}). Sign in instead.</div>}
         <label className="label" htmlFor="auth-email">Email</label>

@@ -11,7 +11,7 @@ export function Gallery() {
   return (
     <main className="page">
       <header className="page-head">
-        <h1>TRENDING FRESCOS</h1>
+        <h1>TRENDING PIECES</h1>
         <p className="muted">{w.usingSamples ? 'nothing on the wall yet — showing sample spots' : `${w.canvases.length} pieces · ranked by views, strokes and freshness · updates live`}</p>
       </header>
       <section className="grid">

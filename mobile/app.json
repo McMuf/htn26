@@ -55,6 +55,7 @@
       ]
     },
     "plugins": [
+      "expo-router",
       [
         "expo-camera",
         {
@@ -90,6 +91,7 @@
         }
       ],
       "expo-dev-client",
+      "expo-updates",
       "expo-sharing",
       "expo-asset",
       "./modules/ar-paint/app.plugin.js",
@@ -124,6 +126,13 @@
         "projectId": "5513273d-ce1f-442b-9051-954075d16d0a"
       }
     },
-    "owner": "synaraapp"
+    "owner": "synaraapp",
+    "updates": {
+      "url": "https://u.expo.dev/5513273d-ce1f-442b-9051-954075d16d0a",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
   }
 }

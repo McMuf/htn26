@@ -85,6 +85,12 @@ export const canUndo: boolean = !!NativeModule?.hasUndo;
 export const arPlatform: ArPlatform | null = NativeModule ? (NativeModule.platform ?? 'arkit') : null;
 /** Android: Cloud Anchors are configured (ARCore API key present), so pieces can be saved for exact re-placement. */
 export const hasCloudAnchors: boolean = !!NativeModule?.cloudAnchors;
+/** Path of the app's own App Group container (iOS only). */
+export const appGroupPath: string | null = (NativeModule as any)?.appGroupPath ?? null;
+export type MapSnapshotResult = { path: string; width: number; height: number; pts: { id: string; x: number; y: number; w: number }[] };
+/** Apple Maps snapshot into the App Group for the widget (iOS only; rejects elsewhere). */
+export const mapSnapshot = (opts: { name: string; lat: number; lng: number; spanM: number; width: number; height: number; spots: { id: string; lat: number; lng: number; w: number }[] }): Promise<MapSnapshotResult> =>
+  (NativeModule as any)?.mapSnapshot ? (NativeModule as any).mapSnapshot(opts) : Promise.reject(new Error('unsupported'));
 /** Path of the App Group container expo-live-activity loads images from (iOS only). */
 export const liveActivityGroupPath: string | null = (NativeModule as any)?.liveActivityGroupPath ?? null;
 export const ArPaintView = (NativeModule ? requireNativeView('ArPaint') : () => null) as ComponentType<ArPaintViewProps & { ref?: Ref<ArPaintViewRef> }>;
