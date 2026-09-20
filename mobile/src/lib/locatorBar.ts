@@ -38,7 +38,7 @@ export function renderLocatorBar(headingDeg: number | null): string | null {
   rect(W / 2 - 1, 2, 2, H - 4, C.white);
   const heading = headingDeg ?? 0;
   spots.forEach((s, i) => {
-    const rel = headingDeg == null ? s.b : wrapDiff(s.b, heading); // -180..180, 0 = straight ahead
+    const rel = wrapDiff(s.b, heading); // -180..180, 0 = straight ahead (north when the heading is unknown)
     const inFov = Math.abs(rel) <= HALF_FOV;
     const x = W / 2 + (Math.max(-HALF_FOV, Math.min(HALF_FOV, rel)) / HALF_FOV) * (W / 2 - 10);
     const size = s.d < 60 ? 10 : s.d < 200 ? 8 : 6;

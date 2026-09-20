@@ -129,7 +129,7 @@ export const useStore = create<State>((set, get) => ({
   },
   wallVersion: 0,
   online: false,
-  tab: 'create', // the camera is the centre of the app: it opens there
+  tab: 'profile', // where you land after the launch globe
   sheet: null,
   debug: { volEvents: 0, lastVol: 0.5, held: '-', blocker: '-', walls: 0, poseReady: false, surface: '?' },
   setDebug: (d) => set((st) => ({ debug: { ...st.debug, ...d } })),

@@ -48,7 +48,7 @@ export default function App() {
       {launched && <Root />}
       {!launchGone && (
         <View style={StyleSheet.absoluteFill} pointerEvents={launched ? 'none' : 'auto'}>
-          <LaunchScreen onEnter={() => setLaunched(true)} onDone={() => setLaunchGone(true)} />
+          <LaunchScreen onEnter={() => { useStore.getState().setTab('profile'); setLaunched(true); }} onDone={() => setLaunchGone(true)} /> {/* the globe always lands on Profile */}
         </View>
       )}
       <StatusBar style="light" />
