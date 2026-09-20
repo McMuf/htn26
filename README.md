@@ -46,7 +46,7 @@ Goals: `goal1.md` (web), `goal2.md` (Android). `deploy.md` sets up the backend.
 | Vault: grid of your pieces + detail (photo, location, stats) | **real**. Create photographs the wall (camera frame + paint) a few seconds after you spray and after an undo; photos live on the phone, so other people's pieces fall back to the paint rendered on a brick wall |
 | Settings | real toggles (input, AR surfaces, debug line, geofence); About section static |
 | Widgets (small/medium + lock screen): **activity heat radar near you** (medium hero), nearest hotspot (small + lock screen), colour swatches, paint gauges + refill countdown, streak | **real** (`mobile/targets/widget`, App Group). Heat = recency-weighted stroke/view activity of real canvases within 2 km; when fewer than 3 are in range the seeded sample spots are blended in and the widget shows a SAMPLE badge. Countdown assumes the in-app regen rate; paint only regenerates while the app is open |
-| Dynamic Island / lock-screen Live Activity while spraying: active swatch, paint draining live, session timer, stroke count | **real** (`mobile/modules/live-activity` + `targets/widget/PaintActivity.swift`), ends ~8 s after the last stroke, on tab change or backgrounding |
+| Dynamic Island / lock-screen Live Activity while spraying: active swatch, paint draining live, session timer, stroke count | **real** (`expo-live-activity` + `mobile/src/lib/liveActivity.ts`), ends ~8 s after the last stroke, on tab change or backgrounding |
 | "Hot spot nearby" banner (expo-notifications, foreground) and full-brightness AR mode (expo-brightness) | **real** |
 | Web `/world`, `/gallery` | **real** Supabase reads + realtime; samples only when empty |
 

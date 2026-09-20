@@ -5,6 +5,5 @@ import SwiftUI
 struct TaggedWidgets: WidgetBundle {
   var body: some Widget {
     PaintCanWidget()
-    PaintActivityWidget()
   }
 }

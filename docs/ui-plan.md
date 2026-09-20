@@ -107,3 +107,7 @@ COSPRAY in the wordmark, "Cospray" in prose. Bundle id / App Group / slug keep `
 - **Palette collapsed to purple + green** (Sept 20, after the first device pass): yellow labels/coins/active
   states and the blue quests/market panels were too much variance; green took the signal role, purple the
   secondary panels, and the CREATE key is no longer green at rest.
+- **Live Activity moved to `expo-live-activity`** (Software Mansion): its config plugin generates the
+  ActivityKit target; the island shows the can, "SPRAYING <colour>", both levels + strokes as the
+  subtitle and the active can's level as the progress ring. The hand-rolled `modules/live-activity`
+  + `PaintActivity.swift` were removed. Images live in `mobile/assets/liveActivity/` (≤ 4 KB each).

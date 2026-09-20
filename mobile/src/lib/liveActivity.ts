@@ -1,39 +1,49 @@
 import { AppState, Platform } from 'react-native';
-import * as LA from '../../modules/live-activity';
+import * as LA from 'expo-live-activity';
 import { useStore, type Side } from '../store';
 import { colorName } from './economy';
 
 /**
- * Mirrors the painting session into the Dynamic Island / lock screen. Started on the first hold,
- * updated once a second while a colour is held, ended after a few seconds idle, on tab change, or when
- * the app leaves the foreground. Everything is fire-and-forget and iOS-only, so the spray loop never
- * waits on it.
+ * The painting session on the Dynamic Island / lock screen, through expo-live-activity (Software
+ * Mansion's ActivityKit module + config plugin). Started on the first hold, updated once a second
+ * while a colour is held, ended after a few seconds idle, on tab change, or when the app leaves the
+ * foreground. Everything is fire-and-forget and iOS-only, so the spray loop never waits on it.
  */
 const IDLE_END_MS = 8000; // long enough that the island doesn't pop in and out between strokes
 const TICK_MS = 1000;
-const supported = Platform.OS === 'ios' && LA.hasLiveActivity;
+const supported = Platform.OS === 'ios';
 
-let active = false, starting: Promise<unknown> | null = null, startedAt = 0, strokes = 0, side: Side | null = null;
+let id: string | null = null, strokes = 0, side: Side | null = null;
 let tick: ReturnType<typeof setInterval> | null = null, idle: ReturnType<typeof setTimeout> | null = null;
 
-const state = (): LA.LaState => { const p = useStore.getState().paint; return { paintA: Math.round(p.A), paintB: Math.round(p.B), sprayingSide: side ?? 'none', startedAt, strokes }; };
-const attrs = (): LA.LaAttrs => {
-  const st = useStore.getState();
-  return { tag: st.painter?.name ?? 'COSPRAY', colorA: st.settings.optionA.color, nameA: colorName(st.settings.optionA.color), colorB: st.settings.optionB.color, nameB: colorName(st.settings.optionB.color) };
+const CONFIG: LA.LiveActivityConfig = {
+  backgroundColor: '#12082b', titleColor: '#ffffff', subtitleColor: '#cdbff5',
+  progressViewTint: '#59d92d', progressViewLabelColor: '#ffffff',
+  timerType: 'circular', imagePosition: 'left', imageAlign: 'center', imageSize: { height: 56, width: 26 }, contentFit: 'contain',
+  padding: { horizontal: 16, top: 12, bottom: 12 },
 };
-const push = () => { if (active) LA.update(state()).catch(() => {}); };
+
+function state(): LA.LiveActivityState {
+  const st = useStore.getState();
+  const opt = side === 'B' ? st.settings.optionB : side === 'A' ? st.settings.optionA : null;
+  const p = st.paint;
+  const active = side ? Math.round(p[side]) : Math.round(Math.min(p.A, p.B));
+  return {
+    title: opt ? `SPRAYING ${colorName(opt.color).toUpperCase()}` : `${st.painter?.name ?? 'COSPRAY'} · PAUSED`,
+    subtitle: `${colorName(st.settings.optionA.color)} ${Math.round(p.A)}% · ${colorName(st.settings.optionB.color)} ${Math.round(p.B)}% · ${strokes} stroke${strokes === 1 ? '' : 's'}`,
+    progressBar: { progress: active / 100 },
+    imageName: 'can', dynamicIslandImageName: 'can_island',
+  };
+}
+const push = () => { if (id) { try { LA.updateActivity(id, state()); } catch {} } };
 
 export function laSprayStart(s: Side) {
   if (!supported) return;
   try {
     side = s;
     if (idle) { clearTimeout(idle); idle = null; }
-    if (!active && !starting) {
-      if (!LA.areActivitiesEnabled()) return;
-      startedAt = Date.now(); strokes = 0;
-      starting = LA.start(attrs(), state()).then(() => { active = true; push(); }).catch(() => {}).finally(() => { starting = null; });
-    } else push();
-    if (!tick) tick = setInterval(push, TICK_MS);
+    if (!id) { strokes = 0; id = LA.startActivity(state(), CONFIG) ?? null; } else push();
+    if (id && !tick) tick = setInterval(push, TICK_MS);
   } catch {}
 }
 
@@ -56,17 +66,12 @@ export function laEnd() {
   if (idle) { clearTimeout(idle); idle = null; }
   if (tick) { clearInterval(tick); tick = null; }
   side = null;
-  if (active || starting) {
-    const fin = state();
-    active = false;
-    (starting ?? Promise.resolve()).then(() => LA.end(fin, 2)).catch(() => {});
-  }
+  if (id) { const done = id; id = null; try { LA.stopActivity(done, state()); } catch {} }
 }
 
-/** Call once at app start: clears activities left over from a killed app, ends the session when the app leaves the foreground. */
+/** Call once at app start: ends the session when the app leaves the foreground. */
 export function startLiveActivityLifecycle() {
   if (!supported) return () => {};
-  LA.endAll().catch(() => {});
   const sub = AppState.addEventListener('change', (s) => { if (s !== 'active') laEnd(); });
   return () => sub.remove();
 }

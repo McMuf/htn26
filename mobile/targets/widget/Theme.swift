@@ -172,23 +172,26 @@ struct CanIcon: View {
     "....#.###########d#####.#..."
   ]
   static let bodyTop = 25, bodyBottom = 58 // sprite rows that hold paint
+  /// `logo` draws the icon exactly as the app icon (puff included, original colours); otherwise the body is recoloured and filled.
+  var logo = false
   var body: some View {
     let rows = CanIcon.rows
     let (r, g, b) = rgb(color)
     let filled = Int((max(0, min(100, level)) / 100 * Double(CanIcon.bodyBottom - CanIcon.bodyTop + 1)).rounded())
+    let skip = logo ? 0 : 24 // the spray puff rows
     Canvas { ctx, _ in
       for (y, row) in rows.enumerated() {
-        if y < 24 { continue } // the spray puff
+        if y < skip { continue }
         for (x, ch) in row.enumerated() {
           if ch == "." { continue }
-          let rect = CGRect(x: CGFloat(x) * cell, y: CGFloat(y - 24) * cell, width: cell + 0.3, height: cell + 0.3)
-          let inBody = y >= CanIcon.bodyTop && y <= CanIcon.bodyBottom
+          let rect = CGRect(x: CGFloat(x) * cell, y: CGFloat(y - skip) * cell, width: cell + 0.3, height: cell + 0.3)
+          let inBody = !logo && y >= CanIcon.bodyTop && y <= CanIcon.bodyBottom
           let painted = inBody && (CanIcon.bodyBottom - y) < filled
           ctx.fill(Path(rect), with: .color(shade(ch, r, g, b, tint: inBody, painted: painted)))
         }
       }
     }
-    .frame(width: CGFloat(rows[0].count) * cell, height: CGFloat(rows.count - 24) * cell)
+    .frame(width: CGFloat(rows[0].count) * cell, height: CGFloat(rows.count - skip) * cell)
   }
   func shade(_ ch: Character, _ r: Double, _ g: Double, _ b: Double, tint: Bool, painted: Bool) -> Color {
     switch ch {

@@ -94,6 +94,7 @@
       "expo-sharing",
       "expo-asset",
       "./modules/ar-paint/app.plugin.js",
+      "expo-live-activity",
       "./plugins/withoutPushEntitlement.js"
     ],
     "extra": {

@@ -209,14 +209,27 @@ struct Swatch: View {
   }
 }
 
-/// The two cans with their colour and level, names underneath.
+/// The two cans: the logo can as drawn on the app icon, each with its paint colour and level underneath.
 struct Cans: View {
   let entry: CanEntry
   var cell: CGFloat = 1.3
   var body: some View {
-    HStack(alignment: .top, spacing: 8) {
-      VStack(spacing: 2) { CanIcon(color: entry.colorA, level: entry.paintA, cell: cell); Text("\(Int(entry.paintA))%").font(PF.display(10)).foregroundStyle(.white) }
-      VStack(spacing: 2) { CanIcon(color: entry.colorB, level: entry.paintB, cell: cell); Text("\(Int(entry.paintB))%").font(PF.display(10)).foregroundStyle(.white) }
+    HStack(alignment: .top, spacing: 10) {
+      CanSlot(color: entry.colorA, level: entry.paintA, name: entry.nameA, cell: cell)
+      CanSlot(color: entry.colorB, level: entry.paintB, name: entry.nameB, cell: cell)
+    }
+  }
+}
+struct CanSlot: View {
+  let color: Color; let level: Double; let name: String; let cell: CGFloat
+  var body: some View {
+    VStack(spacing: 3) {
+      CanIcon(color: color, level: level, cell: cell, logo: true)
+      HStack(spacing: 4) {
+        Notched(n: 1.5).fill(color).frame(width: 10, height: 10).overlay(Notched(n: 1.5).stroke(T.ink, lineWidth: 1.5))
+        Text("\(Int(level))%").font(PF.display(11)).foregroundStyle(.white)
+      }
+      SegBar(value: level, color: color, segs: 8, height: 4).frame(width: 44)
     }
   }
 }
@@ -336,7 +349,7 @@ struct PaintCanView: View {
       HeaderStrip(entry: entry)
       MapPlate(entry: entry).frame(height: 196)
       HStack(alignment: .top, spacing: 14) {
-        Cans(entry: entry, cell: 1.7)
+        Cans(entry: entry, cell: 1.6)
         VStack(alignment: .leading, spacing: 4) {
           Caps(text: "nearest pieces", size: 10)
           if top.isEmpty { Text("nothing painted near you yet — go first").font(PF.body(11)).foregroundStyle(T.dim) }
