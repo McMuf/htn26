@@ -121,6 +121,8 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
      * about 78 degrees off the normal, so ordinary steep painting is unaffected.
      */
     const val EXTENSION_MIN_INCIDENCE = 0.2f
+    /** Normals this far from parallel mean two different surfaces meeting — a corner, not a gap. */
+    const val PERPENDICULAR_DOT = 0.5f // 60 degrees apart
     val CROSS_X = intArrayOf(0, -1, 1, 0, 0)
     val CROSS_Y = intArrayOf(0, 0, 0, -1, 1)
 
@@ -998,6 +1000,10 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     // "Close behind" is the whole rule, and it is a distance rather than a kind of surface: the
     // floor metres past a wall does not take over, so a wall stays paintable from one patch, while
     // the next face of a pillar or the floor under a table edge does, because it is right there.
+    // Two things can be held while scanning on: `edge`, a hit just past a ragged polygon but still
+    // inside the surface's real extent, and `guess`, a hit genuinely out beyond it.
+    var edge: Hit? = null
+    var edgeDist = 0f
     var guess: Hit? = null
     var guessDist = 0f
     for (h in hits) {
@@ -1009,10 +1015,21 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       val dist = cameraPos.distance(pos)
 
       if (p.isPoseInPolygon(h.hitPose)) {
-        // Real geometry, so it outranks a guess — but only if it is close behind it. The floor
-        // three metres past a wall is not what you are aiming at, while the adjacent face of a
-        // pillar, or the floor under a table edge, is right there.
-        if (guess != null && dist - guessDist > HANDOVER_M) break
+        // Real geometry, so it outranks a held extension — but not unconditionally.
+        val held = edge ?: guess
+        val takesOver = when {
+          held == null -> true
+          // Still inside the near surface, just outside its ragged outline. Only a surface facing
+          // a different way takes over, because that is a corner. A parallel one close behind is
+          // the floor showing through a gap in a chair seat's polygon, and following it there is
+          // what used to throw the reticle to the floor mid-stroke.
+          edge != null -> dist - edgeDist <= HANDOVER_M &&
+            (held.plane?.let { abs(planeNormal(p) dot planeNormal(it)) < PERPENDICULAR_DOT } ?: true)
+          // Genuinely past the edge, so any real surface close behind wins, parallel or not: the
+          // floor under a table edge, or the next face of a pillar.
+          else -> dist - guessDist <= HANDOVER_M
+        }
+        if (!takesOver) break
         stickyPlane = p
         return Hit(t, p, HitKind.PLANE, p.type == Plane.Type.VERTICAL || M.isVertical(t))
       }
@@ -1027,19 +1044,24 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       val l = M.transformPoint(M.invert(M.fromPose(p.centerPose)), pos)
       val dx = max(0f, abs(l.x) - p.extentX / 2)
       val dz = max(0f, abs(l.z) - p.extentZ / 2)
-      // within a few centimetres of the edge this is polygon raggedness, not a real overshoot
+      // within a few centimetres of the edge this is polygon raggedness, not a real overshoot.
+      // Held rather than returned: at a pillar corner the next face is a real surface a few
+      // centimetres behind this one, and returning here handed it seven centimetres of every
+      // corner, four times around.
       if (hypot(dx, dz) < EDGE_SLOP_M * (if (sticky) 1.5f else 1f)) {
-        stickyPlane = p
-        return Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
-      }
-      if (guess == null && (dx / allowance(p.extentX, sticky)).let { it * it } +
+        if (edge == null) {
+          edge = Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
+          edgeDist = dist
+        }
+      } else if (guess == null && (dx / allowance(p.extentX, sticky)).let { it * it } +
           (dz / allowance(p.extentZ, sticky)).let { it * it } < 1f) {
         guess = Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
         guessDist = dist
       }
     }
-    stickyPlane = guess?.plane
-    return guess
+    val best = edge ?: guess
+    stickyPlane = best?.plane
+    return best
   }
 
   // ---- paint loop --------------------------------------------------------------------------
