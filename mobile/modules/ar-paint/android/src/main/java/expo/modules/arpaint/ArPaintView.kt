@@ -108,6 +108,19 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
      * line drawn off a table edge drop onto the floor promptly instead of hanging in the air.
      */
     const val EDGE_SLOP_M = 0.05f
+    /**
+     * How far behind a guessed extension a real polygon hit may be and still take over. Under it,
+     * the real surface is the one you are pointing at — the next face of a pillar, the floor below
+     * a table edge. Over it, the polygon is merely somewhere further along the same ray, like the
+     * floor several metres past a wall, and the nearer surface keeps the reticle.
+     */
+    const val HANDOVER_M = 1.2f
+    /**
+     * How square-on the ray must meet a plane for its extension to count: below this it is being
+     * seen edge-on, where the hit position swings wildly for a millimetre of plane error. 0.2 is
+     * about 78 degrees off the normal, so ordinary steep painting is unaffected.
+     */
+    const val EXTENSION_MIN_INCIDENCE = 0.2f
     val CROSS_X = intArrayOf(0, -1, 1, 0, 0)
     val CROSS_Y = intArrayOf(0, 0, 0, -1, 1)
 
@@ -982,37 +995,47 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     // that beats anything behind it. Further out is a guess, held only as a fallback: if some
     // farther plane reports a real polygon hit, that is a surface actually there and it wins.
     //
-    // That demotion applies to horizontal planes only — see the note at the test below. A wall has
-    // nothing behind it to fall through to, so its extension is taken outright, which is what
-    // keeps a whole wall paintable from the one patch ARCore has found.
+    // "Close behind" is the whole rule, and it is a distance rather than a kind of surface: the
+    // floor metres past a wall does not take over, so a wall stays paintable from one patch, while
+    // the next face of a pillar or the floor under a table edge does, because it is right there.
     var guess: Hit? = null
+    var guessDist = 0f
     for (h in hits) {
       val p = h.trackable as? Plane ?: continue
       val t = M.fromPose(h.hitPose)
-      if (!usable(p, M.pos(t))) continue
+      val pos = M.pos(t)
+      if (!usable(p, pos)) continue
       val sticky = p === stickyPlane
+      val dist = cameraPos.distance(pos)
+
       if (p.isPoseInPolygon(h.hitPose)) {
+        // Real geometry, so it outranks a guess — but only if it is close behind it. The floor
+        // three metres past a wall is not what you are aiming at, while the adjacent face of a
+        // pillar, or the floor under a table edge, is right there.
+        if (guess != null && dist - guessDist > HANDOVER_M) break
         stickyPlane = p
         return Hit(t, p, HitKind.PLANE, p.type == Plane.Type.VERTICAL || M.isVertical(t))
       }
-      val l = M.transformPoint(M.invert(M.fromPose(p.centerPose)), M.pos(t))
+
+      // Grazing extensions are the pillar problem. Sweeping round a corner, the face you have
+      // just left is seen edge-on, and its invisible continuation lies right across the face you
+      // are now aiming at. Anything met this obliquely is not what the reticle is pointed at, and
+      // its hit position is wildly sensitive to a millimetre of plane error, which is what makes
+      // the paint stutter at a corner instead of turning it.
+      if (abs(((pos - cameraPos).normalized()) dot planeNormal(p)) < EXTENSION_MIN_INCIDENCE) continue
+
+      val l = M.transformPoint(M.invert(M.fromPose(p.centerPose)), pos)
       val dx = max(0f, abs(l.x) - p.extentX / 2)
       val dz = max(0f, abs(l.z) - p.extentZ / 2)
-      val atEdge = hypot(dx, dz) < EDGE_SLOP_M * (if (sticky) 1.5f else 1f)
-      val withinReach = (dx / allowance(p.extentX, sticky)).let { it * it } +
-        (dz / allowance(p.extentZ, sticky)).let { it * it } < 1f
-      // Only a raised horizontal surface has an edge you can step off — nothing lies behind a
-      // wall. So a wall's extension is taken at once, while a floor's or a table's is demoted to
-      // a guess that a real surface can outvote. Without that distinction walls stopped working
-      // entirely: aim anywhere outside the detected patch and the wall became a guess, while the
-      // same ray carried on to the floor beyond it, whose large well-formed polygon won every
-      // time. The reticle landed on the floor behind the wall.
-      if (atEdge || (withinReach && p.type == Plane.Type.VERTICAL)) {
+      // within a few centimetres of the edge this is polygon raggedness, not a real overshoot
+      if (hypot(dx, dz) < EDGE_SLOP_M * (if (sticky) 1.5f else 1f)) {
         stickyPlane = p
         return Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
       }
-      if (guess == null && withinReach) {
+      if (guess == null && (dx / allowance(p.extentX, sticky)).let { it * it } +
+          (dz / allowance(p.extentZ, sticky)).let { it * it } < 1f) {
         guess = Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
+        guessDist = dist
       }
     }
     stickyPlane = guess?.plane
