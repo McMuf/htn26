@@ -3,10 +3,10 @@ import ActivityKit
 
 struct AttrsRecord: Record {
   @Field var tag: String = "COSPRAY"
-  @Field var colorA: String = "#ff2d95"
-  @Field var nameA: String = "Hot pink"
-  @Field var colorB: String = "#19e6ff"
-  @Field var nameB: String = "Cyan"
+  @Field var colorA: String = "#59d92d"
+  @Field var nameA: String = "Neon green"
+  @Field var colorB: String = "#4a22b8"
+  @Field var nameB: String = "Dark purple"
 }
 
 struct StateRecord: Record {

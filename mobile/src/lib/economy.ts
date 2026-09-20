@@ -31,7 +31,7 @@ export const skinColor = (canSkin: string, paintColor: string) => MARKET_CANS.fi
 /** Every colour the pickers offer: the base palette plus bought paints. */
 export const ownedPaints = (owned: string[]) => MARKET_PAINTS.filter((p) => owned.includes(p.id)).map((p) => p.color);
 const BASE_NAMES: Record<string, string> = {
-  '#ff2d95': 'Hot pink', '#19e6ff': 'Cyan', '#ffe600': 'Yellow', '#7cff3a': 'Lime',
+  '#59d92d': 'Neon green', '#4a22b8': 'Dark purple', '#ff2d95': 'Hot pink', '#19e6ff': 'Cyan', '#ffe600': 'Yellow', '#7cff3a': 'Lime',
   '#ff5c1a': 'Orange', '#b26bff': 'Violet', '#ffffff': 'White', '#111111': 'Black',
 };
 /** Display name for a paint colour (base palette or a Market paint). */

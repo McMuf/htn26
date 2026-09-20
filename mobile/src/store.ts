@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import {
-  DEFAULT_OPTION_A, DEFAULT_OPTION_B, GEOFENCE_BYPASS_DEFAULT, HFOV_DEG, PAINT_MAX, SprayOption,
+  DEFAULT_OPTION_A, DEFAULT_OPTION_B, GEOFENCE_BYPASS_DEFAULT, HFOV_DEG, LEGACY_DEFAULTS, PAINT_MAX, SprayOption,
 } from './config';
 import type { Canvas, Painter, Stroke } from './types';
 
@@ -157,12 +157,19 @@ function persist(key: string, value: unknown) {
   AsyncStorage.setItem(`tagged:${key}`, JSON.stringify(value)).catch(() => {});
 }
 
+/** Phones that still carry the pre-Cospray default cans (hot pink / cyan) move to neon green / dark purple. */
+function migrateSettings(s: Settings): Settings {
+  const a = LEGACY_DEFAULTS.includes(s.optionA.color) ? DEFAULT_OPTION_A : s.optionA;
+  const b = LEGACY_DEFAULTS.includes(s.optionB.color) ? DEFAULT_OPTION_B : s.optionB;
+  return a === s.optionA && b === s.optionB ? s : { ...s, optionA: a, optionB: b };
+}
+
 export async function hydrateStore() {
   try {
     const [p, s, d, ph, del] = await Promise.all(['painter', 'settings', 'discovered', 'photos', 'deleted'].map((k) => AsyncStorage.getItem(`tagged:${k}`)));
     useStore.setState({
       painter: p ? JSON.parse(p) : null,
-      settings: { ...DEFAULT_SETTINGS, ...(s ? JSON.parse(s) : {}) },
+      settings: migrateSettings({ ...DEFAULT_SETTINGS, ...(s ? JSON.parse(s) : {}) }),
       discovered: d ? JSON.parse(d) : {},
       photos: ph ? JSON.parse(ph) : {},
       deleted: del ? JSON.parse(del) : {},
