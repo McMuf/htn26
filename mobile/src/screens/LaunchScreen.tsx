@@ -168,7 +168,7 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
       <Animated.View style={[styles.copy, { bottom: H * 0.1 }, copyStyle]} pointerEvents="none">
         <Wordmark />
         <Text style={styles.tag}>the world is your wall</Text>
-        <Animated.Text style={[styles.cta, blinkStyle]}>▶ PRESS START</Animated.Text>
+        <Animated.Text style={[styles.cta, blinkStyle]}>PRESS START</Animated.Text>
       </Animated.View>
     </Pressable>
   );

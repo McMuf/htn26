@@ -101,34 +101,113 @@ struct Bands: View {
   }
 }
 
-/// A spray can as pixel art: grey cap, purple-outlined body, filled with the paint colour up to `level` (0..100).
+/// The Cospray can (the app icon's sprite, mobile/src/ui/LogoCan.tsx) recoloured to a paint colour and
+/// filled to `level`: body rows above the paint line go to bare metal, the cap and the C stay.
 struct CanIcon: View {
   let color: Color
   let level: Double
-  var cell: CGFloat = 3
+  var cell: CGFloat = 1.5
   static let rows: [String] = [
-    "...###...", "...###...", "..#####..", ".#######.", ".#######.",
-    ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.",
-    ".#######.",
+    ".........................GG.",
+    ".........................GG.",
+    ".......................GG...",
+    ".......................GG...",
+    ".......................GG...",
+    ".....................GGGGGG.",
+    ".....................GGGGGG.",
+    "...................GGGGGG...",
+    "..........####.....GGGGGG...",
+    ".........#lWWl#.GGGGGGGGGGG.",
+    ".........##lW##.GGGGGGGGGGG.",
+    ".........#h##h#....GGGGGG...",
+    ".........#hlWh#...dGGGGGG...",
+    ".......l###hh###...d.GGGGGGG",
+    ".....pppp##dd..dppp.dGGGGGG.",
+    ".....##.Wdd##ppW###ddGGGGGG.",
+    "....#llhddd##ppdWWW#d..GG...",
+    "...#lpppl......WWWWW#d.GG...",
+    "..#lhdpppWWWWWWlWWWWW#...GG.",
+    ".#hpddddppphhhllWWWWlW...GG.",
+    ".#hpddddpppphhhllllllW......",
+    "#dhpdddddppphhhhlllllW......",
+    "#l#hdddddpppphhhhlllW#......",
+    "#lp##hhhhlllWWWWWWW##h......",
+    "h.p..#..#..........ddh......",
+    ".#pd.##############pph#.....",
+    ".##d.dppllWlWWWWWllpp##.....",
+    ".#h##dppllWlWWWWWWl##h#.....",
+    ".#lpd##############pph#.....",
+    ".#lpd.ddphWhhWWWlhhpph#.....",
+    ".#lpd.ddphWhhWWWlhhpph#.....",
+    ".#lpd.ddphWhhWWWllhpph#.....",
+    ".#lpd.ddphWhhWWWlhhpph#.....",
+    ".#lpd.ddphWhhWWWlhhpph#.....",
+    ".#lpd.ddphWhhWWWlhhpph#.....",
+    ".#lpd.ddphWhhWWWlhhpph#.....",
+    ".#lpd.d##########hhpph#.....",
+    ".#lpd.##gGWGGWWW##hpph#.....",
+    ".#lpd##ggGWGGWWWG##pph#.....",
+    ".#lpd#ggg#####WWGG#pph#.....",
+    ".#lpd#ggg#Whh##WGG#pph#.....",
+    ".#lpd#ggg#WhhW##GG#pph#.....",
+    ".#lpd#ggg#WhhWW####pph#.....",
+    ".#lpd#ggg#WhhWWWlhhpph#.....",
+    ".#lpd#ggg#WhhWWWlhhpph#.....",
+    ".#lpd#ggg#WhhWW####pph#.....",
+    ".#lpd#ggg#WhhW##GG#pph#.....",
+    ".#lpd#ggg#Whh##WGG#pph#.....",
+    ".#lpd#ggg#####WWGG#pph#.....",
+    ".#lpd##ggGWGGWWWG##pph#.....",
+    ".#lpd.##gGWGGWWW##hpph#.....",
+    ".#lpd.d##########hhpph#.....",
+    ".#lpd.ddphWhhWWWlhhpph#.....",
+    ".#lpd.ddphWhhWWWlhhpph#.....",
+    "#p#pddddphWhhWWWlhhpp#p#....",
+    "#pd#ddddphWhhWWWlhhp#pp#....",
+    "#pd#ddddphWhhWWWlhhp#hp#....",
+    "#pd..#..phWhhWWWld#ddhp#....",
+    ".#d...dd########dphhdh#.....",
+    "..#...ddhlWllWWWlhhhd#......",
+    "....#.ddhlWllWWWlpd###.#....",
+    "....#.###########d#####.#..."
   ]
+  static let bodyTop = 25, bodyBottom = 58 // sprite rows that hold paint
   var body: some View {
-    let rows = CanIcon.rows, cols = 9
-    let bodyTop = 5, bodyBottom = 15
-    let filledRows = Int((max(0, min(100, level)) / 100 * Double(bodyBottom - bodyTop + 1)).rounded())
+    let rows = CanIcon.rows
+    let (r, g, b) = rgb(color)
+    let filled = Int((max(0, min(100, level)) / 100 * Double(CanIcon.bodyBottom - CanIcon.bodyTop + 1)).rounded())
     Canvas { ctx, _ in
       for (y, row) in rows.enumerated() {
+        if y < 24 { continue } // the spray puff
         for (x, ch) in row.enumerated() {
-          let r = CGRect(x: CGFloat(x) * cell, y: CGFloat(y) * cell, width: cell, height: cell)
-          if ch == "#" { ctx.fill(Path(r), with: .color(y < 5 ? T.dim : T.ink)) }
-          else if y >= bodyTop && y <= bodyBottom && x > 1 && x < cols - 2 {
-            let fromBottom = bodyBottom - y
-            ctx.fill(Path(r), with: .color(fromBottom < filledRows ? color : T.well))
-          } else if y >= bodyTop && y <= bodyBottom && (x == 1 || x == cols - 2) {
-            ctx.fill(Path(r), with: .color(T.purple))
-          }
+          if ch == "." { continue }
+          let rect = CGRect(x: CGFloat(x) * cell, y: CGFloat(y - 24) * cell, width: cell + 0.3, height: cell + 0.3)
+          let inBody = y >= CanIcon.bodyTop && y <= CanIcon.bodyBottom
+          let painted = inBody && (CanIcon.bodyBottom - y) < filled
+          ctx.fill(Path(rect), with: .color(shade(ch, r, g, b, tint: inBody, painted: painted)))
         }
       }
     }
-    .frame(width: CGFloat(cols) * cell, height: CGFloat(rows.count) * cell)
+    .frame(width: CGFloat(rows[0].count) * cell, height: CGFloat(rows.count - 24) * cell)
+  }
+  func shade(_ ch: Character, _ r: Double, _ g: Double, _ b: Double, tint: Bool, painted: Bool) -> Color {
+    switch ch {
+    case "#": return T.ink
+    case "G": return T.green
+    case "g": return T.greenLo
+    case "k": return Color(hex: "#285a1e")
+    default: break
+    }
+    // shading cuts d < p < h < l < W, remapped onto the paint colour (or bare metal above the paint line)
+    let k: Double = ch == "d" ? 0.45 : ch == "p" ? 0.75 : ch == "h" ? 1.0 : ch == "l" ? 1.25 : 1.6
+    if tint && !painted { let m = 0.22 + 0.16 * k; return Color(red: m, green: m * 0.95, blue: m * 1.25) }
+    if !tint { return Color(hex: ch == "d" ? "#3a2580" : ch == "p" ? "#5b3fb0" : ch == "h" ? "#8e6fe8" : ch == "l" ? "#b49bff" : "#efe8ff") }
+    let f = { (c: Double) -> Double in k <= 1 ? c * k : c + (1 - c) * (k - 1) }
+    return Color(red: f(r), green: f(g), blue: f(b))
+  }
+  func rgb(_ c: Color) -> (Double, Double, Double) {
+    let ui = UIColor(c); var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+    ui.getRed(&r, green: &g, blue: &b, alpha: &a)
+    return (Double(r), Double(g), Double(b))
   }
 }

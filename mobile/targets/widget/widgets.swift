@@ -212,7 +212,7 @@ struct Swatch: View {
 /// The two cans with their colour and level, names underneath.
 struct Cans: View {
   let entry: CanEntry
-  var cell: CGFloat = 3
+  var cell: CGFloat = 1.3
   var body: some View {
     HStack(alignment: .top, spacing: 8) {
       VStack(spacing: 2) { CanIcon(color: entry.colorA, level: entry.paintA, cell: cell); Text("\(Int(entry.paintA))%").font(PF.display(10)).foregroundStyle(.white) }
@@ -227,10 +227,10 @@ struct Stat: View {
   let label: String
   var body: some View {
     VStack(spacing: 0) {
-      Text("\(n)").font(PF.display(18)).foregroundStyle(.white)
-      Text(label).font(PF.body(9)).foregroundStyle(T.dim)
+      Text("\(n)").font(PF.display(15)).foregroundStyle(.white)
+      Text(label).font(PF.body(8)).foregroundStyle(T.dim)
     }
-    .frame(maxWidth: .infinity).padding(.vertical, 4)
+    .frame(maxWidth: .infinity).padding(.vertical, 2)
     .background(Notched(n: 2).fill(T.tile)).overlay(Notched(n: 2).stroke(T.ink, lineWidth: 2))
   }
 }
@@ -287,7 +287,7 @@ struct PaintCanView: View {
 
   /// Small: today's numbers and two quests; the arrow says there's more in the app.
   var small: some View {
-    VStack(alignment: .leading, spacing: 5) {
+    VStack(alignment: .leading, spacing: 4) {
       HStack { Caps(text: "TODAY", size: 11); Spacer(); Caps(text: "\(entry.today?.streak ?? entry.streak)d", color: T.dim, size: 10) }
       HStack(spacing: 4) {
         Stat(n: entry.today?.strokes ?? 0, label: "strokes")
@@ -295,13 +295,12 @@ struct PaintCanView: View {
         Stat(n: entry.today?.paint ?? 0, label: "paint")
       }
       if let qs = entry.today?.quests, !qs.isEmpty {
-        ForEach(qs.prefix(2)) { q in
-          VStack(alignment: .leading, spacing: 1) {
-            HStack { Text(q.title).font(PF.body(10)).foregroundStyle(.white).lineLimit(1); Spacer(); Text(q.claimed ? "✓" : "\(q.got)/\(q.goal)").font(PF.display(10)).foregroundStyle(q.claimed || q.got >= q.goal ? T.greenHi : T.dim) }
-            SegBar(value: q.claimed ? 100 : Double(q.got) / Double(max(1, q.goal)) * 100, color: q.claimed ? T.greenHi : T.green, segs: 12, height: 4)
+        ForEach(qs.prefix(3)) { q in
+          VStack(alignment: .leading, spacing: 0) {
+            HStack { Text(q.title).font(PF.body(9.5)).foregroundStyle(.white).lineLimit(1); Spacer(); Text(q.claimed ? "DONE" : "\(q.got)/\(q.goal)").font(PF.display(9)).foregroundStyle(q.claimed || q.got >= q.goal ? T.greenHi : T.dim) }
+            SegBar(value: q.claimed ? 100 : Double(q.got) / Double(max(1, q.goal)) * 100, color: q.claimed ? T.greenHi : T.green, segs: 12, height: 3)
           }
         }
-        HStack { Spacer(); Text("MORE QUESTS ▸").font(PF.display(9)).foregroundStyle(T.green) }
       } else {
         Text("open the app to start today's quests").font(PF.body(10)).foregroundStyle(T.dim)
       }
@@ -337,7 +336,7 @@ struct PaintCanView: View {
       HeaderStrip(entry: entry)
       MapPlate(entry: entry).frame(height: 196)
       HStack(alignment: .top, spacing: 14) {
-        Cans(entry: entry, cell: 4)
+        Cans(entry: entry, cell: 1.7)
         VStack(alignment: .leading, spacing: 4) {
           Caps(text: "nearest pieces", size: 10)
           if top.isEmpty { Text("nothing painted near you yet — go first").font(PF.body(11)).foregroundStyle(T.dim) }
