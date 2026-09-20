@@ -32,20 +32,20 @@ export function Globe({ size = 360 }: { size?: number }) {
       ctx.clearRect(0, 0, size, size);
       // atmosphere + body
       const glow = ctx.createRadialGradient(CX, CY, R * 0.9, CX, CY, R * 1.25);
-      glow.addColorStop(0, 'rgba(25,230,255,0.35)'); glow.addColorStop(1, 'rgba(25,230,255,0)');
+      glow.addColorStop(0, 'rgba(171,140,255,0.35)'); glow.addColorStop(1, 'rgba(171,140,255,0)');
       ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(CX, CY, R * 1.25, 0, Math.PI * 2); ctx.fill();
       const body = ctx.createRadialGradient(CX - R * 0.35, CY - R * 0.4, 0, CX, CY, R * 1.4);
-      body.addColorStop(0, '#1b2440'); body.addColorStop(0.6, '#0a0d1c'); body.addColorStop(1, '#03040a');
+      body.addColorStop(0, '#2c1868'); body.addColorStop(0.6, '#1c0f42'); body.addColorStop(1, '#12082b');
       ctx.fillStyle = body; ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.fill();
       const meridians = [] as { sx: number; sy: number; z: number }[][];
       for (let m = 0; m < 360; m += 20) meridians.push(Array.from({ length: 61 }, (_, i) => project(-90 + i * 3, m, spin)));
       for (let p = -60; p <= 60; p += 30) meridians.push(Array.from({ length: 121 }, (_, i) => project(p, i * 3, spin)));
-      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(25,230,255,0.12)'; for (const l of meridians) line(l, false);
-      ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(25,230,255,0.55)'; for (const l of meridians) line(l, true);
-      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(25,230,255,0.8)'; ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(171,140,255,0.12)'; for (const l of meridians) line(l, false);
+      ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(171,140,255,0.55)'; for (const l of meridians) line(l, true);
+      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(171,140,255,0.8)'; ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.stroke();
       CITIES.forEach((c, i) => {
         const p = project(c.lat, c.lng, spin); if (p.z < 0) return;
-        ctx.globalAlpha = 0.5 + 0.5 * p.z; ctx.fillStyle = i === 0 ? '#ff2d95' : '#ffe600';
+        ctx.globalAlpha = 0.5 + 0.5 * p.z; ctx.fillStyle = '#59d92d';
         ctx.beginPath(); ctx.arc(p.sx, p.sy, 2.2 + p.z * 1.5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
       });
       const wl = project(WATERLOO.lat, WATERLOO.lng, spin);
@@ -54,14 +54,14 @@ export function Globe({ size = 360 }: { size?: number }) {
         const g = ctx.createRadialGradient(wl.sx, wl.sy, 0, wl.sx, wl.sy, pulse);
         g.addColorStop(0, 'rgba(255,45,149,0.6)'); g.addColorStop(1, 'rgba(255,45,149,0)');
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(wl.sx, wl.sy, pulse, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ff2d95'; ctx.beginPath(); ctx.arc(wl.sx, wl.sy, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#9cff6b'; ctx.beginPath(); ctx.arc(wl.sx, wl.sy, 4, 0, Math.PI * 2); ctx.fill();
       }
       // orbiting logo badge
       const a = spin * 2.2, ox = CX + R * 1.38 * Math.cos(a), oy = CY + R * 0.42 * Math.sin(a) - R * 0.1, oz = Math.sin(a);
       ctx.globalAlpha = oz > 0 ? 1 : 0.35;
-      ctx.fillStyle = '#ff2d95'; ctx.beginPath(); ctx.arc(ox, oy, 13 + 3 * oz, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#7a45ff'; ctx.beginPath(); ctx.arc(ox, oy, 13 + 3 * oz, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = '#fff'; ctx.font = '900 15px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('F', ox, oy + 1);
+      ctx.fillStyle = '#fff'; ctx.font = '700 15px "Pixelify Sans", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('C', ox, oy + 1);
       ctx.globalAlpha = 1;
       raf = requestAnimationFrame(draw);
     };

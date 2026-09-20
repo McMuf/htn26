@@ -26,7 +26,7 @@ export function Avatar({ name, color, size = 48 }: { name?: string | null; color
 export function CoinPill() {
   const painter = useStore((s) => s.painter);
   const settings = useStore((s) => s.settings);
-  return <div className="pill pxbox flat"><span className="coin" /> {coinsOf(painter, settings)}</div>;
+  return <div className="ppill pxbox flat"><span className="coin" /> {coinsOf(painter, settings)}</div>;
 }
 export function Header({ title, sub, right }: { title: string; sub?: string; right?: ReactNode }) {
   return (

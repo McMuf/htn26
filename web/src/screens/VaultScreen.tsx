@@ -27,13 +27,13 @@ export function VaultScreen() {
   }, [remote, local, me?.id, contributed]);
   const totals = mine.reduce((a, c) => ({ views: a.views + c.views, strokes: a.strokes + c.stroke_count }), { views: 0, strokes: 0 });
   return (
-    <div className="screen">
+    <div className="tabscreen">
       <div className="backdrop" />
       <Header title="VAULT" sub={`${mine.length} walls · ${totals.views} views · ${totals.strokes} strokes`} />
       {mine.length === 0 && <Empty title="Nothing saved yet." sub="Every wall you spray lands here." action={<button type="button" className="btn pxbox green press" onClick={() => setTab('paint')}>PAINT SOMETHING</button>} />}
       <div className="grid2">
         {mine.map((c) => (
-          <div key={c.id} className="pxbox tile card">
+          <div key={c.id} className="pxbox tile pcard">
             <PieceThumb canvasId={c.id} width={200} height={150} />
             <div className="t-card ellipsis">{c.title ?? timeAgo(c.created_at)}</div>
             <div className="t-small">{c.views} views · {c.stroke_count} strokes</div>

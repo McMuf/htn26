@@ -21,7 +21,7 @@ export function ProfileScreen() {
   const low = shake < SHAKE_MIN_TO_SPRAY;
   const day = dayKey();
   return (
-    <div className="screen">
+    <div className="tabscreen">
       <div className="backdrop" />
       <div className="header">
         <Avatar name={painter?.name} color={settings.avatarColor} size={52} />

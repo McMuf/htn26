@@ -40,8 +40,8 @@ input { -webkit-user-select: text; user-select: text; }
 /* ---- generic ------------------------------------------------------------- */
 .screen { position: fixed; inset: 0; background: var(--bg); overflow: hidden; }
 .chip {
-  background: #000a; color: #fff; font-size: 12px; font-weight: 600;
-  padding: 6px 14px; border-radius: 16px; white-space: nowrap;
+  background: var(--plate); color: #fff; font-size: 12px; font-weight: 700;
+  padding: 6px 14px; border: 3px solid var(--ink); white-space: nowrap;
 }
 .h1 { font-weight: 900; font-size: 20px; letter-spacing: 3px; }
 
@@ -263,8 +263,8 @@ input { -webkit-user-select: text; user-select: text; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .swatch { width: 36px; height: 36px; border-radius: 18px; border: 2px solid #ffffff22; flex: none; }
 .swatch.on { border: 3px solid #fff; }
-.pill { padding: 8px 14px; border-radius: 16px; background: #ffffff14; border: 1px solid #ffffff22; color: #fff; font-weight: 700; font-size: 14px; }
-.pill.on { background: var(--accent); border-color: var(--accent); }
+.pill { padding: 8px 14px; border-radius: 0; background: var(--key); border: 3px solid var(--ink); color: #fff; font-weight: 700; font-size: 14px; clip-path: var(--notch); }
+.pill.on { background: var(--green); color: var(--green-ink); }
 .switch-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
   padding: 10px 0; border-bottom: 1px solid #ffffff11; color: #fff; font-size: 14px; text-align: left;
@@ -447,7 +447,7 @@ input { -webkit-user-select: text; user-select: text; }
 @media (min-width: 900px) {
   .sidebar { transform: none; }
   .nav-backdrop, .navkey { display: none; }
-  .screen, .paint { margin-left: min(300px, 84vw); }
+  .tabscreen, .paint { margin-left: min(300px, 84vw); }
   .deck { left: calc(min(300px, 84vw) + 12px); }
 }
 
@@ -479,8 +479,8 @@ input { -webkit-user-select: text; user-select: text; }
 .gate .sub { max-width: 320px; }
 
 /* ---- ported tabs ------------------------------------------------------------ */
-.card { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-.card .thumb { width: 100%; height: auto; display: block; border: 3px solid var(--ink); }
+.pcard { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.pcard .thumb { width: 100%; height: auto; display: block; border: 3px solid var(--ink); }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gauge { display: flex; flex-direction: column; gap: 4px; }
 .quest { display: flex; flex-direction: column; gap: 6px; }

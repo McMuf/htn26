@@ -54,7 +54,7 @@ export function Sidebar() {
           );
         })}
         <div className="sidebar-foot">
-          <div className="pill pxbox flat"><span className="coin" /> {coinsOf(painter, settings)}</div>
+          <div className="ppill pxbox flat"><span className="coin" /> {coinsOf(painter, settings)}</div>
           <button type="button" className="btn sm pxbox dark press" onClick={() => { setOpen(false); setSettingsOpen(true); }}>SETTINGS</button>
         </div>
       </nav>

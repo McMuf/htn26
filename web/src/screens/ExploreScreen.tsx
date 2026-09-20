@@ -70,7 +70,7 @@ export function ExploreScreen() {
   useEffect(() => { if (mapRef.current && loc) mapRef.current.panTo([loc.lat, loc.lng]); }, [loc?.lat, loc?.lng]);
 
   return (
-    <div className="screen">
+    <div className="tabscreen">
       <div className="backdrop" />
       <Header title="EXPLORE" sub={all === SAMPLE_CANVASES ? 'no pieces yet · showing sample spots' : `${all.length} walls across Waterloo`} />
       <Panel title="HOT ZONES">
@@ -79,7 +79,7 @@ export function ExploreScreen() {
       <div className="t-label">TRENDING PIECES</div>
       <div className="hscroll">
         {trending.map((c, i) => (
-          <div key={c.id} className="pxbox tile card" style={{ width: 188, flex: '0 0 auto' }}>
+          <div key={c.id} className="pxbox tile pcard" style={{ width: 188, flex: '0 0 auto' }}>
             <div style={{ position: 'relative' }}>
               <PieceThumb canvasId={c.id} width={172} height={124} />
               <div className={`rank r${Math.min(i + 1, 4)}`}>{i + 1}</div>
@@ -92,9 +92,9 @@ export function ExploreScreen() {
       <div className="t-label">NEARBY CANVASES</div>
       {!loc && <div className="t-sub">waiting for GPS…</div>}
       {nearby.map(({ c, d }) => (
-        <div key={c.id} className="pxbox tile row">
+        <div key={c.id} className="pxbox tile prow">
           <PieceThumb canvasId={c.id} width={64} height={64} />
-          <div className="row-main">
+          <div className="prow-main">
             <div className="t-card">{c.title ?? `${c.author_name}'s piece`}</div>
             <div className="t-small">{c.author_name} · {timeAgo(c.updated_at)} · {c.stroke_count} strokes</div>
           </div>

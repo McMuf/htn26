@@ -34,7 +34,7 @@ export function SocialScreen() {
     </div>
   );
   return (
-    <div className="screen">
+    <div className="tabscreen">
       <div className="backdrop" />
       <Header title="SOCIAL" />
       <section className="pxbox tile panel">
@@ -59,9 +59,9 @@ export function SocialScreen() {
           <>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>{col(second, 2)}{col(first, 1)}{col(third, 3)}</div>
             {board.slice(3, 10).map((p, i) => (
-              <div key={p.id} className="row" style={{ padding: '4px 0', minHeight: 0, background: p.id === painter?.id ? 'var(--line)' : undefined }}>
+              <div key={p.id} className="prow" style={{ padding: '4px 0', minHeight: 0, background: p.id === painter?.id ? 'var(--line)' : undefined }}>
                 <div className="pxbox dark flat" style={{ width: 30, height: 28, display: 'grid', placeItems: 'center', fontWeight: 700 }}>{i + 4}</div>
-                <div className="row-main"><div style={{ fontWeight: 700 }}>{p.name}</div></div>
+                <div className="prow-main"><div style={{ fontWeight: 700 }}>{p.name}</div></div>
                 <div className="t-small">{Math.round(p.paint_used)} paint</div>
               </div>
             ))}
@@ -72,7 +72,7 @@ export function SocialScreen() {
       <Panel title="YOUR CREW">
         <div><div className="t-h">{crew?.name ?? 'NO CREW YET'}</div><div className="t-small">{crew ? crew.blurb : 'pick one to rep it on your card'} · saved in this browser</div></div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {CREWS.map((c) => <button key={c.id} type="button" className={`chip pxbox dark press${settings.crew === c.id ? ' on' : ''}`} onClick={() => setSettings({ crew: settings.crew === c.id ? null : c.id })}>{c.name}</button>)}
+          {CREWS.map((c) => <button key={c.id} type="button" className={`pchip pxbox dark press${settings.crew === c.id ? ' on' : ''}`} onClick={() => setSettings({ crew: settings.crew === c.id ? null : c.id })}>{c.name}</button>)}
         </div>
       </Panel>
     </div>
