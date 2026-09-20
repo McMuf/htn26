@@ -68,7 +68,7 @@ export function ExploreScreen() {
         {FILTERS.map((f) => <Chip key={f.key} label={f.label} on={filter === f.key} onPress={() => setFilter(f.key)} />)}
       </ScrollView>
 
-      <Panel title="HOT ZONES" right={<T v="small">green = fresh paint</T>}>
+      <Panel title="HOT ZONES">
         <View style={styles.mapFrame}><HeatMap canvases={all} height={240} /></View>
         <Btn label="OPEN MAP" icon="pin" tone="purple" size="sm" onPress={() => setMapOpen(true)} />
       </Panel>

@@ -63,7 +63,7 @@ function GoogleHeat({ canvases, height, interactive }: Props) {
         {canvases.map((c) => (
           <Marker key={c.id} coordinate={{ latitude: c.lat, longitude: c.lng }} title={`${c.author_name} · ${c.stroke_count} strokes`} description={`${c.views} views${discovered[c.id] ? ' · found' : ''}`}
             anchor={{ x: 0.5, y: 1 }} tracksViewChanges={false}>
-            <PixelPin hot={(weights[c.id] ?? 0) >= 0.7} />
+            <PixelPin />
           </Marker>
         ))}
       </MapView>
@@ -155,8 +155,8 @@ function PixelHeat({ canvases, height, interactive }: Props) {
 }
 
 /** A neon pixel pin: notched square head, short pointed tail, ink outline, a glint. */
-function PixelPin({ hot }: { hot: boolean }) {
-  const fill = hot ? C.greenHi : C.green;
+function PixelPin() {
+  const fill = C.green;
   return (
     <View style={{ alignItems: 'center' }}>
       <View style={{ width: 16, height: 16, backgroundColor: C.ink, alignItems: 'center', justifyContent: 'center' }}>

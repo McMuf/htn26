@@ -149,7 +149,7 @@ struct MapPlate: View {
           let sx = g.size.width / m.size.width, sy = g.size.height / m.size.height
           ForEach(m.pts, id: \.id) { p in
             let d: CGFloat = 11 + 7 * CGFloat(p.w)
-            PixelPin(color: p.w >= 0.7 ? T.greenHi : T.green, size: d)
+            PixelPin(color: T.green, size: d)
               .shadow(color: T.green.opacity(0.9), radius: 2 + 3 * p.w)
               .position(x: p.x * sx, y: p.y * sy - d / 2) // tip on the spot
           }
@@ -346,7 +346,7 @@ struct PaintCanView: View {
   var large: some View {
     VStack(alignment: .leading, spacing: 10) {
       HeaderStrip(entry: entry)
-      MapPlate(entry: entry).frame(height: 150)
+      MapPlate(entry: entry).frame(height: 172)
       HStack(alignment: .top, spacing: 14) {
         Cans(entry: entry, cell: 1.1)
         VStack(alignment: .leading, spacing: 4) {
