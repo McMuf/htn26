@@ -14,7 +14,6 @@ import { useArSpray } from '../hooks/useArSpray';
 import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
 import { CreateHud } from '../components/HUD';
-import { DiscoveryCues } from '../components/DiscoveryOverlay';
 import { PieceDetail } from '../components/SpatialViewer';
 import { laEnd } from '../lib/liveActivity';
 import { useStore } from '../store';
@@ -301,7 +300,6 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
       />
       {/* strokes painted from the web app (compass-anchored) render as an overlay on top of the AR view */}
       <PaintLayer yawSV={yawSV} pitchSV={pitchSV} rollSV={rollSV} walls={discovery.walls} />
-      <DiscoveryCues d={{ ...discovery, justFound: found }} />
       <CreateHud
         found={found}
         onOpenFound={() => found && setDetail(found)}

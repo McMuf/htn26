@@ -47,7 +47,7 @@ function GoogleHeat({ canvases, height, interactive }: Props) {
   const points = useMemo(() => canvases.map((c) => ({ lat: c.lat, lng: c.lng, w: weights[c.id] ?? 0.12 })), [canvases, weights]);
   const initial = useMemo<Region>(() => {
     const c = canvases[0];
-    const d = interactive ? 0.02 : 0.014;
+    const d = interactive ? 0.006 : 0.0045; // a few blocks: every piece around you, big
     return { latitude: loc?.lat ?? c?.lat ?? GEOFENCE.lat, longitude: loc?.lng ?? c?.lng ?? GEOFENCE.lng, latitudeDelta: d, longitudeDelta: d };
   }, [loc?.lat, loc?.lng, canvases.length, interactive]);
   const [region, setRegion] = useState<Region>(initial);
@@ -63,7 +63,7 @@ function GoogleHeat({ canvases, height, interactive }: Props) {
         scrollEnabled={interactive} zoomEnabled={interactive} rotateEnabled={false} pitchEnabled={false} toolbarEnabled={false}
         showsPointsOfInterests={false} showsBuildings={false} showsTraffic={false}>
         {heat && <Overlay image={{ uri: heat.uri }} bounds={heat.bounds} opacity={1} />}
-        {interactive && canvases.map((c) => (
+        {canvases.map((c) => (
           <Marker key={c.id} coordinate={{ latitude: c.lat, longitude: c.lng }} title={`${c.author_name} · ${c.stroke_count} strokes`} description={`${c.views} views${discovered[c.id] ? ' · found' : ''}`} pinColor={discovered[c.id] ? C.green : C.purple} />
         ))}
       </MapView>

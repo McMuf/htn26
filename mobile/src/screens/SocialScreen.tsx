@@ -11,7 +11,6 @@ import { PieceImage } from '../ui/StrokeThumb';
 import { haptic } from '../ui/haptics';
 import { C, F, GUTTER, TONES, outline, ui } from '../ui/theme';
 import { useStore } from '../store';
-import { MOCK_ACTIVITY, MOCK_FRIENDS } from '../data/mock';
 import { fetchLeaderboard } from '../data/sync';
 import { CREWS, colorName, dayStats } from '../lib/economy';
 import { PALETTE } from '../config';
@@ -139,26 +138,6 @@ export function SocialScreen() {
         </View>
       </Panel>
 
-      <Panel title="FRIENDS" right={<T v="label" color={C.faint}>SAMPLE DATA</T>}>
-        {MOCK_FRIENDS.map((f) => (
-          <Row key={f.id} leading={<Avatar name={f.name} color={f.color} size={38} />} title={f.name} meta={f.status}
-            trailing={
-              <View style={{ alignItems: 'flex-end', gap: 2 }}>
-                <T v="micro" color={f.online ? C.greenHi : C.faint}>{f.online ? 'ONLINE' : 'AWAY'}</T>
-                {f.streak > 0 && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}><PixelIcon name="flame" size={24} color={C.green} alt={C.greenLo} /><Text style={styles.streak}>{f.streak}</Text></View>}
-              </View>
-            } />
-        ))}
-      </Panel>
-      <Panel title="ACTIVITY" right={<T v="label" color={C.faint}>SAMPLE DATA</T>}>
-        {MOCK_ACTIVITY.map((a) => (
-          <View key={a.id} style={styles.line}>
-            <T v="small" style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: C.white }}>{a.who}</Text> {a.what}</T>
-            <T v="small">{a.when}</T>
-          </View>
-        ))}
-      </Panel>
-      <T v="small" style={{ textAlign: 'center' }}>friends and crews will sync once the backend supports them</T>
     </Screen>
   );
 }
