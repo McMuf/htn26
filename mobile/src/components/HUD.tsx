@@ -30,8 +30,8 @@ export type HudLine = { title: string; sub?: string; icon?: IconName; onPress?: 
 export const BLOCKER_LINE: Record<NonNullable<Blocker>, HudLine> = {
   'no-location': { title: 'WAITING FOR GPS', icon: 'pin' },
   'outside-geofence': { title: 'OUTSIDE THE PAINT ZONE', sub: 'PAINTING IS OPEN IN WATERLOO REGION', icon: 'pin' },
-  shake: { title: 'SHAKE THE CAN', sub: 'THE RATTLE CHARGES IT', icon: 'can' },
-  empty: { title: 'OUT OF PAINT', sub: 'THIS COLOUR IS REFILLING', icon: 'drop' },
+  shake: { title: 'SHAKE THE CAN', sub: 'OR HOLD THE CAN ON THE LEFT', icon: 'can' },
+  empty: { title: 'OUT OF PAINT', sub: 'REFILLING — OR HOLD THE CAN', icon: 'drop' },
 };
 
 /** The words that go with the discovery shimmer. */
@@ -130,20 +130,61 @@ function Line({ line }: { line: HudLine }) {
   return <Pressable onPress={() => { haptic.tap(); line.onPress?.(); }} hitSlop={6}>{body}</Pressable>;
 }
 
-/** Can charge as a slim rail down the left edge. Runs down over a minute; shake to refill. */
+/** A hold fills an empty can and both colours in this long — slow enough to read as an action. */
+const HOLD_FILL_SECONDS = 1.2;
+
+/**
+ * Can charge as a slim rail down the left edge. Runs down over a minute; shake to refill — or
+ * hold the rail, which does the shaking for you.
+ *
+ * The hold exists because the physical shake is a bad thing to depend on in front of an audience:
+ * you are already holding the phone at a wall with one hand, a shake vigorous enough to register
+ * loses your aim, and in a development build it fights expo-dev-menu for the same gesture
+ * (scripts/dev_menu_shake.mjs). Holding tops up the paint as well as the charge, so there is no
+ * way to end up stuck on either blocker mid-demo.
+ */
 export function ChargeMeter() {
   const shake = useStore((s) => s.shake);
+  const [filling, setFilling] = useState(false);
   const low = shake < SHAKE_MIN_TO_SPRAY;
   const rot = useSharedValue(0);
   useEffect(() => {
-    rot.value = low
+    rot.value = low || filling
       ? withRepeat(withSequence(withTiming(-12, { duration: 110, easing: Easing.inOut(Easing.quad) }), withTiming(12, { duration: 110, easing: Easing.inOut(Easing.quad) })), -1, true)
       : withTiming(0, { duration: 120 });
-  }, [low]);
+  }, [low, filling]);
+
+  // Drive the fill off the clock rather than a per-frame constant: the spray engines run their own
+  // rAF loop draining the same two values, and a dropped frame shouldn't slow the refill.
+  useEffect(() => {
+    if (!filling) return;
+    let raf = 0;
+    let last = Date.now();
+    const step = () => {
+      raf = requestAnimationFrame(step);
+      const now = Date.now();
+      const d = ((now - last) / 1000) / HOLD_FILL_SECONDS;
+      last = now;
+      const st = useStore.getState();
+      if (st.shake < 1) st.setShake(Math.min(1, st.shake + d));
+      for (const side of ['A', 'B'] as Side[]) {
+        if (st.paint[side] < PAINT_MAX) st.setPaint(side, Math.min(PAINT_MAX, st.paint[side] + d * PAINT_MAX));
+      }
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [filling]);
+
   const wobble = useAnimatedStyle(() => ({ transform: [{ rotate: `${rot.value}deg` }] }));
   const segs = 8, lit = Math.round(Math.max(0, Math.min(1, shake)) * segs);
   return (
-    <View style={styles.charge} pointerEvents="none">
+    <Pressable
+      style={styles.charge}
+      hitSlop={10}
+      accessibilityLabel="Hold to shake the can and refill the paint"
+      onPressIn={() => { haptic.tap(); setFilling(true); }}
+      onPressOut={() => setFilling(false)}
+    >
       <PixelBox fill={PLATE} hi={PLATE_HI} depth={4} contentStyle={styles.chargeIn}>
         <Animated.View style={wobble}><PixelIcon name="can" size={24} color={C.white} /></Animated.View>
         <View style={styles.vbar}>
@@ -151,9 +192,9 @@ export function ChargeMeter() {
             <View key={i} style={{ height: 8, backgroundColor: segs - 1 - i < lit ? C.white : C.line }} />
           ))}
         </View>
-        <Text style={styles.chargeText}>{low ? 'SHAKE' : `${Math.round(shake * 100)}%`}</Text>
+        <Text style={styles.chargeText}>{filling ? 'FILL' : low ? 'HOLD' : `${Math.round(shake * 100)}%`}</Text>
       </PixelBox>
-    </View>
+    </Pressable>
   );
 }
 

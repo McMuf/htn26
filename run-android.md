@@ -165,6 +165,39 @@ keyless OAuth auth, which is a Google Cloud OAuth client plus a small Gradle dep
 only if pieces should outlive the demo:
 <https://developers.google.com/ar/develop/java/cloud-anchors/developer-guide-android>
 
+## 3a. The Google Maps key — optional, and it fails loudly without one
+
+Explore's heat map uses Google Maps on Android. Unlike most missing config, **it does not degrade:
+the Maps SDK throws `RuntimeException: API key not found` while inflating the view**, which takes
+the whole app down the instant you open the tab. Nothing reaches JavaScript, so it looks like a
+random crash on a menu rather than a missing key. iOS never hits this — react-native-maps uses
+Apple Maps there, which needs no key.
+
+So the map is only mounted when it can work. Without a key Android shows a pixel heat view instead
+— the same recency-weighted data plotted on bearing and distance from where you stand, with range
+rings. It's not a stand-in for a broken map; it's what that tab is on Android until a key exists.
+
+To get the real map, in the **same console as the ARCore key** (§3):
+
+1. **APIs & Services → Library →** enable **Maps SDK for Android**.
+2. Make an API key, restricted to **Android apps** with package `com.hamzakhan.tagged` and the
+   keystore SHA-1 from §3.
+3. Put it in `mobile/.env.local`:
+   ```
+   EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=AIza...
+   ```
+4. Rebuild — it's a manifest change:
+   ```powershell
+   cd mobile
+   npx expo prebuild -p android --no-install
+   npx expo run:android --device SM_S931W
+   ```
+
+One variable does both halves: `app.config.js` feeds it to the manifest at prebuild, and
+`EXPO_PUBLIC_*` is inlined into the bundle so `HeatMap.tsx` knows whether mounting the map is safe.
+Maps keys are client-side by nature — the package + SHA-1 restriction is what protects it, exactly
+as with the ARCore key.
+
 ## 4. Building from scratch
 
 Needed when native code changes: anything under `mobile/modules/`, `mobile/targets/`,
@@ -271,6 +304,7 @@ and that is all anyone can say for it. So:
 | `Cloud Anchors not configured` in the logs | No ARCore API key — §3, or live with placed-from-memory |
 | Volume keys change the volume instead of spraying | The interceptor isn't installed; toggle **Volume buttons also spray** off and on in Settings |
 | Shaking opens the dev menu instead of charging the can | expo-dev-menu owns that gesture in a dev build — `npm run shake:off` (§2a) |
+| App dies opening Explore, nothing in the Metro log | Google Maps with no API key — a native throw, so JS never sees it (§3a). Fixed: the map only mounts when a key exists |
 | Reticle won't lock on a wall you're facing | By design since the depth-point fallback was removed (§7): ARCore needs an actual plane. Sweep the wall slowly; a blank one takes a few seconds |
 | Paint is faint or hazy | Shouldn't happen — a Skia paint-alpha bug that did exactly this was fixed. If you see it, say so |
 | Strokes don't reach the iPhone | Backend, not Android — [goal1.md](goal1.md) |
