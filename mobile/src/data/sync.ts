@@ -350,3 +350,83 @@ export async function downloadWorldMap(c: Canvas): Promise<string | null> {
     return null;
   }
 }
+
+/* ------------------------------------------------------------------ upvotes -- */
+
+/** A piece on the board: the canvas plus whether you have voted on it. */
+export type TopPiece = {
+  id: string;
+  title: string | null;
+  author_id: string | null;
+  author_name: string;
+  upvotes: number;
+  views: number;
+  stroke_count: number;
+  created_at: string;
+  lat: number;
+  lng: number;
+  voted: boolean;
+};
+
+/**
+ * Add or remove your vote on a piece, in one round trip.
+ *
+ * The toggle happens server-side (supabase/migration_upvotes.sql) so it cannot race with
+ * itself, and the composite primary key on upvotes means a double tap can never create a
+ * second vote. Returns the authoritative count and your new state; callers update
+ * optimistically and reconcile with this.
+ *
+ * Throws when signed out — RLS requires auth.uid(), so an anonymous session must exist first.
+ */
+export async function toggleUpvote(canvasId: string): Promise<{ count: number; voted: boolean }> {
+  if (!hasBackend) throw new Error('no backend');
+  const { data, error } = await supabase.rpc('toggle_upvote', { cid: canvasId });
+  if (error) {
+    // Loud on purpose: a silent catch here makes a rejected vote look identical to one that
+    // saved, which is exactly how the "it says UPVOTED but the count is 0" confusion happened.
+    console.warn('[upvote] rejected', { canvasId, code: error.code, message: error.message, details: error.details });
+    throw error;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    console.warn('[upvote] no row returned', { canvasId, data });
+    throw new Error('vote did not return a row');
+  }
+  return { count: Number(row.new_count ?? 0), voted: !!row.voted };
+}
+
+/**
+ * Why a vote failed, in words a person can act on. Postgres raises P0001 from the
+ * `sign in to vote` guard in toggle_upvote; RLS rejections come back as 42501.
+ */
+export function upvoteErrorMessage(e: unknown): string {
+  const err = e as { code?: string; message?: string } | null;
+  const code = err?.code;
+  const msg = err?.message ?? '';
+  if (code === 'P0001' || /sign in to vote/i.test(msg)) return 'Sign in to vote';
+  if (code === '42501') return 'Not allowed to vote';
+  if (code === 'PGRST202' || /could not find the function/i.test(msg)) return 'Voting not set up yet';
+  if (/network|fetch/i.test(msg)) return 'Offline — try again';
+  return msg || 'Could not vote';
+}
+
+/** The board: most-upvoted pieces first, with your own vote state baked in. */
+export async function fetchTopPieces(limit = 20): Promise<TopPiece[]> {
+  if (!hasBackend) return [];
+  const { data, error } = await supabase.rpc('top_pieces', { lim: limit });
+  if (error) throw error;
+  return (data ?? []) as TopPiece[];
+}
+
+/** Which of these pieces have I already voted on? Used to hydrate discovery cards in bulk. */
+export async function fetchMyUpvotes(canvasIds: string[]): Promise<Set<string>> {
+  if (!hasBackend || canvasIds.length === 0) return new Set();
+  try {
+    const { data, error } = await supabase.rpc('my_upvotes', { ids: canvasIds });
+    if (error) throw error;
+    return new Set((data ?? []).map((r: unknown) => (typeof r === 'string' ? r : (r as { canvas_id: string }).canvas_id)));
+  } catch {
+    // Not being able to tell is not worth failing a render over; the button just starts unvoted.
+    return new Set();
+  }
+}

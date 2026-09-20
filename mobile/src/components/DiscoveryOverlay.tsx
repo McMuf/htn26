@@ -1,11 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import type { Discovery } from '../hooks/useDiscovery';
 import { useStore } from '../store';
+import { toggleUpvote, upvoteErrorMessage } from '../data/sync';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
 import { PressBox } from '../ui/kit';
+import { haptic } from '../ui/haptics';
 import { C, F, PLATE, PLATE_HI, TONES, ui, uiLabel } from '../ui/theme';
 
 /**
@@ -50,13 +52,59 @@ function Spark({ i, x, y, t, strength }: { i: number; x: number; y: number; t: S
   return <Animated.View style={[styles.spark, st]} />;
 }
 
-export type FoundPiece = { id: string; author_name: string; views: number };
+export type FoundPiece = {
+  id: string;
+  author_name: string;
+  views: number;
+  /** ISO timestamp the piece was created */
+  created_at: string;
+  upvotes: number;
+};
 
-/** "You found a piece": drops in from the top. VIEW opens the piece page (views, strokes, report). */
+/**
+ * "You found a piece": drops in from the top with who made it, when, how many views and
+ * upvotes it has, and a button to add your own. VIEW opens the piece page.
+ *
+ * The vote is optimistic — the count moves on tap and rolls back if the server refuses.
+ * At a demo a button that waits on a round trip reads as broken.
+ */
 export function FoundCard({ c, onView }: { c: FoundPiece; onView?: () => void }) {
   const y = useSharedValue(-80);
   useEffect(() => { y.value = -80; y.value = withSpring(0, { damping: 13, stiffness: 140 }); }, [c.id]);
   const st = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+
+  const voted = useStore((s) => !!s.upvoted[c.id]);
+  const setUpvoted = useStore((s) => s.setUpvoted);
+  const [count, setCount] = useState(c.upvotes);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  // A new card means a different piece: take its count as the truth again.
+  useEffect(() => { setCount(c.upvotes); }, [c.id, c.upvotes]);
+
+  const vote = async () => {
+    if (busy) return;
+    setBusy(true);
+    const wasVoted = voted;
+    const wasCount = count;
+    setUpvoted(c.id, !wasVoted);
+    setCount(Math.max(0, wasCount + (wasVoted ? -1 : 1)));
+    haptic.tap();
+    try {
+      const res = await toggleUpvote(c.id);
+      setUpvoted(c.id, res.voted);
+      setCount(res.count);
+    } catch (e) {
+      // Put it back as it was, and say why — a vote that silently does nothing is worse
+      // than one that tells you to sign in.
+      setUpvoted(c.id, wasVoted);
+      setCount(wasCount);
+      setErr(upvoteErrorMessage(e));
+      setTimeout(() => setErr(null), 2500);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Animated.View style={[{ alignSelf: 'stretch' }, st]}>
       <PixelBox fill={PLATE} hi={PLATE_HI} n={6} depth={5} contentStyle={styles.cardIn}>
@@ -64,8 +112,22 @@ export function FoundCard({ c, onView }: { c: FoundPiece; onView?: () => void })
         <View style={{ flex: 1 }}>
           <Text style={styles.cardEyebrow}>YOU FOUND A PIECE</Text>
           <Text style={styles.cardTitle} numberOfLines={1}>by {c.author_name}</Text>
-          <Text style={styles.cardMeta}>{c.views} {c.views === 1 ? 'view' : 'views'}</Text>
+          <Text style={[styles.cardMeta, err ? { color: C.red } : null]} numberOfLines={1}>
+            {err ?? `${timeAgo(c.created_at)} · ${c.views} ${c.views === 1 ? 'view' : 'views'}`}
+          </Text>
         </View>
+        <PressBox
+          fill={voted ? TONES.green.fill : PLATE_HI}
+          hi={voted ? TONES.green.hi : PLATE_HI}
+          lo={voted ? TONES.green.lo : null}
+          depth={3}
+          hitSlop={8}
+          onPress={vote}
+          contentStyle={styles.voteBtn}
+        >
+          <PixelIcon name="flame" size={18} color={voted ? TONES.green.text : C.white} />
+          <Text style={[styles.voteText, voted && { color: TONES.green.text }]}>{count}</Text>
+        </PressBox>
         {onView ? (
           <PressBox fill={TONES.white.fill} hi={TONES.white.hi} lo={TONES.white.lo} depth={3} hitSlop={8} onPress={onView} contentStyle={styles.viewBtn}>
             <Text style={styles.viewText}>VIEW</Text>
@@ -90,6 +152,8 @@ const styles = StyleSheet.create({
   cardEyebrow: { ...uiLabel(11, 1), color: C.green },
   cardTitle: { fontFamily: F.display, fontSize: 20, color: C.white },
   cardMeta: { ...ui(12.5, '600'), color: C.dim },
+  voteBtn: { height: 34, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  voteText: { ...uiLabel(12, 0.6), color: C.white },
   viewBtn: { height: 34, paddingHorizontal: 12, justifyContent: 'center' },
   viewText: { ...uiLabel(12, 0.8), color: C.ink },
 });

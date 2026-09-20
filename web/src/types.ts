@@ -33,6 +33,7 @@ export type Canvas = {
   author_id: string | null;
   author_name: string;
   views: number;
+  upvotes: number;
   stroke_count: number;
   flags: number;
   flagged: boolean;

@@ -564,3 +564,41 @@ export async function fetchAllCanvases(): Promise<Canvas[]> {
 }
 
 function isLocalId(id: string | null) { return !id || id.startsWith('local-'); }
+
+/* ------------------------------------------------------------------ upvotes -- */
+
+/** A piece on the board: the canvas plus whether the current session has voted on it. */
+export type TopPiece = {
+  id: string;
+  title: string | null;
+  author_id: string | null;
+  author_name: string;
+  upvotes: number;
+  views: number;
+  stroke_count: number;
+  created_at: string;
+  lat: number;
+  lng: number;
+  voted: boolean;
+};
+
+/**
+ * Add or remove this session's vote on a piece, in one round trip. Server-side toggle
+ * (supabase/migration_upvotes.sql) so it cannot race, with the upvotes composite primary key
+ * as the double-vote guard. Throws when signed out — RLS requires auth.uid().
+ */
+export async function toggleUpvote(canvasId: string): Promise<{ count: number; voted: boolean }> {
+  if (!hasBackend) throw new Error('no backend');
+  const { data, error } = await supabase.rpc('toggle_upvote', { cid: canvasId });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return { count: Number(row?.new_count ?? 0), voted: !!row?.voted };
+}
+
+/** The board: most-upvoted pieces first, with this session's vote state baked in. */
+export async function fetchTopPieces(limit = 20): Promise<TopPiece[]> {
+  if (!hasBackend) return [];
+  const { data, error } = await supabase.rpc('top_pieces', { lim: limit });
+  if (error) throw error;
+  return (data ?? []) as TopPiece[];
+}
