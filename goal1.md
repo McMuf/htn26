@@ -29,16 +29,16 @@ actually spraying — camera, compass and GPS need the real thing.
 
 ## What changed in the code
 
-- **`web/src/App.tsx`** — `signInAnonymously()` on load, so the first thing a scanner sees is the
+- **`web-app/src/App.tsx`** — `signInAnonymously()` on load, so the first thing a scanner sees is the
   name prompt. The email form is still there as a fallback if anonymous sign-in is ever off, and
   it now says why it appeared. The three-tab shell (PAINT / MAP / BOARD) is gone; the screen is
   the wall. The settings sheet stayed, because that's where the colours and caps live — removing
   it turned the paint screen's own settings button into a dead end, which I caught by clicking it.
-- **`web/src/data/sync.ts`** — `painters.name` is unique across the whole project, so the second
+- **`web-app/src/data/sync.ts`** — `painters.name` is unique across the whole project, so the second
   person to type ADARSH used to be bounced back to the keyboard. Now it tries ADARSH-2, ADARSH-3
   and so on before giving up. Somebody who just scanned a code should not have to negotiate for a
   name.
-- **`web/src/site/ScanToPaint.tsx`** — a "Scan to paint" panel on the landing page that renders a
+- **`web-app/src/site/ScanToPaint.tsx`** — a "Scan to paint" panel on the landing page that renders a
   QR of that site's own `/paint` URL in the browser, so it's right on localhost and right in
   production without anyone regenerating an image.
 - **Brand** — the web client still said TAGGED in three places; it says FRESCO now.
@@ -80,18 +80,18 @@ WebXR hit-testing, which Android Chrome has and iOS Safari does not.
 ## What's left for you
 
 **`main` is the web app** — it carries the QR flow, anonymous sign-in and the live Supabase keys,
-and a root `vercel.json` that pins the build to `web/`. Native work sits on `samsung-adarsh`
+and a root `vercel.json` that pins the build to `web-app/`. Native work sits on `samsung-adarsh`
 (Android) and `pixel-ui` (iPhone) and is merged in deliberately.
 
 In the Vercel project:
 
 1. **Production Branch → `main`.** If it's already `main`, nothing to change — that's the point of
    the reshuffle.
-2. **Root Directory → `web`** (or leave it at the repo root; the root `vercel.json` covers that).
+2. **Root Directory → `web-app`** (or leave it at the repo root; the root `vercel.json` covers that).
    What must *not* happen is a deploy with no build step: served raw, `/` resolves to `index.ts`,
    the browser calls it `video/mp2t` and downloads it. That was the "download" file.
 3. **Environment variables:** none needed — the publishable key is committed in
-   `web/.env.production`. But if `VITE_SUPABASE_*` *are* set in the dashboard, Vite prioritises
+   `web-app/.env.production`. But if `VITE_SUPABASE_*` *are* set in the dashboard, Vite prioritises
    them over the committed file, so they must hold the new project's values or be deleted.
 4. **Redeploy** with the build cache off, then open the site on a laptop — the landing page carries
    the QR.
@@ -103,7 +103,7 @@ won't do.
 
 ```powershell
 git checkout main
-git checkout samsung-adarsh -- web/    # or whichever branch has the change
+git checkout samsung-adarsh -- web-app/   # or whichever branch has the change
 git commit -am "web: ..." && git push
 ```
 
@@ -155,7 +155,7 @@ at the bottom*, copy the **publishable** key (never `service_role` — it bypass
 node scripts/use_supabase.mjs https://<ref>.supabase.co <publishable key>
 ```
 
-That writes `.env`, `web/.env`, `web/.env.production` and `eas.json`, and re-runs the checks.
+That writes `.env`, `web-app/.env`, `web-app/.env.production` and `eas.json`, and re-runs the checks.
 
 ## What will bite
 
