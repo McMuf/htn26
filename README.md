@@ -9,7 +9,7 @@ package names still say `tagged`.
 
 | Branch | What it's for |
 |---|---|
-| `main` | **The web app** — the QR painter in `web/`, and what Vercel deploys. The base every other branch starts from. |
+| `main` | **The web app** — the QR painter in `web-app/`, and what Vercel deploys. The base every other branch starts from. |
 | `samsung-adarsh` | **Android** — the ARCore module in `modules/ar-paint/android` and the Android-side fixes. See `goal2.md`. |
 | `pixel-ui` | **iPhone** — the pixel-arcade UI on top of `main`. |
 
@@ -21,7 +21,7 @@ deployed site's branch, so do it deliberately. Goals: `goal1.md` (web), `goal2.m
 - **iPhone app** (this repo root): ARKit surface painting, glass dock shell, widget.
 - **Android app** (same code): ARCore surface painting — see [Android](#android-galaxy-s25) and
   `goal2.md`. No widget.
-- **Companion site** (`web/`, live at **https://tagged-web.vercel.app**): judge-facing, read-only.
+- **Companion site** (`web-app/`, live at **https://tagged-web.vercel.app**): judge-facing, read-only.
   `/` landing + globe, `/world` live map of Waterloo with every canvas's paint rendered as its
   marker (realtime), `/gallery` trending pieces + leaderboard. Same Supabase project.
 - **Mobile web painter** (`/paint` on the same site): compass-anchored painting from any phone browser.
