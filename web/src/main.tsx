@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Analytics } from '@vercel/analytics/react';
 import App from './App';
 import { Site } from './site/Site';
 
@@ -13,5 +14,6 @@ if (isPaint) import('./styles.css');
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {isPaint ? <App /> : <Site path={path} />}
+    <Analytics />
   </StrictMode>,
 );
