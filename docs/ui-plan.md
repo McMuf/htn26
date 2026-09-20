@@ -4,9 +4,9 @@ Source of truth for the overhaul. If the build deviates, this file changes in th
 
 ## Direction
 
-**Pixel arcade, one palette, everywhere.** The Profile screen is the reference: CRT purple backdrop,
-purple slab panels, yellow labels, green primary buttons, blue secondary panels (quests, market),
-red for danger/low. Flat colour, notched corners, hard shadows — no blur, no radius, no gradients
+**Pixel arcade, two colours, everywhere.** Dark purple is the world (backdrop, panels, cards, the idle
+dock), neon green is the signal (labels, primary buttons, active states, heat, beacons). Red appears
+only for danger/low. No yellow, no blue — one accent family so every screen reads the same. Flat colour, notched corners, hard shadows — no blur, no radius, no gradients
 except the banded CRT backdrop. Glassmorphism from the original brief was dropped by decision
 (the dock is a solid arcade bar; that idiom is what gets extended, see `ui-audit.md`).
 
@@ -25,18 +25,15 @@ Neon paint colours (`config.ts PALETTE`) appear **only** as paint: swatches, hol
 | `key` | `#1f1348` | tray keys, segment buttons |
 | `dockBar` | `#0d062b` | dock bar (edge = `panelHi`) |
 | `white` / `dim` / `faint` / `line` | `#ffffff` / `#cdbff5` / `#8f80c8` / `#ffffff1a` | text ranks |
-| `yellow` hi/lo, `yellowInk` | `#ffd21f` / `#fff07a` / `#c48f00`, `#2a1a00` | labels, coins, active key; text on yellow |
-| `green` hi/lo | `#59d92d` / `#9cff6b` / `#2b8a17` | primary CTA, ready, ON |
-| `blue` hi/lo **(new)** | `#3d6cff` / `#8fb0ff` / `#1f3fb8` | secondary panels (quests, market) |
-| `blueDeep` hi/lo **(new)** | `#2444b8` / `#3d6cff` / `#182f8a` | wells inside blue panels (counters, previews) |
-| `red` hi/lo | `#ff3d55` / `#ff8a99` / `#a8162c` | low paint, danger, sign-out |
-| `purple` hi/lo | `#7a45ff` / `#ab8cff` / `#4a22b8` | wordmark shadow, land on the globe |
+| `green` hi/lo, `greenInk` | `#59d92d` / `#9cff6b` / `#2b8a17`, `#0b2a05` | labels, coins, primary CTA, active dock key / chips, heat, beacons; dark text on green |
+| `purple` hi/lo | `#7a45ff` / `#ab8cff` / `#4a22b8` | secondary panels (quests, market cards), idle CREATE key, wordmark shadow, land on the globe |
+| `red` hi/lo | `#ff3d55` / `#ff8a99` / `#a8162c` | low paint, danger, sign-out — nothing else |
 | `PLATE` / `PLATE_HI` | `#120a2e` / `#2a1c5c` | camera overlay plates (colourless by design) |
 
-Removed: `cyan lime orange violet phosphor phosDim pink card`, backdrops `terminal magenta blue`.
+Removed: `yellow* blue* blueDeep* cyan lime orange violet phosphor phosDim pink card`, backdrops `terminal magenta blue`.
 `BACKDROPS`: `purple` (every screen) and `night` (launch only).
 
-Heat ramp (Explore map + widget): 0 `bg2` → `yellowLo` → `yellow` → `red`. User marker `green`.
+Heat ramp (Explore map + widget): 0 `bg2` → `purple` → `green` → `greenHi`. User marker `green`.
 
 ### Type (`T` variants — screens never set `fontFamily` inline)
 | Variant | Face | Size |
@@ -46,10 +43,10 @@ Heat ramp (Explore map + widget): 0 `bg2` → `yellowLo` → `yellow` → `red`.
 | `card` | Pixelify 700 | 17 |
 | `num` / `numBig` | Pixelify 700 + outline | 30 / 34 |
 | `body` / `sub` / `small` | system 500 | 15 / 14 / 13 |
-| `label` (yellow) / `eyebrow` (white) | system 800 caps ls 1.1 | 11.5 |
+| `label` (green) / `eyebrow` (white) | system 800 caps ls 1.1 | 11.5 |
 | `micro` | system 800 caps ls 0.6 | 10.5 |
 | `mono` | VT323 | 22 |
-`Wordmark`: Pixelify 700, 56 / ls 8, 3-layer hard shadow (`yellowLo` → `purpleLo` → `ink`); `sm` 22.
+`Wordmark`: Pixelify 700, 56 / ls 8, 3-layer hard shadow (`greenLo` → `purpleLo` → `ink`); `sm` 22.
 Fonts loaded: Pixelify 700, 500; VT323. Silkscreen and Pixelify 400/600 dropped.
 
 ### Space, shape, motion
@@ -75,16 +72,16 @@ Fonts loaded: Pixelify 700, 500; VT323. Silkscreen and Pixelify 400/600 dropped.
 |---|---|
 | **Launch** | Rebuilt: dithered pixel Earth on a 4px grid from a real land mask (`src/data/land.ts`), spun on the UI thread (Skia clock + worklet); stepped-ring atmosphere; blinking city pixels; pulsing Waterloo marker with chip; `Wordmark` COSPRAY with dithered spray halo; orbiting `PixelCan`; blinking `PRESS START ▶`; tap → heavy haptic → spray-burst particles + chunky zoom into Waterloo → cross-fade into the app. |
 | **Onboarding** | kit `Screen`, `Wordmark`, `Field`, `Btn`; swatches via `PressBox`; social buttons → SOON `Chip`s; gated haptics. |
-| **Profile** | `Gauge` extracted; quests `Panel tone="blue"` with `blueDeep` counters; pressable `Pill`; `well`; gated `success`. |
+| **Profile** | `Gauge` extracted; quests `Panel tone="purple"` with dark counter wells; pressable `Pill`; `well`; gated `success`. |
 | **Vault** | purple backdrop; `Card` grid; `Empty`; label sizes from kit. |
 | **Explore** | purple backdrop; trending `Card`s, nearby `Row`s; heat map on the shared `heat.ts` model, 3 stepped levels in theme colours; fullscreen map gets `Backdrop` + `SheetHeader`. |
 | **Social** | purple backdrop; share card = `PixelBox` tile with a Skia dithered band header (no gradient), `numBig`, notched piece thumbs; `Row`s for friends/activity; `Wordmark sm` footer. |
-| **Market** | purple backdrop; `SheetHeader`; `Card`s with `blueDeep` preview wells. |
+| **Market** | purple backdrop; `SheetHeader`; purple `Card`s with `well` preview boxes. |
 | **Settings** | tokens; animated `Toggle`; `Row`s; sign-out under a `Divider`, out of the debug panel. |
 | **Create** | HUD/Discovery tokens only (plates stay colourless); `PixelReticle` replaces the round reticle; PieceDetail gets `Backdrop` + `SheetHeader`; PaintScreen permission view uses `Screen` + `Panel`. Spray hooks and the AR module untouched. |
-| **Dock** | tokens; `PressBox` squash on side items; CREATE key unchanged. |
+| **Dock** | tokens; `PressBox` squash on side items; CREATE key is a purple slab when idle, green only while you're in the camera. |
 | **Delete** | `AuthScreen`, `NameScreen`, `LeaderboardScreen`, `MapScreen`, `Glass.tsx`, `expo-blur`, unused fonts. |
-| **Widget / Live Activity** | `#12082b` background, yellow labels, notched frames, heat ramp above. |
+| **Widget / Live Activity** | `#12082b` background, green labels, notched frames, heat ramp above. |
 
 ## Brand
 COSPRAY in the wordmark, "Cospray" in prose. Bundle id / App Group / slug keep `tagged` (rebuild-safe).
@@ -107,3 +104,6 @@ COSPRAY in the wordmark, "Cospray" in prose. Bundle id / App Group / slug keep `
   plugin strips it after all other iOS mods since only local notifications are used.
 - **Building to the phone**: `npx expo run:ios --device 00008150-000178393A10C01C --no-bundler` from
   `mobile/` (the Xcode UDID, not the CoreDevice id). Metro stays on 8082.
+- **Palette collapsed to purple + green** (Sept 20, after the first device pass): yellow labels/coins/active
+  states and the blue quests/market panels were too much variance; green took the signal role, purple the
+  secondary panels, and the CREATE key is no longer green at rest.

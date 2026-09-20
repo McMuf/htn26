@@ -88,7 +88,7 @@ export function ExploreScreen() {
 
       <Panel title="HOT ZONES" right={<T v="small">bigger glow = more paint</T>}>
         <View style={styles.mapFrame}><HeatMap canvases={all} height={190} /></View>
-        <Btn label="OPEN MAP" icon="pin" tone="blue" size="sm" onPress={() => setMapOpen(true)} />
+        <Btn label="OPEN MAP" icon="pin" tone="purple" size="sm" onPress={() => setMapOpen(true)} />
       </Panel>
 
       <T v="label">NEARBY CANVASES</T>
@@ -101,7 +101,7 @@ export function ExploreScreen() {
           trailing={
             <View style={{ alignItems: 'flex-end', gap: 2 }}>
               <T v="card" style={{ fontSize: 16 }}>{d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`}</T>
-              <T v="micro" color={discovered[c.id] ? C.greenHi : isMock(c.id) ? C.faint : C.yellow}>{discovered[c.id] ? 'FOUND' : isMock(c.id) ? 'SAMPLE' : 'UNDISCOVERED'}</T>
+              <T v="micro" color={discovered[c.id] ? C.greenHi : isMock(c.id) ? C.faint : C.white}>{discovered[c.id] ? 'FOUND' : isMock(c.id) ? 'SAMPLE' : 'UNDISCOVERED'}</T>
             </View>
           } />
       ))}

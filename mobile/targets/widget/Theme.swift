@@ -11,15 +11,15 @@ enum T {
   static let well = Color(hex: "#150a36")
   static let dim = Color(hex: "#cdbff5")
   static let faint = Color(hex: "#8f80c8")
-  static let yellow = Color(hex: "#ffd21f")
-  static let yellowHi = Color(hex: "#fff07a")
-  static let yellowLo = Color(hex: "#c48f00")
-  static let yellowInk = Color(hex: "#2a1a00")
+  static let purple = Color(hex: "#7a45ff")
+  static let purpleHi = Color(hex: "#ab8cff")
   static let green = Color(hex: "#59d92d")
   static let greenHi = Color(hex: "#9cff6b")
+  static let greenLo = Color(hex: "#2b8a17")
+  static let greenInk = Color(hex: "#0b2a05")
   static let red = Color(hex: "#ff3d55")
-  /// cold -> ember -> warm -> blazing (theme.ts HEAT)
-  static let heat: [Color] = [bg2, yellowLo, yellow, red]
+  /// cold -> ember -> warm -> blazing (theme.ts HEAT): purple world, green signal
+  static let heat: [Color] = [bg2, purple, green, greenHi]
 }
 
 extension Color {
@@ -47,10 +47,10 @@ struct Notched: Shape {
   }
 }
 
-/// Small caps label in yellow, the widget's equivalent of `T v="label"` (named Caps to stay clear of SwiftUI.Label).
+/// Small caps label in neon green, the widget's equivalent of `T v="label"` (named Caps to stay clear of SwiftUI.Label).
 struct Caps: View {
   let text: String
-  var color: Color = T.yellow
+  var color: Color = T.green
   var size: CGFloat = 9
   var body: some View { Text(text).font(.system(size: size, weight: .black)).tracking(1).foregroundStyle(color) }
 }

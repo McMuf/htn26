@@ -6,7 +6,7 @@ module.exports = (config) => ({
   deploymentTarget: '17.0',
   colors: {
     $widgetBackground: '#12082b',
-    $accent: '#ffd21f',
+    $accent: '#59d92d',
   },
   entitlements: {
     'com.apple.security.application-groups': config.ios.entitlements['com.apple.security.application-groups'],

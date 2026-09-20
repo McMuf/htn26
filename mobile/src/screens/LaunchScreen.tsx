@@ -178,7 +178,7 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
         </Animated.View>
         <Burst origin={target} progress={burst} />
       </Animated.View>
-      <Animated.View style={[styles.can, canStyle]} pointerEvents="none"><PixelCan color={C.yellow} cell={4} /></Animated.View>
+      <Animated.View style={[styles.can, canStyle]} pointerEvents="none"><PixelCan color={C.green} cell={4} /></Animated.View>
       <Animated.View style={[styles.copy, { bottom: H * 0.1 }, copyStyle]} pointerEvents="none">
         <Halo width={W} />
         <Wordmark />
@@ -189,7 +189,7 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
   );
 }
 
-/** A dithered yellow spray cloud behind the wordmark. */
+/** A dithered green spray cloud behind the wordmark. */
 function Halo({ width }: { width: number }) {
   const w = Math.min(width, 380), h = 96;
   const paths = useMemo(() => {
@@ -205,8 +205,8 @@ function Halo({ width }: { width: number }) {
   }, [w]);
   return (
     <Canvas style={{ position: 'absolute', width: w, height: h, top: 4 }} pointerEvents="none">
-      <Path path={paths[0]} color={C.yellow} opacity={0.5} antiAlias={false} />
-      <Path path={paths[1]} color={C.yellowLo} opacity={0.42} antiAlias={false} />
+      <Path path={paths[0]} color={C.green} opacity={0.5} antiAlias={false} />
+      <Path path={paths[1]} color={C.greenLo} opacity={0.42} antiAlias={false} />
       <Path path={paths[2]} color={C.purpleLo} opacity={0.5} antiAlias={false} />
     </Canvas>
   );
@@ -243,11 +243,11 @@ function Particle({ p, origin, progress }: { p: { a: number; r: number; s: numbe
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   chip: { position: 'absolute', left: 0, top: 0 },
-  chipBox: { backgroundColor: C.ink, borderWidth: 2, borderColor: C.yellow, paddingHorizontal: 6, paddingVertical: 2 },
-  chipText: { ...uiLabel(9, 1), color: C.yellow },
+  chipBox: { backgroundColor: C.ink, borderWidth: 2, borderColor: C.green, paddingHorizontal: 6, paddingVertical: 2 },
+  chipText: { ...uiLabel(9, 1), color: C.green },
   can: { position: 'absolute', left: 0, top: 0 },
   particle: { position: 'absolute', left: 0, top: 0 },
   copy: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 8 },
   tag: { color: C.dim, fontFamily: F.body, fontSize: 16, letterSpacing: 1, marginTop: 6 },
-  cta: { color: C.yellow, ...uiLabel(13, 2.5), marginTop: 14 },
+  cta: { color: C.green, ...uiLabel(13, 2.5), marginTop: 14 },
 });

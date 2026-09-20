@@ -111,7 +111,7 @@ struct NearestView: View {
         }
         HStack(spacing: 5) {
           Text(heatLabel(n.w)).font(.system(size: 7, weight: .black)).tracking(0.8).padding(.horizontal, 5).padding(.vertical, 2)
-            .background(Notched(n: 2).fill(heatColor(n.w))).foregroundStyle(n.w < 0.7 ? T.yellowInk : .white)
+            .background(Notched(n: 2).fill(heatColor(n.w))).foregroundStyle(n.w < 0.7 ? .white : T.greenInk)
           Text(n.found ? "found" : n.mine ? "yours" : n.sample ? "sample" : "undiscovered").font(.system(size: 8, weight: .semibold)).foregroundStyle(T.dim)
         }
       } else {

@@ -77,7 +77,7 @@ function Static({ k, v, onPress, dim }: { k: string; v: string; onPress?: () => 
   return (
     <Pressable onPress={onPress} disabled={!onPress} style={styles.switchRow}>
       <Text style={[styles.switchLabel, dim && { color: C.faint }]}>{k}</Text>
-      <Text style={[styles.staticVal, onPress && { color: C.blueHi }, dim && { color: C.faint, ...uiLabel(10.5, 0.6) }]}>{v}</Text>
+      <Text style={[styles.staticVal, onPress && { color: C.greenHi }, dim && { color: C.faint, ...uiLabel(10.5, 0.6) }]}>{v}</Text>
     </Pressable>
   );
 }

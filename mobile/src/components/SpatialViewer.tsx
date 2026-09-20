@@ -69,7 +69,7 @@ export function PieceDetail({ canvas: c, onClose }: { canvas: CanvasT; onClose: 
               <T v="mono">{c.lat.toFixed(5)}, {c.lng.toFixed(5)}</T>
             </View>
             <T v="small">facing {Math.round(c.heading)}° · {isMock(c.id) ? 'sample spot' : c.world_map_path ? 'AR world map saved' : 'compass-anchored'}</T>
-            <Btn label="OPEN IN MAPS" icon="share" tone="blue" onPress={() => Linking.openURL(mapsUrl)} />
+            <Btn label="OPEN IN MAPS" icon="share" tone="purple" onPress={() => Linking.openURL(mapsUrl)} />
           </Panel>
           {colors.length > 0 && (
             <View style={{ flexDirection: 'row', gap: 6 }}>{colors.map((col) => <View key={col} style={{ width: 24, height: 24, backgroundColor: col, borderWidth: 3, borderColor: C.ink }} />)}</View>
@@ -194,7 +194,7 @@ function floorPicture() {
     for (let i = 0; i < 10; i++) for (let j = 0; j < 10; j++) rect(cv, i * TILE, j * TILE, TILE, TILE, (i + j) % 2 ? a : b);
     rect(cv, R - WALL_W / 2, R - 7, WALL_W, 14, paintOf('#000000', 0.35)); // contact shadow
     cv.restore();
-    const dots = paintOf(C.yellow), white = paintOf(C.white);
+    const dots = paintOf(C.green), white = paintOf(C.white);
     for (let i = 0; i < 48; i++) { const ang = (i / 48) * Math.PI * 2; rect(cv, R + Math.cos(ang) * (R - 3) - 3, R + Math.sin(ang) * (R - 3) - 3, 6, 6, i % 2 ? dots : white); }
     for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) rect(cv, R + dx * (R - 14) - 5, R + dy * (R - 14) - 5, 10, 10, dots); // compass ticks
   });
@@ -205,7 +205,7 @@ function skylinePicture(id: string) {
   const rng = seededRng(`sky-${id}`);
   return record(PANO_W, SKY_H, (cv) => {
     const layer = (color: string, minH: number, maxH: number, minW: number, maxW: number, windows: boolean) => {
-      const p = paintOf(color); const win = paintOf(C.yellow, 0.75); const win2 = paintOf(C.greenHi, 0.6);
+      const p = paintOf(color); const win = paintOf(C.green, 0.75); const win2 = paintOf(C.greenHi, 0.6);
       for (let x = 0; x < PANO_W;) {
         let w = Math.round(minW + rng() * (maxW - minW)); if (x + w > PANO_W - 20) w = PANO_W - x;
         const h = Math.round(minH + rng() * (maxH - minH));
@@ -216,7 +216,7 @@ function skylinePicture(id: string) {
     };
     layer(C.panelHi, 40, 110, 40, 90, false);
     layer(C.panelLo, 60, 160, 36, 84, true);
-    const moon = paintOf(C.yellowHi);
+    const moon = paintOf(C.dim);
     const mx = Math.round(200 + rng() * 1000), my = 18;
     for (let dy = -18; dy <= 18; dy += 3) { const hw = Math.round(Math.sqrt(18 * 18 - dy * dy) / 3) * 3; rect(cv, mx - hw, my + dy, hw * 2, 3, moon); }
   });

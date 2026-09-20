@@ -22,17 +22,14 @@ export const C = {
   dim: '#cdbff5',
   faint: '#8f80c8',
   line: '#ffffff1a',
-  // accents (roles in docs/ui-plan.md)
-  yellow: '#ffd21f', yellowHi: '#fff07a', yellowLo: '#c48f00', yellowInk: '#2a1a00',
-  green: '#59d92d', greenHi: '#9cff6b', greenLo: '#2b8a17',
-  blue: '#3d6cff', blueHi: '#8fb0ff', blueLo: '#1f3fb8',
-  blueDeep: '#2444b8', blueDeepHi: '#3d6cff', blueDeepLo: '#182f8a',
-  red: '#ff3d55', redHi: '#ff8a99', redLo: '#a8162c',
+  // accents (roles in docs/ui-plan.md): two families only — purple is the world, neon green is the signal
+  green: '#59d92d', greenHi: '#9cff6b', greenLo: '#2b8a17', greenInk: '#0b2a05',
   purple: '#7a45ff', purpleHi: '#ab8cff', purpleLo: '#4a22b8',
+  red: '#ff3d55', redHi: '#ff8a99', redLo: '#a8162c', // danger / low only
 };
 
 /** Heat ramp for maps / the widget: cold -> ember -> warm -> blazing. */
-export const HEAT = [C.bg2, C.yellowLo, C.yellow, C.red] as const;
+export const HEAT = [C.bg2, C.purple, C.green, C.greenHi] as const;
 
 export const F = {
   display: 'PixelifySans_700Bold',
@@ -40,14 +37,11 @@ export const F = {
   mono: 'VT323_400Regular',
 };
 
-export type Tone = 'green' | 'yellow' | 'red' | 'blue' | 'blueDeep' | 'purple' | 'dark' | 'white' | 'panel' | 'tile';
+export type Tone = 'green' | 'red' | 'purple' | 'dark' | 'white' | 'panel' | 'tile';
 /** fill / bevel-highlight / bevel-shade / text for the chunky buttons and panels. */
 export const TONES: Record<Tone, { fill: string; hi: string; lo: string; text: string }> = {
-  green: { fill: C.green, hi: C.greenHi, lo: C.greenLo, text: C.white },
-  yellow: { fill: C.yellow, hi: C.yellowHi, lo: C.yellowLo, text: C.yellowInk },
+  green: { fill: C.green, hi: C.greenHi, lo: C.greenLo, text: C.greenInk },
   red: { fill: C.red, hi: C.redHi, lo: C.redLo, text: C.white },
-  blue: { fill: C.blue, hi: C.blueHi, lo: C.blueLo, text: C.white },
-  blueDeep: { fill: C.blueDeep, hi: C.blueDeepHi, lo: C.blueDeepLo, text: C.white },
   purple: { fill: C.purple, hi: C.purpleHi, lo: C.purpleLo, text: C.white },
   dark: { fill: '#1a0f3a', hi: '#3a2a78', lo: '#0f0826', text: C.white },
   white: { fill: C.white, hi: C.white, lo: '#b9aee0', text: C.bg2 },

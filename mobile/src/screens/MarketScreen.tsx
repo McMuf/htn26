@@ -42,8 +42,8 @@ export function MarketScreen() {
             <Card key={it.id} it={it} preview={<Blob color={it.color} />}>
               {owned ? (
                 <View style={{ flexDirection: 'row', gap: 6 }}>
-                  <Btn label="LEFT" size="sm" tone={onA ? 'yellow' : 'dark'} style={{ flex: 1 }} onPress={() => equip('optionA', it)} />
-                  <Btn label="RIGHT" size="sm" tone={onB ? 'yellow' : 'dark'} style={{ flex: 1 }} onPress={() => equip('optionB', it)} />
+                  <Btn label="LEFT" size="sm" tone={onA ? 'green' : 'dark'} style={{ flex: 1 }} onPress={() => equip('optionA', it)} />
+                  <Btn label="RIGHT" size="sm" tone={onB ? 'green' : 'dark'} style={{ flex: 1 }} onPress={() => equip('optionB', it)} />
                 </View>
               ) : <BuyBtn it={it} coins={coins} onBuy={() => buy(it)} />}
             </Card>
@@ -54,13 +54,13 @@ export function MarketScreen() {
       <T v="label">CAN SKINS</T>
       <View style={styles.grid}>
         <Card it={{ id: 'paint', name: 'Classic', price: 0, color: settings.optionA.color, blurb: 'follows your colour' }} preview={<PixelCan color={settings.optionA.color} cell={4} />}>
-          <Btn label={settings.canSkin === 'paint' ? 'IN USE' : 'USE'} size="sm" tone={settings.canSkin === 'paint' ? 'yellow' : 'dark'} onPress={() => setSettings({ canSkin: 'paint' })} />
+          <Btn label={settings.canSkin === 'paint' ? 'IN USE' : 'USE'} size="sm" tone={settings.canSkin === 'paint' ? 'green' : 'dark'} onPress={() => setSettings({ canSkin: 'paint' })} />
         </Card>
         {MARKET_CANS.map((it) => {
           const owned = settings.owned.includes(it.id);
           return (
             <Card key={it.id} it={it} preview={<PixelCan color={it.color} cell={4} />}>
-              {owned ? <Btn label={settings.canSkin === it.id ? 'IN USE' : 'USE'} size="sm" tone={settings.canSkin === it.id ? 'yellow' : 'dark'} onPress={() => setSettings({ canSkin: it.id })} />
+              {owned ? <Btn label={settings.canSkin === it.id ? 'IN USE' : 'USE'} size="sm" tone={settings.canSkin === it.id ? 'green' : 'dark'} onPress={() => setSettings({ canSkin: it.id })} />
                 : <BuyBtn it={it} coins={coins} onBuy={() => buy(it)} />}
             </Card>
           );
@@ -84,7 +84,7 @@ export function MarketScreen() {
 
 function Card({ it, preview, children }: { it: Item; preview: React.ReactNode; children: React.ReactNode }) {
   return (
-    <PixelBox n={6} depth={5} fill={TONES.blue.fill} hi={TONES.blue.hi} lo={TONES.blue.lo} style={{ width: CARD }} contentStyle={{ padding: 10, gap: 8 }}>
+    <PixelBox n={6} depth={5} fill={TONES.purple.fill} hi={TONES.purple.hi} lo={TONES.purple.lo} style={{ width: CARD }} contentStyle={{ padding: 10, gap: 8 }}>
       <View style={styles.preview}>{preview}</View>
       <View>
         <Text style={styles.name} numberOfLines={1}>{it.name}</Text>
@@ -92,7 +92,7 @@ function Card({ it, preview, children }: { it: Item; preview: React.ReactNode; c
       </View>
       {it.price > 0 && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <PixelIcon name="coin" size={24} color={C.yellow} alt={C.yellowLo} />
+          <PixelIcon name="coin" size={24} color={C.green} alt={C.greenLo} />
           <Text style={styles.price}>{it.price}</Text>
         </View>
       )}
@@ -127,10 +127,10 @@ function Blob({ color }: { color: string }) {
 
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  preview: { height: 116, alignItems: 'center', justifyContent: 'center', backgroundColor: C.blueDeepLo, borderWidth: 3, borderColor: C.ink },
+  preview: { height: 116, alignItems: 'center', justifyContent: 'center', backgroundColor: C.well, borderWidth: 3, borderColor: C.ink },
   name: { fontFamily: F.display, fontSize: 17, color: C.white },
-  blurb: { ...ui(12.5, '500'), color: C.blueHi },
-  price: { fontFamily: F.display, fontSize: 18, color: C.yellow },
+  blurb: { ...ui(12.5, '500'), color: C.dim },
+  price: { fontFamily: F.display, fontSize: 18, color: C.green },
   soon: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   soonChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.well, paddingHorizontal: 8, height: 28 },
   soonText: { ...uiLabel(10.5, 0.6), color: C.faint },

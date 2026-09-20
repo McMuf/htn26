@@ -56,7 +56,7 @@ export function VaultScreen() {
           <Card key={c.id} onPress={() => setOpen(c)} style={{ width: CELL }}>
             <View>
               <PieceImage canvasId={c.id} width={CELL - 16} height={Math.round((CELL - 16) * 0.78)} />
-              <View style={styles.badge}><PixelIcon name="cube" size={24} color={C.white} alt={C.yellow} /></View>
+              <View style={styles.badge}><PixelIcon name="cube" size={24} color={C.white} alt={C.green} /></View>
             </View>
             <View style={{ gap: 2 }}>
               <T v="card" numberOfLines={1}>{c.title ?? timeAgo(c.created_at)}</T>

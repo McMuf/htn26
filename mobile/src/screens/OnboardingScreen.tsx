@@ -167,7 +167,7 @@ function Perm({ icon, label, hint, ok, onPress }: { icon: IconName; label: strin
         <T v="card">{label}</T>
         <T v="small">{hint}</T>
       </View>
-      <Btn label={ok ? 'ALLOWED' : 'ALLOW'} size="sm" tone={ok ? 'dark' : 'yellow'} icon={ok ? 'check' : undefined} disabled={ok} onPress={onPress} />
+      <Btn label={ok ? 'ALLOWED' : 'ALLOW'} size="sm" tone={ok ? 'dark' : 'green'} icon={ok ? 'check' : undefined} disabled={ok} onPress={onPress} />
     </View>
   );
 }
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   steps: { flex: 1, flexDirection: 'row', gap: 6 },
   step: { flex: 1, height: 12, backgroundColor: C.line, borderWidth: 3, borderColor: C.ink },
-  stepOn: { backgroundColor: C.yellow },
+  stepOn: { backgroundColor: C.green },
   socials: { flexDirection: 'row', gap: 8 },
   rowC: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

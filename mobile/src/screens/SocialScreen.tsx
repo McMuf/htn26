@@ -69,7 +69,7 @@ export function SocialScreen() {
 
   return (
     <Screen loading={loading} onRefresh={loadBoard}>
-      <Header title="SOCIAL" right={<Pill icon="flame" value={stats.streak} iconColor={C.red} alt={C.yellow} />} />
+      <Header title="SOCIAL" right={<Pill icon="flame" value={stats.streak} />} />
 
       {/* the shareable card: this exact view is snapshotted to a PNG */}
       <View ref={cardRef} collapsable={false}>
@@ -128,7 +128,7 @@ export function SocialScreen() {
 
       <Panel title="YOUR CREW">
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <PixelIcon name="flag" size={24} color={C.yellow} />
+          <PixelIcon name="flag" size={24} color={C.green} />
           <View style={{ flex: 1 }}>
             <T v="h">{crew?.name ?? 'NO CREW YET'}</T>
             <T v="small">{crew ? crew.blurb : 'pick one to rep it on your card'} · saved on this phone</T>
@@ -145,7 +145,7 @@ export function SocialScreen() {
             trailing={
               <View style={{ alignItems: 'flex-end', gap: 2 }}>
                 <T v="micro" color={f.online ? C.greenHi : C.faint}>{f.online ? 'ONLINE' : 'AWAY'}</T>
-                {f.streak > 0 && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}><PixelIcon name="flame" size={24} color={C.red} alt={C.yellow} /><Text style={styles.streak}>{f.streak}</Text></View>}
+                {f.streak > 0 && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}><PixelIcon name="flame" size={24} color={C.green} alt={C.greenLo} /><Text style={styles.streak}>{f.streak}</Text></View>}
               </View>
             } />
         ))}
@@ -168,12 +168,12 @@ function Podium({ rows, me }: { rows: Painter[]; me?: string }) {
   const [first, second, third] = rows;
   const col = (p: Painter | undefined, place: 1 | 2 | 3) => {
     const h = place === 1 ? 96 : place === 2 ? 68 : 52;
-    const t = TONES[place === 1 ? 'yellow' : place === 2 ? 'white' : 'red'];
+    const t = TONES[place === 1 ? 'green' : place === 2 ? 'white' : 'red'];
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
         {p ? (
           <>
-            {place === 1 && <PixelIcon name="crown" size={24} color={C.yellow} alt={C.yellowLo} />}
+            {place === 1 && <PixelIcon name="crown" size={24} color={C.green} alt={C.greenLo} />}
             <Avatar name={p.name} color={hueOf(p.name)} size={place === 1 ? 52 : 44} />
             <Text style={styles.pName} numberOfLines={1}>{p.name}</Text>
             <T v="mono">{Math.round(p.paint_used)}</T>

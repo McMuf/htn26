@@ -19,7 +19,7 @@ const TEXT: Record<V, TextStyle> = {
   sub: { ...ui(14, '500'), color: C.dim },
   body: { ...ui(15, '500'), color: C.white },
   small: { ...ui(13, '500'), color: C.dim },
-  label: { ...uiLabel(11.5, 1.1), color: C.yellow },
+  label: { ...uiLabel(11.5, 1.1), color: C.green },
   eyebrow: { ...uiLabel(11.5, 1.1), color: C.white },
   micro: { ...uiLabel(10.5, 0.6), color: C.dim },
   num: { fontFamily: F.display, fontSize: 30, color: C.white, ...outline() },
@@ -30,7 +30,7 @@ export function T({ v = 'body', color, style, ...rest }: TextProps & { v?: V; co
   return <Text {...rest} style={[TEXT[v], color ? { color } : null, style]} />;
 }
 
-/** The COSPRAY wordmark: pixel display face with a stacked hard shadow (yellow -> purple -> ink). */
+/** The COSPRAY wordmark: pixel display face with a stacked hard shadow (green -> purple -> ink). */
 export function Wordmark({ size = 'lg', style }: { size?: 'lg' | 'sm'; style?: StyleProp<TextStyle> }) {
   const lg = size === 'lg';
   const fs = lg ? 56 : 22, ls = lg ? 8 : 3, px = lg ? 4 : 2;
@@ -39,7 +39,7 @@ export function Wordmark({ size = 'lg', style }: { size?: 'lg' | 'sm'; style?: S
     <View style={style}>
       <Text style={[base, styles.abs, { top: px * 3, color: C.ink }]}>COSPRAY</Text>
       <Text style={[base, styles.abs, { top: px * 2, color: C.purpleLo }]}>COSPRAY</Text>
-      <Text style={[base, styles.abs, { top: px, color: C.yellowLo }]}>COSPRAY</Text>
+      <Text style={[base, styles.abs, { top: px, color: C.greenLo }]}>COSPRAY</Text>
       <Text style={base}>COSPRAY</Text>
     </View>
   );
@@ -99,7 +99,7 @@ export function Panel({ title, tone = 'panel', right, children, style, pad = 14 
     <PixelBox fill={t.fill} hi={t.hi} lo={t.lo} n={6} depth={5} style={style} contentStyle={{ padding: pad, gap: 12 }}>
       {title ? (
         <View style={styles.panelHead}>
-          <T v="label" color={tone === 'yellow' ? C.yellowInk : C.yellow}>{title}</T>
+          <T v="label" color={tone === 'green' ? C.greenInk : C.green}>{title}</T>
           {right}
         </View>
       ) : null}
@@ -113,7 +113,7 @@ export function Empty({ icon, title, sub, action }: { icon: IconName; title: str
   return (
     <Panel>
       <View style={{ alignItems: 'center', gap: 8, paddingVertical: 10 }}>
-        <PixelIcon name={icon} size={48} color={C.yellow} alt={C.yellowLo} />
+        <PixelIcon name={icon} size={48} color={C.green} alt={C.greenLo} />
         <T v="h" style={{ textAlign: 'center' }}>{title}</T>
         {sub ? <T v="sub" style={{ textAlign: 'center' }}>{sub}</T> : null}
         {action ? <View style={{ marginTop: 6 }}>{action}</View> : null}
@@ -155,7 +155,7 @@ export function Btn({ label, onPress, onPressIn, onPressOut, tone = 'green', ico
   size?: keyof typeof SIZES; style?: StyleProp<ViewStyle>; disabled?: boolean;
 }) {
   const t = TONES[tone], s = SIZES[size];
-  const shadow = tone === 'yellow' || tone === 'white' ? {} : outline(t.lo, 2);
+  const shadow = tone === 'green' || tone === 'white' ? {} : outline(t.lo, 2);
   return (
     <PressBox fill={t.fill} hi={t.hi} lo={t.lo} n={s.n} depth={5} onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} disabled={disabled} style={style}
       contentStyle={{ height: s.h, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: s.px }}>
@@ -166,22 +166,22 @@ export function Btn({ label, onPress, onPressIn, onPressOut, tone = 'green', ico
 }
 
 export function IconBtn({ icon, onPress, tone = 'dark', size = 44, active }: { icon: IconName; onPress?: () => void; tone?: Tone; size?: number; active?: boolean }) {
-  const t = TONES[active ? 'yellow' : tone];
+  const t = TONES[active ? 'green' : tone];
   return (
     <PressBox fill={t.fill} hi={t.hi} lo={t.lo} depth={4} hitSlop={6} onPress={onPress} style={{ width: size }}
       contentStyle={{ height: size - 4, alignItems: 'center', justifyContent: 'center' }}>
-      <PixelIcon name={icon} size={24} color={active ? C.yellowInk : C.white} />
+      <PixelIcon name={icon} size={24} color={active ? C.greenInk : C.white} />
     </PressBox>
   );
 }
 
 export function Chip({ label, on, onPress, icon }: { label: string; on?: boolean; onPress?: () => void; icon?: IconName }) {
-  const t = TONES[on ? 'yellow' : 'dark'];
+  const t = TONES[on ? 'green' : 'dark'];
   return (
     <PressBox fill={t.fill} hi={t.hi} lo={t.lo} depth={3} onPress={onPress} disabled={!onPress}
       contentStyle={{ height: 34, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      {icon ? <PixelIcon name={icon} size={12} color={on ? C.yellowInk : C.white} /> : null}
-      <Text style={{ ...uiLabel(11, 0.8), color: on ? C.yellowInk : C.dim }}>{label}</Text>
+      {icon ? <PixelIcon name={icon} size={12} color={on ? C.greenInk : C.white} /> : null}
+      <Text style={{ ...uiLabel(11, 0.8), color: on ? C.greenInk : C.dim }}>{label}</Text>
     </PressBox>
   );
 }
@@ -209,7 +209,7 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
 export function Field({ style, ...rest }: TextInputProps) {
   return (
     <PixelBox fill={C.well} depth={0} bw={3} n={3} contentStyle={{ height: 52, justifyContent: 'center', paddingHorizontal: 14 }}>
-      <TextInput placeholderTextColor={C.faint} selectionColor={C.yellow} {...rest}
+      <TextInput placeholderTextColor={C.faint} selectionColor={C.green} {...rest}
         style={[{ fontFamily: F.display, fontSize: 20, color: C.white, height: 52, padding: 0 }, style]} />
     </PixelBox>
   );
@@ -286,7 +286,7 @@ export function Tile({ n, label, style, big }: { n: string | number; label: stri
 }
 
 /** Small pill: pixel icon + value (coins, streak…). Pressable when `onPress` is set. */
-export function Pill({ icon, value, iconColor = C.yellow, alt = C.yellowLo, onPress }: { icon: IconName; value: string | number; iconColor?: string; alt?: string; onPress?: () => void }) {
+export function Pill({ icon, value, iconColor = C.green, alt = C.greenLo, onPress }: { icon: IconName; value: string | number; iconColor?: string; alt?: string; onPress?: () => void }) {
   const inner = (
     <>
       <PixelIcon name={icon} size={24} color={iconColor} alt={alt} />
@@ -308,7 +308,7 @@ export function Avatar({ name, color, size = 48 }: { name?: string | null; color
 }
 
 export function Rank({ n }: { n: number }) {
-  const tone: Tone = n === 1 ? 'yellow' : n === 2 ? 'white' : n === 3 ? 'red' : 'dark';
+  const tone: Tone = n === 1 ? 'green' : n === 2 ? 'white' : n === 3 ? 'red' : 'dark';
   const t = TONES[tone];
   return (
     <PixelBox fill={t.fill} hi={t.hi} lo={t.lo} depth={2} n={3} style={{ width: 30 }} contentStyle={{ height: 28, alignItems: 'center', justifyContent: 'center' }}>

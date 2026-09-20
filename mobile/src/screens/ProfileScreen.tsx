@@ -60,7 +60,7 @@ export function ProfileScreen() {
 
       <Panel title="MARKET" right={<T v="eyebrow">{coins} COINS</T>}>
         <T v="sub">New paints and can skins. Spray to earn coins; missions pay extra.</T>
-        <Btn label="OPEN MARKET" icon="market" tone="blue" onPress={() => setSheet('market')} />
+        <Btn label="OPEN MARKET" icon="market" tone="purple" onPress={() => setSheet('market')} />
       </Panel>
 
       <Panel title="TODAY">
@@ -81,9 +81,9 @@ function Missions({ stats }: { stats: ReturnType<typeof dayStats> }) {
   const settings = useStore((s) => s.settings);
   const setSettings = useStore((s) => s.setSettings);
   const day = dayKey();
-  const deep = TONES.blueDeep;
+  const deep = TONES.dark;
   return (
-    <Panel title="DAILY QUESTS" tone="blue" right={<PixelIcon name="star" size={24} color={C.yellow} alt={C.yellowLo} />}>
+    <Panel title="DAILY QUESTS" tone="purple" right={<PixelIcon name="star" size={24} color={C.green} alt={C.greenLo} />}>
       {MISSIONS.map((m) => {
         const key = `${day}:${m.id}`;
         const got = Math.min(m.goal, m.get(stats));
@@ -93,15 +93,15 @@ function Missions({ stats }: { stats: ReturnType<typeof dayStats> }) {
         return (
           <PixelBox key={m.id} fill={deep.fill} hi={deep.hi} lo={deep.lo} depth={3} contentStyle={{ padding: 10, gap: 8 }}>
             <View style={styles.rowBetween}>
-              <Text style={styles.mTitle}>{pre}<Text style={{ color: C.yellow }}>{m.hot}</Text>{post}</Text>
+              <Text style={styles.mTitle}>{pre}<Text style={{ color: C.green }}>{m.hot}</Text>{post}</Text>
               <PixelBox fill={deep.lo} depth={0} bw={3} n={3} contentStyle={{ paddingHorizontal: 10, height: 30, justifyContent: 'center' }}>
                 <Text style={{ fontFamily: F.display, fontSize: 16, color: C.white }}>{got}/{m.goal}</Text>
               </PixelBox>
             </View>
             <View style={styles.rowBetween}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <PixelIcon name="coin" size={24} color={C.yellow} alt={C.yellowLo} />
-                <Text style={{ fontFamily: F.display, fontSize: 16, color: C.yellow }}>+{m.reward}</Text>
+                <PixelIcon name="coin" size={24} color={C.green} alt={C.greenLo} />
+                <Text style={{ fontFamily: F.display, fontSize: 16, color: C.green }}>+{m.reward}</Text>
               </View>
               {claimed ? <T v="label" color={C.greenHi}>CLAIMED</T> : (
                 <Btn label={done ? 'CLAIM' : 'IN PROGRESS'} tone={done ? 'green' : 'dark'} size="sm" disabled={!done} onPress={() => {
@@ -123,5 +123,5 @@ const styles = StyleSheet.create({
   canBox: { width: 112, height: 150, alignItems: 'center', justifyContent: 'center', backgroundColor: C.well, borderWidth: 3, borderColor: C.ink },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   tiles: { flexDirection: 'row', gap: 8 },
-  mTitle: { flex: 1, fontFamily: F.display, fontSize: 17, color: C.white, ...outline(C.blueDeepLo) },
+  mTitle: { flex: 1, fontFamily: F.display, fontSize: 17, color: C.white, ...outline(C.well) },
 });

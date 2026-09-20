@@ -73,7 +73,7 @@ export function FoundCard({ c, onView }: { c: FoundPiece; onView?: () => void })
   return (
     <Animated.View style={[{ alignSelf: 'stretch' }, st]}>
       <PixelBox fill={PLATE} hi={PLATE_HI} n={6} depth={5} contentStyle={styles.cardIn}>
-        <PixelIcon name="star" size={24} color={C.yellow} alt={C.yellowLo} />
+        <PixelIcon name="star" size={24} color={C.green} alt={C.greenLo} />
         <View style={{ flex: 1 }}>
           <Text style={styles.cardEyebrow}>YOU FOUND A PIECE</Text>
           <Text style={styles.cardTitle} numberOfLines={1}>by {c.author_name}</Text>
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   spark: { position: 'absolute', width: 9, height: 9, backgroundColor: C.white },
   edge: { position: 'absolute', top: '45%' },
   cardIn: { padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  cardEyebrow: { ...uiLabel(11, 1), color: C.yellow },
+  cardEyebrow: { ...uiLabel(11, 1), color: C.green },
   cardTitle: { fontFamily: F.display, fontSize: 20, color: C.white },
   cardMeta: { ...ui(12.5, '600'), color: C.dim },
   viewBtn: { height: 34, paddingHorizontal: 12, justifyContent: 'center' },
