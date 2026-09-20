@@ -95,7 +95,29 @@
       "./modules/ar-paint/app.plugin.js",
       "expo-live-activity",
       "@bacons/apple-targets",
-      "./plugins/withoutPushEntitlement.js"
+      "./plugins/withoutPushEntitlement.js",
+      [
+        "react-native-android-widget",
+        {
+          "fonts": [
+            "./assets/fonts/PixelifySans_700Bold.ttf",
+            "./assets/fonts/PressStart2P_400Regular.ttf"
+          ],
+          "widgets": [
+            {
+              "name": "Cospray",
+              "label": "Cospray",
+              "description": "Today, your cans, and the pieces near you",
+              "minWidth": "140dp",
+              "minHeight": "140dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {

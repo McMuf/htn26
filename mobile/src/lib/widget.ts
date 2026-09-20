@@ -4,6 +4,8 @@ import { useStore } from '../store';
 import { PAINT_MAX, PAINT_REGEN_PER_SEC } from '../config';
 import { MISSIONS, colorName, dayKey, dayStats } from './economy';
 import { startHeatSync } from './widgetHeat';
+import { startAndroidWidgetSync } from './widgetAndroid';
+import { todayPayload } from './widgetSnapshot';
 
 /** Mirrors paint levels into the App Group so the home-screen widget (targets/widget) can show the can. */
 const APP_GROUP = 'group.com.hamzakhan.tagged';
@@ -12,6 +14,9 @@ let last = '';
 let timer: ReturnType<typeof setTimeout> | null = null;
 
 export function startWidgetSync() {
+  // Android has no App Group and no WidgetKit; it gets the same snapshot through AsyncStorage and
+  // react-native-android-widget instead. The iOS body below is unchanged.
+  if (Platform.OS === 'android') return startAndroidWidgetSync();
   if (Platform.OS !== 'ios') return () => {};
   try { storage = new ExtensionStorage(APP_GROUP); } catch { return () => {}; }
   const push = () => {
@@ -59,12 +64,5 @@ export function streakDays(st: ReturnType<typeof useStore.getState>) {
   return n;
 }
 
-/** What the small widget shows: today's stats and each daily quest's progress. */
-function todayPayload(st: ReturnType<typeof useStore.getState>) {
-  const stats = dayStats(Object.values(st.strokes).flat(), st.painter?.id);
-  const day = dayKey();
-  return {
-    strokes: stats.strokes, pieces: stats.pieces, paint: Math.round(stats.paint), streak: stats.streak,
-    quests: MISSIONS.map((m) => ({ id: m.id, title: m.title.replace('{n}', m.hot), got: Math.min(m.goal, m.get(stats)), goal: m.goal, reward: m.reward, claimed: !!st.settings.claimed[`${day}:${m.id}`] })),
-  };
-}
+/** Re-exported from widgetSnapshot, which owns the single definition. */
+export { todayPayload } from './widgetSnapshot';
