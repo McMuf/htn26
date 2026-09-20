@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import MapKit
 
 // The app writes these keys into the shared App Group UserDefaults (see src/lib/widget.ts):
 //   paintA, paintB (0-100), shake (0-100), colorA, colorB (hex), tag (string), updatedAt (unix seconds),
@@ -24,6 +25,7 @@ struct CanEntry: TimelineEntry {
   let strokes: Int
   let paintUsed: Int
   let heat: HeatPayload?
+  var map: MapSnap? = nil
 
   static func load() -> CanEntry {
     let d = UserDefaults(suiteName: appGroup)
@@ -44,15 +46,104 @@ struct CanEntry: TimelineEntry {
   }
 }
 
+/// A street-map snapshot of the user's vicinity plus every piece projected onto it (points, in the snapshot's coordinate space).
+struct MapSnap {
+  struct Pt { let x: CGFloat; let y: CGFloat; let w: Double; let id: String }
+  let image: UIImage
+  let size: CGSize
+  let pts: [Pt]
+}
+
 struct CanProvider: TimelineProvider {
   func placeholder(in context: Context) -> CanEntry { CanEntry.load() }
   func getSnapshot(in context: Context, completion: @escaping (CanEntry) -> Void) { completion(CanEntry.load()) }
   func getTimeline(in context: Context, completion: @escaping (Timeline<CanEntry>) -> Void) {
     // Paint regenerates ~2.2/s in the app; the app pushes fresh values whenever they change, and we
     // also refresh every 15 minutes so a closed app still shows a filling can.
-    let entry = CanEntry.load()
+    var entry = CanEntry.load()
     let next = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
-    completion(Timeline(entries: [entry], policy: .after(next)))
+    let size = mapSize(for: context.family, display: context.displaySize)
+    snapshotMap(heat: entry.heat, size: size) { snap in
+      entry.map = snap
+      completion(Timeline(entries: [entry], policy: .after(next)))
+    }
+  }
+
+  func mapSize(for family: WidgetFamily, display: CGSize) -> CGSize {
+    switch family {
+    case .systemSmall: return CGSize(width: display.width, height: display.height)
+    case .systemMedium: return CGSize(width: display.height, height: display.height)
+    case .systemLarge: return CGSize(width: display.width, height: 190)
+    default: return .zero
+    }
+  }
+
+  /// Apple's dark tiles, no labels or POIs, framed on the user at the payload's radius; the pieces are
+  /// projected with the snapshot's own transform. Times out to nil, and the view falls back to the radar.
+  func snapshotMap(heat: HeatPayload?, size: CGSize, done: @escaping (MapSnap?) -> Void) {
+    guard let h = heat, size.width > 0 else { done(nil); return }
+    let center = CLLocationCoordinate2D(latitude: h.lat, longitude: h.lng)
+    let opts = MKMapSnapshotter.Options()
+    let aspect = size.width / max(1, size.height)
+    opts.region = MKCoordinateRegion(center: center, latitudinalMeters: h.radiusM * 2.1, longitudinalMeters: h.radiusM * 2.1 * Double(max(1, aspect)))
+    opts.size = size
+    opts.scale = 2
+    opts.mapType = .mutedStandard
+    opts.pointOfInterestFilter = .excludingAll
+    opts.showsBuildings = false
+    opts.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
+    var finished = false
+    let snapper = MKMapSnapshotter(options: opts)
+    let timeout = DispatchWorkItem { if !finished { finished = true; snapper.cancel(); done(nil) } }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 6, execute: timeout)
+    snapper.start { snap, _ in
+      guard !finished else { return }
+      finished = true; timeout.cancel()
+      guard let snap = snap else { done(nil); return }
+      let cosLat = cos(h.lat * .pi / 180)
+      let pts = h.spots.map { s -> MapSnap.Pt in
+        let c = CLLocationCoordinate2D(latitude: h.lat + s.dy / 111320, longitude: h.lng + s.dx / (111320 * cosLat))
+        let p = snap.point(for: c)
+        return MapSnap.Pt(x: p.x, y: p.y, w: s.w, id: s.id)
+      }
+      done(MapSnap(image: snap.image, size: size, pts: pts))
+    }
+  }
+}
+
+/// The map plate: the snapshot desaturated and tinted purple, then every piece as a neon-green pixel
+/// with a glow (bigger and brighter the hotter it is), and you as a green block in the middle.
+struct MapPlate: View {
+  let entry: CanEntry
+  var showScale = true
+  var body: some View {
+    GeometryReader { g in
+      ZStack {
+        if let m = entry.map {
+          Image(uiImage: m.image).resizable().scaledToFill().frame(width: g.size.width, height: g.size.height).clipped()
+            .saturation(0).colorMultiply(T.purpleHi).brightness(-0.08)
+          Rectangle().fill(T.bg.opacity(0.35))
+          let sx = g.size.width / m.size.width, sy = g.size.height / m.size.height
+          ForEach(m.pts, id: \.id) { p in
+            let d: CGFloat = 5 + 7 * CGFloat(p.w)
+            Notched(n: 1.5).fill(p.w >= 0.7 ? T.greenHi : T.green).frame(width: d, height: d)
+              .overlay(Notched(n: 1.5).stroke(T.ink, lineWidth: 1.5))
+              .shadow(color: T.green.opacity(0.9), radius: 3 + 4 * p.w)
+              .position(x: p.x * sx, y: p.y * sy)
+          }
+          Rectangle().fill(T.ink).frame(width: 12, height: 12).position(x: g.size.width / 2, y: g.size.height / 2)
+          Rectangle().fill(T.green).frame(width: 8, height: 8).shadow(color: T.green, radius: 4).position(x: g.size.width / 2, y: g.size.height / 2)
+        } else {
+          RadarView(heat: entry.heat, density: 24, showScale: false)
+        }
+        if showScale {
+          VStack { Spacer(); HStack { if entry.heat?.seeded == true { Caps(text: "SAMPLE", color: T.faint, size: 7) }; Spacer(); Text("\(Int(entry.heat?.radiusM ?? 500)) m").font(.system(size: 8, weight: .bold)).foregroundStyle(T.dim) } }.padding(5)
+        }
+      }
+      .background(Notched(n: 3).fill(T.ink))
+      .clipShape(Notched(n: 3))
+      .overlay(Notched(n: 3).stroke(T.ink, lineWidth: 2))
+    }
   }
 }
 
@@ -127,9 +218,7 @@ struct PaintCanView: View {
   var entry: CanEntry
   @Environment(\.widgetFamily) var family
 
-  var status: String {
-    entry.shake < 12 ? "shake the can" : (min(entry.paintA, entry.paintB) < 18 ? "running low…" : "ready to spray")
-  }
+  var status: String { min(entry.paintA, entry.paintB) < 18 ? "running low…" : "ready to spray" }
   var nearest: HeatSpot? { entry.heat?.nearest }
   var top: [HeatSpot] { Array((entry.heat?.spots ?? []).sorted { $0.d < $1.d }.prefix(3)) }
 
@@ -150,7 +239,7 @@ struct PaintCanView: View {
   /// Small: the radar edge to edge, the nearest spot on a plate at the bottom.
   var small: some View {
     ZStack(alignment: .bottom) {
-      RadarView(heat: entry.heat, density: 22, showScale: false)
+      MapPlate(entry: entry, showScale: false)
       VStack(alignment: .leading, spacing: 2) {
         if let n = nearest {
           HStack(spacing: 4) {
@@ -178,13 +267,13 @@ struct PaintCanView: View {
   /// Medium: radar hero on the left, can status on the right.
   var medium: some View {
     HStack(spacing: 10) {
-      RadarView(heat: entry.heat, density: 24).aspectRatio(1, contentMode: .fit)
+      MapPlate(entry: entry).aspectRatio(1, contentMode: .fit)
       VStack(alignment: .leading, spacing: 6) {
         HeaderStrip(entry: entry)
         Gauge(value: entry.paintA, color: entry.colorA, label: entry.nameA.uppercased(), refillAt: entry.refillAtA)
         Gauge(value: entry.paintB, color: entry.colorB, label: entry.nameB.uppercased(), refillAt: entry.refillAtB)
         Spacer(minLength: 0)
-        if let n = nearest { SpotRow(s: n) } else { Caps(text: status, color: T.dim, size: 8) }
+        if let n = nearest { SpotRow(s: n) } else { Caps(text: "NO PIECES NEARBY YET", color: T.dim, size: 8) }
       }
     }
   }
@@ -193,17 +282,10 @@ struct PaintCanView: View {
   var large: some View {
     VStack(alignment: .leading, spacing: 10) {
       HeaderStrip(entry: entry)
-      RadarView(heat: entry.heat, density: 30).frame(height: 168)
+      MapPlate(entry: entry).frame(height: 190)
       HStack(spacing: 12) {
-        VStack(alignment: .leading, spacing: 6) {
-          Gauge(value: entry.paintA, color: entry.colorA, label: entry.nameA.uppercased(), refillAt: entry.refillAtA)
-          Gauge(value: entry.paintB, color: entry.colorB, label: entry.nameB.uppercased(), refillAt: entry.refillAtB)
-        }
-        VStack(alignment: .leading, spacing: 2) {
-          Caps(text: "CAN", color: T.dim, size: 8)
-          SegBar(value: entry.shake, color: entry.shake < 12 ? T.purpleHi : T.green, segs: 8, height: 7)
-          Text(status.uppercased()).font(.system(size: 8, weight: .heavy)).tracking(0.5).foregroundStyle(T.dim).lineLimit(1)
-        }.frame(width: 96)
+        Gauge(value: entry.paintA, color: entry.colorA, label: entry.nameA.uppercased(), refillAt: entry.refillAtA)
+        Gauge(value: entry.paintB, color: entry.colorB, label: entry.nameB.uppercased(), refillAt: entry.refillAtB)
       }
       VStack(alignment: .leading, spacing: 5) {
         Caps(text: "NEAREST PIECES", size: 8)
