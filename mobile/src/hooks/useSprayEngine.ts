@@ -11,6 +11,7 @@ import { seededRng } from '../lib/ids';
 import { getWall } from '../paint/Wall';
 import { OPACITY, THICKNESS } from '../lib/economy';
 import { sfx } from '../audio/sfx';
+import { laSprayEnd, laSprayStart, laStroke } from '../lib/liveActivity';
 import { useStore, type Side } from '../store';
 import { createCanvas, uploadStroke } from '../data/sync';
 import type { Pose } from './usePose';
@@ -117,6 +118,7 @@ export function useSprayEngine(pose: React.MutableRefObject<Pose>) {
     lastTick.current = Date.now();
     sprayingNow.current = true;
     if (st.settings.sound) sfx.click();
+    laSprayStart(side);
   };
 
   const end = (side: Side) => {
@@ -126,8 +128,10 @@ export function useSprayEngine(pose: React.MutableRefObject<Pose>) {
     sfx.setHiss(false, 0, 0);
     const s = stroke.current;
     stroke.current = null;
+    laSprayEnd();
     if (s && s.points.length > 0) {
       useStore.getState().addStroke(s);
+      laStroke();
       const p = useStore.getState().painter;
       if (p) useStore.getState().setPainter({ ...p, strokes: p.strokes + 1, paint_used: p.paint_used + s.paint_used });
       uploadStroke(s);

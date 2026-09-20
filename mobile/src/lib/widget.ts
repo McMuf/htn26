@@ -3,6 +3,7 @@ import { ExtensionStorage } from '@bacons/apple-targets';
 import { useStore } from '../store';
 import { PAINT_MAX, PAINT_REGEN_PER_SEC } from '../config';
 import { colorName } from './economy';
+import { startHeatSync } from './widgetHeat';
 
 /** Mirrors paint levels into the App Group so the home-screen widget (targets/widget) can show the can. */
 const APP_GROUP = 'group.com.hamzakhan.tagged';
@@ -18,13 +19,15 @@ export function startWidgetSync() {
     const snap = {
       paintA: Math.round(st.paint.A), paintB: Math.round(st.paint.B), shake: Math.round(st.shake * 100),
       colorA: st.settings.optionA.color, colorB: st.settings.optionB.color, nameA: colorName(st.settings.optionA.color), nameB: colorName(st.settings.optionB.color),
-      tag: st.painter?.name ?? 'FRESCO', strokes: st.painter?.strokes ?? 0, paintUsed: Math.round(st.painter?.paint_used ?? 0),
+      tag: st.painter?.name ?? 'COSPRAY', strokes: st.painter?.strokes ?? 0, paintUsed: Math.round(st.painter?.paint_used ?? 0),
       // when each can is full again at the in-app regen rate (unix seconds; widget shows a countdown)
       refillAtA: Math.floor(Date.now() / 1000 + (PAINT_MAX - st.paint.A) / PAINT_REGEN_PER_SEC),
       refillAtB: Math.floor(Date.now() / 1000 + (PAINT_MAX - st.paint.B) / PAINT_REGEN_PER_SEC),
       streak: streakDays(st),
     };
-    const key = JSON.stringify({ ...snap, refillAtA: Math.round(snap.refillAtA / 5), refillAtB: Math.round(snap.refillAtB / 5) });
+    // reload only when something visible moved: paint in 5 % steps, refill times in 5 s buckets. WidgetKit
+    // budgets reloads per day, and the heat radar (widgetHeat.ts) needs its share of them.
+    const key = JSON.stringify({ ...snap, paintA: Math.round(snap.paintA / 5), paintB: Math.round(snap.paintB / 5), shake: Math.round(snap.shake / 10), refillAtA: Math.round(snap.refillAtA / 5), refillAtB: Math.round(snap.refillAtB / 5) });
     if (key === last) return;
     last = key;
     try {
@@ -39,7 +42,8 @@ export function startWidgetSync() {
   // paint changes 30×/s while spraying; the widget only needs a few updates a minute
   const unsub = useStore.subscribe(() => { if (!timer) timer = setTimeout(() => { timer = null; push(); }, 3000); });
   push();
-  return () => { unsub(); if (timer) clearTimeout(timer); };
+  const stopHeat = startHeatSync(storage);
+  return () => { unsub(); stopHeat(); if (timer) clearTimeout(timer); };
 }
 
 /** Consecutive days (ending today) with at least one of your strokes in the local cache. */

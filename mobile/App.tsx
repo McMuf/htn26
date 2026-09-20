@@ -8,6 +8,7 @@ import { PixelifySans_500Medium, PixelifySans_700Bold } from '@expo-google-fonts
 import { VT323_400Regular } from '@expo-google-fonts/vt323';
 import { hydrateStore, useStore } from './src/store';
 import { useLocation } from './src/hooks/useLocation';
+import { useArBrightness } from './src/hooks/useArBrightness';
 import { sfx } from './src/audio/sfx';
 import { fetchPainter, flushPending, loadCached, loadNearby, subscribeRealtime } from './src/data/sync';
 import { supabase } from './src/lib/supabase';
@@ -18,6 +19,7 @@ import { PaintScreen } from './src/screens/PaintScreen';
 import { ArPaintScreen } from './src/screens/ArPaintScreen';
 import { isArSupported } from './modules/ar-paint';
 import { startWidgetSync } from './src/lib/widget';
+import { startLiveActivityLifecycle } from './src/lib/liveActivity';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { ExploreScreen } from './src/screens/ExploreScreen';
 import { SocialScreen } from './src/screens/SocialScreen';
@@ -81,9 +83,11 @@ function Root() {
   const settings = useStore((s) => s.settings);
   const location = useStore((s) => s.location);
   useLocation();
+  useArBrightness(tab === 'create' && !sheet);
 
   useEffect(() => { sfx.enabled = settings.sound; }, [settings.sound]);
   useEffect(() => startWidgetSync(), []);
+  useEffect(() => startLiveActivityLifecycle(), []);
 
   // backend: realtime + periodic nearby refresh + pending flush
   useEffect(() => {

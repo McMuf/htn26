@@ -7,6 +7,7 @@ import {
 import { haversineM, wrap360 } from '../lib/geo';
 import { uuid } from '../lib/ids';
 import { sfx } from '../audio/sfx';
+import { laSprayEnd, laSprayStart, laStroke } from '../lib/liveActivity';
 import { useStore, type Side } from '../store';
 import { createCanvas, uploadStroke } from '../data/sync';
 import type { Pose } from './usePose';
@@ -122,6 +123,7 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     strokePaint.current = 0;
     applyNativeProps(side);
     if (st.settings.sound) sfx.click();
+    laSprayStart(side);
   };
 
   const end = (side: Side) => {
@@ -129,6 +131,7 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     held.current = null;
     sfx.setHiss(false, 0, 0);
     setNative((n) => ({ ...n, spraying: false }));
+    laSprayEnd();
   };
 
   // 10 Hz game tick while held: cost, hiss, haptics, blockers
@@ -177,6 +180,7 @@ export function useArSpray(pose: React.MutableRefObject<Pose>, opts: { onStrokeS
     };
     strokePaint.current = 0;
     st.addStroke(s);
+    laStroke();
     const p = st.painter;
     if (p) st.setPainter({ ...p, strokes: p.strokes + 1, paint_used: p.paint_used + s.paint_used });
     uploadStroke(s);

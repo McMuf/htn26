@@ -4,6 +4,7 @@ import { CANVAS_VISIBLE_RADIUS_M, DISCOVERED_RADIUS_M, DISCOVERY_SHIMMER_RADIUS_
 import { bearingDeg, clamp, haversineM, wrapDiff } from '../lib/geo';
 import { useStore } from '../store';
 import { incrementViews } from '../data/sync';
+import { maybeAlert } from '../lib/proximityAlerts';
 import type { Pose } from './usePose';
 import type { Canvas } from '../types';
 import type { WallView } from '../paint/PaintLayer';
@@ -84,6 +85,8 @@ export function useDiscovery(pose: React.MutableRefObject<Pose>, autoLock: boole
           Math.abs((prev.pull?.distance ?? 0) - (pull?.distance ?? 0)) < 0.3 && Math.abs((prev.pull?.relBearing ?? 0) - (pull?.relBearing ?? 0)) < 2 &&
           prev.walls.length === walls.length && prev.walls.every((w, i) => w.canvasId === walls[i].canvasId && Math.abs(w.resolve - walls[i].resolve) < 0.02);
         if (same) return prev;
+        // a new piece started pulling you in: maybe a "hot spot nearby" banner (cooldown + heat gate inside)
+        if (pull && pull.canvas.id !== prev.pull?.canvas.id) maybeAlert(pull.canvas, pull.distance, pull.bearing);
         return { walls, pull, justFound: jf, focused: justFound ?? focused };
       });
     }, 120);

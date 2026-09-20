@@ -2,11 +2,11 @@
 module.exports = (config) => ({
   type: 'widget',
   name: 'widget',
-  displayName: 'Fresco Can',
+  displayName: 'Cospray Radar',
   deploymentTarget: '17.0',
   colors: {
-    $widgetBackground: '#0b0b0f',
-    $accent: '#ff2d95',
+    $widgetBackground: '#12082b',
+    $accent: '#ffd21f',
   },
   entitlements: {
     'com.apple.security.application-groups': config.ios.entitlements['com.apple.security.application-groups'],

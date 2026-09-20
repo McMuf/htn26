@@ -12,6 +12,7 @@ import { BLOCKER_LINE, CreateHud, pullLine, Reticle, type HudLine } from '../com
 import { GUTTER } from '../ui/theme';
 import { DiscoveryCues } from '../components/DiscoveryOverlay';
 import { PieceDetail } from '../components/SpatialViewer';
+import { laEnd } from '../lib/liveActivity';
 import { useStore } from '../store';
 import type { Canvas } from '../types';
 
@@ -49,7 +50,7 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
   const [detail, setDetail] = useState<Canvas | null>(null);
 
   useVolumeTrigger(settings.volumeButtons && active, { onHoldStart: engine.start, onHoldEnd: engine.end });
-  useEffect(() => { if (!active && engine.held.current) engine.end(engine.held.current); }, [active]);
+  useEffect(() => { if (!active) { if (engine.held.current) engine.end(engine.held.current); laEnd(); } }, [active]);
 
   // cheap UI poll for spray state (engine runs off refs to stay at 30Hz without re-rendering)
   const [ui, setUi] = useState<{ spraying: boolean; blocker: Blocker }>({ spraying: false, blocker: null });

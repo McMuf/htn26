@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Tagged",
+    "name": "Cospray",
     "slug": "tagged",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -26,6 +26,8 @@
           "audio"
         ],
         "ITSAppUsesNonExemptEncryption": false,
+        "NSSupportsLiveActivities": true,
+        "NSSupportsLiveActivitiesFrequentUpdates": true,
         "UIRequiredDeviceCapabilities": [
           "arkit"
         ]

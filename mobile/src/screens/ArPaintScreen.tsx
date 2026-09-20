@@ -16,6 +16,7 @@ import { useDiscovery } from '../hooks/useDiscovery';
 import { BLOCKER_LINE, CreateHud, pullLine, type HudLine } from '../components/HUD';
 import { DiscoveryCues } from '../components/DiscoveryOverlay';
 import { PieceDetail } from '../components/SpatialViewer';
+import { laEnd } from '../lib/liveActivity';
 import { useStore } from '../store';
 import { deleteStroke, downloadWorldMap, incrementViews, onRemoteStroke, uploadWorldMap, worldMapUsable } from '../data/sync';
 import { CANVAS_JOIN_RADIUS_M } from '../config';
@@ -170,7 +171,7 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const discovery = useDiscovery(pose, (c) => !worldMapUsable(c));
 
   useVolumeTrigger(settings.volumeButtons && active, { onHoldStart: engine.start, onHoldEnd: engine.end });
-  useEffect(() => { if (!active && engine.held.current) engine.end(engine.held.current); }, [active]);
+  useEffect(() => { if (!active) { if (engine.held.current) engine.end(engine.held.current); laEnd(); } }, [active]);
 
   // The canvas you're standing at: load its world map (relocalise), or, if it has AR strokes but
   // no usable map, place them from the painter's viewpoint. Once, and only before you paint here.
