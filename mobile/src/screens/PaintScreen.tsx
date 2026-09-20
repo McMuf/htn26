@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { Btn } from '../ui/kit';
+import { StyleSheet, View } from 'react-native';
+import { Btn, Empty, Screen } from '../ui/kit';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useKeepAwake } from 'expo-keep-awake';
 import { PaintLayer } from '../paint/PaintLayer';
@@ -9,7 +9,7 @@ import { useSprayEngine, type Blocker } from '../hooks/useSprayEngine';
 import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
 import { BLOCKER_LINE, CreateHud, pullLine, Reticle, type HudLine } from '../components/HUD';
-import { F } from '../ui/theme';
+import { GUTTER } from '../ui/theme';
 import { DiscoveryCues } from '../components/DiscoveryOverlay';
 import { PieceDetail } from '../components/SpatialViewer';
 import { useStore } from '../store';
@@ -72,10 +72,11 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
 
   if (!perm?.granted) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.msg}>Camera permission is needed to paint.</Text>
-        <Btn label="ALLOW CAMERA" tone="green" onPress={requestPerm} />
-      </View>
+      <Screen scroll={false}>
+        <View style={styles.center}>
+          <Empty icon="camera" title="Camera needed" sub="Cospray paints on real walls through the camera." action={<Btn label="ALLOW CAMERA" tone="green" onPress={requestPerm} />} />
+        </View>
+      </Screen>
     );
   }
 
@@ -107,7 +108,6 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#12082b', padding: 24, gap: 16 },
-  msg: { fontFamily: F.body, color: '#fff', fontSize: 16, textAlign: 'center' },
+  root: { flex: 1, backgroundColor: '#000000' },
+  center: { flex: 1, justifyContent: 'center', padding: GUTTER },
 });

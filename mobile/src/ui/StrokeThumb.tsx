@@ -51,7 +51,7 @@ export function PieceImage({ canvasId, width, height, cell = 3, radius = 0 }: { 
   return <StrokeThumb canvasId={canvasId} width={width} height={height} cell={cell} radius={radius} wall />;
 }
 
-const BRICK = { base: '#463c66', light: '#51466f', dark: '#352d55', mortar: '#2a2447' };
+export const BRICK = { base: '#463c66', light: '#51466f', dark: '#352d55', mortar: '#2a2447' };
 
 /** Seeded brick courses: mortar grid plus a few lighter and darker bricks, so no two walls match. */
 export function wallPaths(id: string, w: number, h: number) {

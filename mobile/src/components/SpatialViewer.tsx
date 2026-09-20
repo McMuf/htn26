@@ -5,8 +5,9 @@ import { cancelAnimation, Easing, useDerivedValue, useSharedValue, withDecay, wi
 import { Btn, IconBtn, Panel, T, Tile } from '../ui/kit';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
-import { layoutDabs, mosaic } from '../ui/StrokeThumb';
-import { C, F, uiLabel } from '../ui/theme';
+import { BRICK, layoutDabs, mosaic } from '../ui/StrokeThumb';
+import { Backdrop } from '../ui/Backdrop';
+import { BACKDROPS, C, GUTTER, uiLabel } from '../ui/theme';
 import { mix } from '../ui/color';
 import { seededRng } from '../lib/ids';
 import { useStore } from '../store';
@@ -38,7 +39,7 @@ export function PieceDetail({ canvas: c, onClose }: { canvas: CanvasT; onClose: 
   useEffect(() => { if (!isMock(c.id)) fetchPreviewStrokes([c.id]).catch(() => {}); }, [c.id]);
   const paint = strokes.reduce((a, s) => a + s.paint_used, 0);
   const colors = [...new Set(strokes.map((s) => s.color))].slice(0, 8);
-  const mapsUrl = `https://maps.apple.com/?ll=${c.lat},${c.lng}&q=${encodeURIComponent(c.title ?? 'Fresco piece')}`;
+  const mapsUrl = `https://maps.apple.com/?ll=${c.lat},${c.lng}&q=${encodeURIComponent(c.title ?? 'Cospray piece')}`;
   const canReport = !isMock(c.id) && c.author_id !== me?.id;
   const report = () => Alert.alert('Report this piece?', 'Two reports hide a piece for everyone.', [
     { text: 'Cancel', style: 'cancel' },
@@ -47,6 +48,7 @@ export function PieceDetail({ canvas: c, onClose }: { canvas: CanvasT; onClose: 
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={styles.root}>
+        <Backdrop />
         <Scene canvas={c} strokes={strokes} onClose={onClose} />
         <ScrollView contentContainerStyle={styles.sheet} showsVerticalScrollIndicator={false}>
           <View>
@@ -64,7 +66,7 @@ export function PieceDetail({ canvas: c, onClose }: { canvas: CanvasT; onClose: 
           <Panel title="LOCATION">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <PixelIcon name="pin" size={24} color={C.white} />
-              <Text style={styles.mono}>{c.lat.toFixed(5)}, {c.lng.toFixed(5)}</Text>
+              <T v="mono">{c.lat.toFixed(5)}, {c.lng.toFixed(5)}</T>
             </View>
             <T v="small">facing {Math.round(c.heading)}° · {isMock(c.id) ? 'sample spot' : c.world_map_path ? 'AR world map saved' : 'compass-anchored'}</T>
             <Btn label="OPEN IN MAPS" icon="share" tone="blue" onPress={() => Linking.openURL(mapsUrl)} />
@@ -114,25 +116,25 @@ function Scene({ canvas: c, strokes, onClose }: { canvas: CanvasT; strokes: Stro
   const skyB = useDerivedValue(() => [{ translateX: PANO_W - (((yaw.value * PANO_W) / (Math.PI * 2)) % PANO_W + PANO_W) % PANO_W }]);
   const floorT = useMemo(() => [{ rotateX: Math.PI / 2 }, { translateX: -R }, { translateY: -R }] as any, []);
   const wallT = useMemo(() => [{ translateX: -WALL_W / 2 }, { translateY: -WALL_H }] as any, []);
-  const bands = useMemo(() => Array.from({ length: 12 }, (_, i) => mix('#3b1a8a', '#150a36', i / 11)), []);
+  const bands = useMemo(() => Array.from({ length: 12 }, (_, i) => mix(BACKDROPS.purple.top, C.well, i / 11)), []);
   const horizon = cy - 34;
 
   return (
-    <View style={{ height: SCENE_H, backgroundColor: '#150a36' }} {...pan.panHandlers}>
+    <View style={{ height: SCENE_H, backgroundColor: C.well, borderBottomWidth: 3, borderColor: C.ink }} {...pan.panHandlers}>
       <Canvas style={{ width: sw, height: SCENE_H }}>
         {bands.map((col, i) => <Rect key={i} x={0} y={(i * SCENE_H) / 12} width={sw} height={SCENE_H / 12 + 1} color={col} />)}
         <Group transform={[{ translateY: horizon - SKY_H }]}>
           <Group transform={skyA}><Picture picture={skyPic} /></Group>
           <Group transform={skyB}><Picture picture={skyPic} /></Group>
         </Group>
-        <Rect x={0} y={horizon} width={sw} height={SCENE_H - horizon} color="#150a36" />
+        <Rect x={0} y={horizon} width={sw} height={SCENE_H - horizon} color={C.well} />
         <Group transform={cam}>
           <Group transform={floorT}><Picture picture={floorPic} /></Group>
           <Group transform={wallT}><Picture picture={wallPic} /></Group>
         </Group>
       </Canvas>
       <View style={styles.topRow} pointerEvents="box-none">
-        <PixelBox fill="#160b36" depth={3} contentStyle={{ height: 36, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <PixelBox fill={C.plate} depth={3} contentStyle={{ height: 36, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <PixelIcon name="cube" size={24} color={C.white} alt={C.faint} />
           <Text style={styles.chip}>5 M CAPTURE RADIUS</Text>
         </PixelBox>
@@ -164,8 +166,8 @@ const rect = (cv: any, x: number, y: number, w: number, h: number, p: any) => cv
 function wallPicture(id: string, strokes: Stroke[]) {
   const rng = seededRng(`wall-${id}`);
   return record(WALL_W, WALL_H, (cv) => {
-    rect(cv, 0, 0, WALL_W, WALL_H, paintOf('#4b3e82'));
-    const mortar = paintOf('#332a63');
+    rect(cv, 0, 0, WALL_W, WALL_H, paintOf(BRICK.base));
+    const mortar = paintOf(BRICK.mortar);
     for (let r = 0, y = 0; y < WALL_H; r++, y += 8) {
       rect(cv, 0, y, WALL_W, 2, mortar);
       for (let x = r % 2 ? 11 : 0; x < WALL_W; x += 22) {
@@ -188,11 +190,11 @@ function wallPicture(id: string, strokes: Stroke[]) {
 function floorPicture() {
   return record(R * 2, R * 2, (cv) => {
     const clip = Skia.Path.Make(); clip.addCircle(R, R, R); cv.save(); cv.clipPath(clip, 1, false);
-    const a = paintOf('#2b1a66'), b = paintOf('#35227a');
+    const a = paintOf(C.panel), b = paintOf(mix(C.panel, C.panelHi, 0.3));
     for (let i = 0; i < 10; i++) for (let j = 0; j < 10; j++) rect(cv, i * TILE, j * TILE, TILE, TILE, (i + j) % 2 ? a : b);
     rect(cv, R - WALL_W / 2, R - 7, WALL_W, 14, paintOf('#000000', 0.35)); // contact shadow
     cv.restore();
-    const dots = paintOf('#ffd21f'), white = paintOf('#ffffff');
+    const dots = paintOf(C.yellow), white = paintOf(C.white);
     for (let i = 0; i < 48; i++) { const ang = (i / 48) * Math.PI * 2; rect(cv, R + Math.cos(ang) * (R - 3) - 3, R + Math.sin(ang) * (R - 3) - 3, 6, 6, i % 2 ? dots : white); }
     for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) rect(cv, R + dx * (R - 14) - 5, R + dy * (R - 14) - 5, 10, 10, dots); // compass ticks
   });
@@ -203,7 +205,7 @@ function skylinePicture(id: string) {
   const rng = seededRng(`sky-${id}`);
   return record(PANO_W, SKY_H, (cv) => {
     const layer = (color: string, minH: number, maxH: number, minW: number, maxW: number, windows: boolean) => {
-      const p = paintOf(color); const win = paintOf('#ffd21f', 0.75); const win2 = paintOf('#57ffa0', 0.6);
+      const p = paintOf(color); const win = paintOf(C.yellow, 0.75); const win2 = paintOf(C.greenHi, 0.6);
       for (let x = 0; x < PANO_W;) {
         let w = Math.round(minW + rng() * (maxW - minW)); if (x + w > PANO_W - 20) w = PANO_W - x;
         const h = Math.round(minH + rng() * (maxH - minH));
@@ -212,23 +214,22 @@ function skylinePicture(id: string) {
         x += w;
       }
     };
-    layer('#3f2a86', 40, 110, 40, 90, false);
-    layer('#22124f', 60, 160, 36, 84, true);
-    const moon = paintOf('#fff3a8');
+    layer(C.panelHi, 40, 110, 40, 90, false);
+    layer(C.panelLo, 60, 160, 36, 84, true);
+    const moon = paintOf(C.yellowHi);
     const mx = Math.round(200 + rng() * 1000), my = 18;
     for (let dy = -18; dy <= 18; dy += 3) { const hw = Math.round(Math.sqrt(18 * 18 - dy * dy) / 3) * 3; rect(cv, mx - hw, my + dy, hw * 2, 3, moon); }
   });
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#150a36' },
+  root: { flex: 1, backgroundColor: C.bg },
   photoFrame: { borderWidth: 3, borderColor: C.ink },
   photo: { width: '100%', height: 210 },
-  sheet: { padding: 18, gap: 14, paddingBottom: 50 },
+  sheet: { padding: GUTTER, gap: 14, paddingBottom: 50 },
   topRow: { position: 'absolute', top: 56, left: 14, right: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   bottomRow: { position: 'absolute', bottom: 12, left: 14, right: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   chip: { ...uiLabel(11, 0.6), color: C.white },
-  hint: { backgroundColor: '#0a062088', paddingHorizontal: 10, paddingVertical: 6 },
+  hint: { backgroundColor: C.ink + '88', paddingHorizontal: 10, paddingVertical: 6 },
   hintText: { ...uiLabel(10.5, 0.8), color: C.dim },
-  mono: { fontFamily: F.mono, fontSize: 22, color: C.phosphor },
 });

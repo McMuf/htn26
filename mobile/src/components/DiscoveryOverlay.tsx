@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import type { Discovery } from '../hooks/useDiscovery';
 import { useStore } from '../store';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
-import { hapticTap } from '../ui/kit';
-import { C, F, PLATE, PLATE_HI, ui, uiLabel } from '../ui/theme';
+import { PressBox } from '../ui/kit';
+import { C, F, PLATE, PLATE_HI, TONES, ui, uiLabel } from '../ui/theme';
 
 /**
  * The reveal, drawn over the camera. A pixel shimmer pulls your eye toward an undiscovered piece
@@ -57,7 +57,7 @@ function EdgeArrow({ left, strength }: { left: boolean; strength: number }) {
   return (
     <Animated.View pointerEvents="none" style={[styles.edge, left ? { left: 10 } : { right: 10 }, st]}>
       <PixelBox fill={PLATE} hi={PLATE_HI} depth={3} style={{ width: 48 }} contentStyle={{ height: 44, alignItems: 'center', justifyContent: 'center' }}>
-        <PixelIcon name={left ? 'left' : 'right'} size={24} color="#fff" />
+        <PixelIcon name={left ? 'left' : 'right'} size={24} color={C.white} />
       </PixelBox>
     </Animated.View>
   );
@@ -73,18 +73,16 @@ export function FoundCard({ c, onView }: { c: FoundPiece; onView?: () => void })
   return (
     <Animated.View style={[{ alignSelf: 'stretch' }, st]}>
       <PixelBox fill={PLATE} hi={PLATE_HI} n={6} depth={5} contentStyle={styles.cardIn}>
-        <PixelIcon name="star" size={24} color="#fff" />
+        <PixelIcon name="star" size={24} color={C.yellow} alt={C.yellowLo} />
         <View style={{ flex: 1 }}>
           <Text style={styles.cardEyebrow}>YOU FOUND A PIECE</Text>
           <Text style={styles.cardTitle} numberOfLines={1}>by {c.author_name}</Text>
           <Text style={styles.cardMeta}>{c.views} {c.views === 1 ? 'view' : 'views'}</Text>
         </View>
         {onView ? (
-          <Pressable onPress={() => { hapticTap(); onView(); }} hitSlop={8}>
-            <PixelBox fill="#ffffff" hi="#ffffff" lo="#b9aee0" depth={3} contentStyle={styles.viewBtn}>
-              <Text style={styles.viewText}>VIEW</Text>
-            </PixelBox>
-          </Pressable>
+          <PressBox fill={TONES.white.fill} hi={TONES.white.hi} lo={TONES.white.lo} depth={3} hitSlop={8} onPress={onView} contentStyle={styles.viewBtn}>
+            <Text style={styles.viewText}>VIEW</Text>
+          </PressBox>
         ) : null}
       </PixelBox>
     </Animated.View>
@@ -100,11 +98,11 @@ export function timeAgo(iso: string) {
 }
 
 const styles = StyleSheet.create({
-  spark: { position: 'absolute', width: 9, height: 9, backgroundColor: '#fff' },
+  spark: { position: 'absolute', width: 9, height: 9, backgroundColor: C.white },
   edge: { position: 'absolute', top: '45%' },
   cardIn: { padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  cardEyebrow: { ...uiLabel(11, 1), color: '#fff' },
-  cardTitle: { fontFamily: F.display, fontSize: 20, color: '#fff' },
+  cardEyebrow: { ...uiLabel(11, 1), color: C.yellow },
+  cardTitle: { fontFamily: F.display, fontSize: 20, color: C.white },
   cardMeta: { ...ui(12.5, '600'), color: C.dim },
   viewBtn: { height: 34, paddingHorizontal: 12, justifyContent: 'center' },
   viewText: { ...uiLabel(12, 0.8), color: C.ink },

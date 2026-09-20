@@ -5,7 +5,7 @@ import { Backdrop } from './Backdrop';
 import { PixelBox } from './PixelBox';
 import { PixelIcon, type IconName } from './PixelIcon';
 import { haptic } from './haptics';
-import { BACKDROPS, C, DOCK_INSET, F, GUTTER, outline, TONES, ui, uiLabel, type BackdropName, type Tone } from './theme';
+import { BACKDROPS, C, DOCK_INSET, F, GUTTER, PLATE_HI, outline, TONES, ui, uiLabel, type BackdropName, type Tone } from './theme';
 
 /** Kept for old call sites; prefer `haptic.tap`. */
 export const hapticTap = haptic.tap;
@@ -192,7 +192,7 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
   const knob = useAnimatedStyle(() => ({ left: x.value }));
   return (
     <Pressable onPress={() => { haptic.tap(); onChange(!on); }} hitSlop={8} style={{ width: 62, height: 34 }}>
-      <PixelBox fill={on ? C.green : TONES.dark.hi} hi={on ? C.greenHi : '#4d3a99'} lo={on ? C.greenLo : '#241a55'} depth={0} style={{ width: 62, height: 34 }}>
+      <PixelBox fill={on ? C.green : TONES.dark.hi} hi={on ? C.greenHi : C.panelHi} lo={on ? C.greenLo : TONES.dark.lo} depth={0} style={{ width: 62, height: 34 }}>
         <View style={{ height: 34 }} />
       </PixelBox>
       <Animated.View style={[styles.knob, knob]} pointerEvents="none">
@@ -295,10 +295,9 @@ export function Pill({ icon, value, iconColor = C.yellow, alt = C.yellowLo, onPr
   );
   const content = { height: 38, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, paddingHorizontal: 10 };
   return onPress
-    ? <PressBox fill={C.plate} hi={PLATE_HI_PILL} depth={3} n={3} onPress={onPress} contentStyle={content}>{inner}</PressBox>
-    : <PixelBox fill={C.plate} hi={PLATE_HI_PILL} depth={3} n={3} contentStyle={content}>{inner}</PixelBox>;
+    ? <PressBox fill={C.plate} hi={PLATE_HI} depth={3} n={3} onPress={onPress} contentStyle={content}>{inner}</PressBox>
+    : <PixelBox fill={C.plate} hi={PLATE_HI} depth={3} n={3} contentStyle={content}>{inner}</PixelBox>;
 }
-const PLATE_HI_PILL = '#2a1c5c';
 
 export function Avatar({ name, color, size = 48 }: { name?: string | null; color: string; size?: number }) {
   return (
