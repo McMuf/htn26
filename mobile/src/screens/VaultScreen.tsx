@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
-import { Btn, Card, Empty, Header, Pill, Screen, T } from '../ui/kit';
+import { Btn, Card, Empty, Header, CoinPill, Screen, T } from '../ui/kit';
 import { PixelIcon } from '../ui/PixelIcon';
 import { PieceImage } from '../ui/StrokeThumb';
 import { C, GUTTER } from '../ui/theme';
@@ -46,7 +46,7 @@ export function VaultScreen() {
 
   return (
     <Screen loading={loading} onRefresh={load}>
-      <Header title="VAULT" sub={`${mine.length} walls · ${totals.views} views · ${totals.strokes} strokes`} right={<Pill icon="cube" value={mine.length} />} />
+      <Header title="VAULT" sub={`${mine.length} walls · ${totals.views} views · ${totals.strokes} strokes`} right={<CoinPill />} />
       {mine.length === 0 && (
         <Empty icon="cube" title="Nothing saved yet." sub="Every wall you spray lands here, ready to walk around in 3D."
           action={<Btn label="PAINT SOMETHING" icon="create" tone="green" onPress={() => setTab('create')} />} />

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
-import { Btn, Card, Chip, Header, Panel, Pill, Rank, Row, Screen, SheetHeader, T } from '../ui/kit';
+import { Btn, Card, Chip, Header, Panel, CoinPill, Rank, Row, Screen, SheetHeader, T } from '../ui/kit';
 import { Backdrop } from '../ui/Backdrop';
 import { PieceImage } from '../ui/StrokeThumb';
 import { C, GUTTER } from '../ui/theme';
@@ -63,10 +63,15 @@ export function ExploreScreen() {
 
   return (
     <Screen loading={loading} onRefresh={load}>
-      <Header title="EXPLORE" sub={usingSamples ? 'no pieces yet · showing sample spots' : `${all.length} walls across Waterloo`} right={<Pill icon="eye" value={all.reduce((a, c) => a + c.views, 0)} />} />
+      <Header title="EXPLORE" sub={usingSamples ? 'no pieces yet · showing sample spots' : `${all.length} walls across Waterloo`} right={<CoinPill />} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 18 }} style={styles.bleed}>
         {FILTERS.map((f) => <Chip key={f.key} label={f.label} on={filter === f.key} onPress={() => setFilter(f.key)} />)}
       </ScrollView>
+
+      <Panel title="HOT ZONES" right={<T v="small">green = fresh paint</T>}>
+        <View style={styles.mapFrame}><HeatMap canvases={all} height={240} /></View>
+        <Btn label="OPEN MAP" icon="pin" tone="purple" size="sm" onPress={() => setMapOpen(true)} />
+      </Panel>
 
       <T v="label">TRENDING PIECES</T>
       {trending.length === 0 ? <T v="sub">Nothing matches this filter yet.</T> : (
@@ -85,11 +90,6 @@ export function ExploreScreen() {
           ))}
         </ScrollView>
       )}
-
-      <Panel title="HOT ZONES" right={<T v="small">bigger glow = more paint</T>}>
-        <View style={styles.mapFrame}><HeatMap canvases={all} height={190} /></View>
-        <Btn label="OPEN MAP" icon="pin" tone="purple" size="sm" onPress={() => setMapOpen(true)} />
-      </Panel>
 
       <T v="label">NEARBY CANVASES</T>
       {!loc && <T v="sub">waiting for GPS…</T>}

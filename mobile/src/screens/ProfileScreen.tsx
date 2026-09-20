@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
 import { PixelCan } from '../ui/PixelCan';
-import { Avatar, Btn, Gauge, IconBtn, Panel, Pill, Screen, SegBar, T, Tile } from '../ui/kit';
+import { Avatar, Btn, Gauge, IconBtn, Panel, CoinPill, Screen, SegBar, T, Tile } from '../ui/kit';
 import { haptic } from '../ui/haptics';
 import { C, F, TONES, outline } from '../ui/theme';
 import { useStore } from '../store';
@@ -32,7 +32,7 @@ export function ProfileScreen() {
           <T v="h" numberOfLines={1}>{painter?.name ?? 'painter'}</T>
           <T v="small">{crew ? crew.name : 'NO CREW'} · {online ? 'LIVE' : 'OFFLINE'}</T>
         </View>
-        <Pill icon="coin" value={coins} onPress={() => setSheet('market')} />
+        <CoinPill />
         <IconBtn icon="settings" onPress={() => setSheet('settings')} />
       </View>
 

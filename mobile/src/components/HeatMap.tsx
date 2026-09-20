@@ -1,48 +1,56 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapView, { Circle, Marker } from 'react-native-maps';
+import MapView, { Marker, Overlay, type Region } from 'react-native-maps';
 import { GEOFENCE } from '../config';
 import { useStore } from '../store';
-import { heatLevel, heatWeights } from '../lib/heat';
-import { C, HEAT } from '../ui/theme';
-import { rgb } from '../ui/color';
+import { heatWeights } from '../lib/heat';
+import { renderHeat } from '../lib/heatImage';
+import { C } from '../ui/theme';
 import type { Canvas } from '../types';
 
-const rgba = (hex: string, a: number) => { const [r, g, b] = rgb(hex); return `rgba(${r},${g},${b},${a})`; };
-
 /**
- * Hot-zone map: every canvas glows in proportion to its recency-weighted activity (same model as the
- * widget), as three stepped rings in the theme's heat ramp — no soft gradients.
+ * Hot-zone map: a dark purple map (Apple's dark tiles, tinted through blend layers) with the
+ * recency-weighted activity of every piece burned in as chunky purple→green heat (same model as the
+ * widget). The heat is rendered by us (react-native-maps' Heatmap is Google-only on iOS) as an
+ * image overlay that re-renders when the region settles.
  */
 export function HeatMap({ canvases, height = 190, interactive = false }: { canvases: Canvas[]; height?: number; interactive?: boolean }) {
   const loc = useStore((s) => s.location);
   const discovered = useStore((s) => s.discovered);
   const weights = useMemo(() => heatWeights(canvases), [canvases]);
-  const region = useMemo(() => {
+  const points = useMemo(() => canvases.map((c) => ({ lat: c.lat, lng: c.lng, w: weights[c.id] ?? 0.12 })), [canvases, weights]);
+  const initial = useMemo<Region>(() => {
     const c = canvases[0];
-    return { latitude: loc?.lat ?? c?.lat ?? GEOFENCE.lat, longitude: loc?.lng ?? c?.lng ?? GEOFENCE.lng, latitudeDelta: 0.014, longitudeDelta: 0.014 };
-  }, [loc?.lat, loc?.lng, canvases.length]);
+    const d = interactive ? 0.02 : 0.014;
+    return { latitude: loc?.lat ?? c?.lat ?? GEOFENCE.lat, longitude: loc?.lng ?? c?.lng ?? GEOFENCE.lng, latitudeDelta: d, longitudeDelta: d };
+  }, [loc?.lat, loc?.lng, canvases.length, interactive]);
+  const [region, setRegion] = useState<Region>(initial);
+  useEffect(() => { if (!interactive) setRegion(initial); }, [initial, interactive]);
+  // render a little wider than the viewport so panning doesn't show a hard edge before the next render
+  const heat = useMemo(() => renderHeat(points, { ...region, latitudeDelta: region.latitudeDelta * 1.5, longitudeDelta: region.longitudeDelta * 1.5 }, interactive ? 192 : 128), [points, region, interactive]);
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onSettle = (r: Region) => { if (pending.current) clearTimeout(pending.current); pending.current = setTimeout(() => setRegion(r), 150); };
   return (
     <View style={interactive ? styles.fill : { height }}>
-      <MapView style={StyleSheet.absoluteFill} userInterfaceStyle="dark" showsUserLocation initialRegion={region}
-        scrollEnabled={interactive} zoomEnabled={interactive} rotateEnabled={false} pitchEnabled={false} toolbarEnabled={false}>
-        {canvases.map((c) => {
-          const w = weights[c.id] ?? 0.12;
-          const lvl = heatLevel(w);
-          const r = 40 + w * 160;
-          return (
-            <React.Fragment key={c.id}>
-              <Circle center={{ latitude: c.lat, longitude: c.lng }} radius={r} strokeWidth={0} fillColor={rgba(HEAT[Math.max(1, lvl - 1)], 0.16)} />
-              <Circle center={{ latitude: c.lat, longitude: c.lng }} radius={r * 0.62} strokeWidth={0} fillColor={rgba(HEAT[Math.max(1, lvl)], 0.28)} />
-              <Circle center={{ latitude: c.lat, longitude: c.lng }} radius={r * 0.3} strokeWidth={2} strokeColor={C.ink} fillColor={rgba(HEAT[Math.max(1, lvl)], 0.75)} />
-              {interactive && <Marker coordinate={{ latitude: c.lat, longitude: c.lng }} title={`${c.author_name} · ${c.stroke_count} strokes`} description={`${c.views} views${discovered[c.id] ? ' · found' : ''}`} pinColor={discovered[c.id] ? C.green : C.red} />}
-            </React.Fragment>
-          );
-        })}
+      <MapView style={StyleSheet.absoluteFill} userInterfaceStyle="dark" showsUserLocation initialRegion={initial}
+        onRegionChangeComplete={interactive ? onSettle : undefined}
+        scrollEnabled={interactive} zoomEnabled={interactive} rotateEnabled={false} pitchEnabled={false} toolbarEnabled={false}
+        showsPointsOfInterests={false} showsBuildings={false} showsTraffic={false}>
+        {heat && <Overlay image={{ uri: heat.uri }} bounds={heat.bounds} opacity={1} />}
+        {interactive && canvases.map((c) => (
+          <Marker key={c.id} coordinate={{ latitude: c.lat, longitude: c.lng }} title={`${c.author_name} · ${c.stroke_count} strokes`} description={`${c.views} views${discovered[c.id] ? ' · found' : ''}`} pinColor={discovered[c.id] ? C.green : C.purple} />
+        ))}
       </MapView>
+      {/* purple tint: colourise the dark tiles, then deepen the darks */}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.tint]} />
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.deepen]} />
     </View>
   );
 }
 
-/** Interactive = fill whatever it's given; an explicit height would beat absoluteFill's bottom. */
-const styles = StyleSheet.create({ fill: { flex: 1 } });
+const styles = StyleSheet.create({
+  /** Interactive = fill whatever it's given; an explicit height would beat absoluteFill's bottom. */
+  fill: { flex: 1 },
+  tint: { backgroundColor: '#3a1a8a', mixBlendMode: 'color' },
+  deepen: { backgroundColor: C.bg, opacity: 0.45, mixBlendMode: 'multiply' },
+});
