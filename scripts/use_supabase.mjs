@@ -126,13 +126,18 @@ if (checkOnly) {
   setEnv('web/.env', { VITE_SUPABASE_URL: url, VITE_SUPABASE_KEY: key });
   setEnv('web/.env.production', { VITE_SUPABASE_URL: url, VITE_SUPABASE_KEY: key });
 
+  // Patch the values where they sit: re-serialising the JSON would reflow the whole file.
   const easPath = join(root, 'eas.json');
-  const eas = JSON.parse(readFileSync(easPath, 'utf8'));
-  if (eas.build?.development?.env) {
-    eas.build.development.env.EXPO_PUBLIC_SUPABASE_URL = url;
-    eas.build.development.env.EXPO_PUBLIC_SUPABASE_KEY = key;
-    writeFileSync(easPath, JSON.stringify(eas, null, 2) + '\n');
-    console.log('  wrote eas.json (development env)');
+  const before = readFileSync(easPath, 'utf8');
+  let eas = before;
+  for (const [name, value] of [['EXPO_PUBLIC_SUPABASE_URL', url], ['EXPO_PUBLIC_SUPABASE_KEY', key]]) {
+    eas = eas.replace(new RegExp(`("${name}"\\s*:\\s*)"[^"]*"`, 'g'), `$1${JSON.stringify(value)}`);
+  }
+  if (eas !== before) {
+    writeFileSync(easPath, eas);
+    console.log('  wrote eas.json (build profiles)');
+  } else {
+    console.log('  eas.json: no EXPO_PUBLIC_SUPABASE_* entries found — add them by hand if you build with EAS');
   }
   console.log('\nRestart Metro with -c so the new values get inlined: npx expo start --dev-client -c');
 }
