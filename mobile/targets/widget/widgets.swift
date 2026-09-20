@@ -100,7 +100,7 @@ struct CanProvider: TimelineProvider {
     let span = min(h.radiusM, 150) * 2
     opts.region = MKCoordinateRegion(center: center, latitudinalMeters: span, longitudinalMeters: span * Double(max(1, aspect)))
     opts.size = size
-    opts.scale = 1
+    opts.scale = 2
     opts.mapType = .mutedStandard
     opts.pointOfInterestFilter = .excludingAll
     opts.showsBuildings = false
@@ -119,7 +119,7 @@ struct CanProvider: TimelineProvider {
         let p = snap.point(for: c)
         return MapSnap.Pt(x: p.x, y: p.y, w: s.w, id: s.id)
       }
-      done(MapSnap(image: pixelate(snap.image, cell: 4), size: size, pts: pts))
+      done(MapSnap(image: snap.image, size: size, pts: pts)) // the real Apple map, streets intact
     }
   }
 }
@@ -143,9 +143,9 @@ struct MapPlate: View {
     GeometryReader { g in
       ZStack {
         if let m = entry.map {
-          Image(uiImage: m.image).interpolation(.none).resizable().scaledToFill().frame(width: g.size.width, height: g.size.height).clipped()
-            .saturation(0).colorMultiply(T.purpleHi).brightness(-0.08)
-          Rectangle().fill(T.bg.opacity(0.35))
+          Image(uiImage: m.image).resizable().scaledToFill().frame(width: g.size.width, height: g.size.height).clipped()
+            .saturation(0).colorMultiply(T.purpleHi)
+          Rectangle().fill(T.bg.opacity(0.22))
           let sx = g.size.width / m.size.width, sy = g.size.height / m.size.height
           ForEach(m.pts, id: \.id) { p in
             let d: CGFloat = 11 + 7 * CGFloat(p.w)
