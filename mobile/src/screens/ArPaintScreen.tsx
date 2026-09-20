@@ -13,7 +13,7 @@ import { PaintLayer } from '../paint/PaintLayer';
 import { useArSpray } from '../hooks/useArSpray';
 import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
-import { BLOCKER_LINE, CreateHud, type HudLine } from '../components/HUD';
+import { CreateHud } from '../components/HUD';
 import { DiscoveryCues } from '../components/DiscoveryOverlay';
 import { PieceDetail } from '../components/SpatialViewer';
 import { laEnd } from '../lib/liveActivity';
@@ -75,11 +75,8 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const [hitInfo, setHitInfo] = useState<{ kind: HitKind; vertical: boolean; locked: boolean; dist: number }>({ kind: 'none', vertical: false, locked: false, dist: 1 });
   /** Moved-surface check: pieces watched, and how many are hidden because their surface left. */
   const moved = useRef({ watched: 0, gone: 0 });
-  const [hinted, setHinted] = useState(true); // first-run hint, hidden after the first spray
   const [detail, setDetail] = useState<Canvas | null>(null);
-  const [mapNote, setMapNote] = useState<HudLine | null>(null);
   const [pieceId, setPieceId] = useState<string | null>(null); // the wall you're painting on / standing at
-  const [flash, setFlash] = useState<HudLine | null>(null); // short-lived "that worked" line
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captureTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const capturing = useRef(false);
@@ -277,32 +274,14 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     const id = setInterval(() => {
       const blocker = engine.held.current ? engine.blocker.current : null;
       const held = engine.held.current ?? '-';
-      if (held !== '-') setHinted(false);
       setUi((p) => (p.blocker === blocker && p.held === held ? p : { blocker, held }));
     }, 100);
     return () => clearInterval(id);
   }, []);
 
-  // sharing state of the wall you're standing at, as one short-lived notice
-  useEffect(() => {
-    setMapNote(mapState === 'loading' ? { title: 'LOADING THE WALL HERE' }
-      : mapState === 'relocalizing' ? { title: 'RESOLVING THE PIECE HERE', sub: 'LOOK AROUND SLOWLY' }
-      : mapState === 'approx' ? { title: 'PIECE PLACED FROM MEMORY', sub: 'WALK TO WHERE IT WAS PAINTED' }
-      : mapState === 'resolved' ? { title: 'PIECE RESOLVED' } : null);
-    if (mapState !== 'approx' && mapState !== 'resolved') return;
-    const id = setTimeout(() => setMapNote(null), 5000);
-    return () => clearTimeout(id);
-  }, [mapState]);
 
   const found = justFound ?? discovery.justFound;
   const piece = (pieceId ? canvases[pieceId] : null) ?? (pieceId === engine.activeCanvas.current?.id ? engine.activeCanvas.current : null);
-  const notice: HudLine | null = ui.blocker ? BLOCKER_LINE[ui.blocker]
-    : flash ? flash
-    : found ? null
-    : mapNote ? mapNote
-    : discovery.focused ? { title: `${discovery.focused.author_name}'s piece`.toUpperCase(), sub: 'TAP TO VIEW', icon: 'eye', onPress: () => setDetail(discovery.focused) }
-    : hinted && (painter?.strokes ?? 0) < 5 ? { title: 'SHAKE TO CHARGE', sub: settings.volumeButtons ? 'THEN HOLD A COLOUR OR VOL+ / VOL−' : 'THEN HOLD A COLOUR TO SPRAY' }
-    : null;
 
   return (
     <View style={styles.root}>
@@ -324,10 +303,8 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
       <PaintLayer yawSV={yawSV} pitchSV={pitchSV} rollSV={rollSV} walls={discovery.walls} />
       <DiscoveryCues d={{ ...discovery, justFound: found }} />
       <CreateHud
-        status={surfaceLine(tracking, hitInfo, engine.native.spraying)}
         found={found}
         onOpenFound={() => found && setDetail(found)}
-        notice={notice}
         debug={settings.debugHud ? `planes ${tracking.planes ?? 0} · quads ${surfaces} · ${arPlatform === 'arcore' ? `${tracking.depth ? 'depth' : 'no depth'} · compass ${tracking.heading ?? '…'}` : hasLidar ? 'lidar' : 'no lidar'} · hit ${hitInfo.kind} · surf ${moved.current.gone}/${moved.current.watched} · held ${ui.held} · block ${ui.blocker ?? '-'} · gps ${location ? `±${Math.round(location.accuracy)}m` : '…'} · map ${tracking.mapping || '-'}` : null}
         onStart={engine.start}
         onEnd={engine.end}
@@ -339,24 +316,6 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   );
 }
 
-/**
- * What the reticle is on, only while it matters: until a wall or floor locks (the hint disappears
- * once it does), and while spraying close or far enough to change the spray (focus / mist).
- */
-function surfaceLine(tracking: ArTrackingEvent, hit: { kind: HitKind; locked: boolean; dist: number }, spraying: boolean): HudLine | null {
-  if (hit.locked) {
-    if (!spraying) return null;
-    const mode = hit.dist < 0.8 ? 'FOCUS' : hit.dist > 1.5 ? 'MIST' : null;
-    return mode ? { title: mode, sub: `${hit.dist.toFixed(1)} M FROM THE SURFACE` } : null;
-  }
-  if (tracking.state !== 'normal' && tracking.reason !== 'relocalizing' && hit.kind === 'none') {
-    if (tracking.reason === 'excessiveMotion') return { title: 'SLOW DOWN', sub: 'MOVE THE PHONE GENTLY' };
-    if (tracking.reason === 'insufficientFeatures') return { title: 'NOT ENOUGH DETAIL', sub: 'MORE LIGHT OR A TEXTURED WALL' };
-    return { title: 'STARTING CAMERA', sub: 'MOVE THE PHONE SLOWLY' };
-  }
-  if (hit.kind === 'none') return { title: 'AIM AT A WALL OR FLOOR' };
-  return { title: 'FINDING SURFACE', sub: 'MOVE SLOWLY' };
-}
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },

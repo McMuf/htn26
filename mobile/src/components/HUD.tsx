@@ -3,9 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { PAINT_EMPTY_THRESHOLD, PAINT_MAX, PAINT_REGEN_PER_SEC, PALETTE, SHAKE_MIN_TO_SPRAY } from '../config';
 import { useStore, type Side } from '../store';
-import type { Blocker } from '../hooks/useSprayEngine';
 import { PixelBox } from '../ui/PixelBox';
-import { PixelIcon, type IconName } from '../ui/PixelIcon';
+import { PixelIcon } from '../ui/PixelIcon';
 import { haptic } from '../ui/haptics';
 import { C, F, HOLD_BOTTOM, HOLD_H, PLATE, PLATE_HI, TONES, outline, ui, uiLabel } from '../ui/theme';
 import { isLight } from '../ui/color';
@@ -21,17 +20,9 @@ import { FoundCard, type FoundPiece } from './DiscoveryOverlay';
  *  - top centre: only the found card (and the debug line when that setting is on) — no status text
  *  - bottom deck: can charge + tools toggle on one strip, the two colours below; the tray opens above
  */
-export type HudLine = { title: string; sub?: string; icon?: IconName; onPress?: () => void };
 
-export const BLOCKER_LINE: Record<NonNullable<Blocker>, HudLine> = {
-  'no-location': { title: 'WAITING FOR GPS', icon: 'pin' },
-  'outside-geofence': { title: 'OUTSIDE THE PAINT ZONE', sub: 'PAINTING IS OPEN IN WATERLOO REGION', icon: 'pin' },
-  shake: { title: 'SHAKE THE CAN', sub: 'OR HOLD THE CAN ON THE LEFT', icon: 'can' },
-  empty: { title: 'OUT OF PAINT', sub: 'REFILLING — OR HOLD THE CAN', icon: 'drop' },
-};
-
-export function CreateHud({ status, found, onOpenFound, notice, debug, onStart, onEnd, pieceId, onOpenPiece }: {
-  status?: HudLine | null; found?: FoundPiece | null; onOpenFound?: () => void; notice?: HudLine | null; debug?: string | null;
+export function CreateHud({ found, onOpenFound, debug, onStart, onEnd, pieceId, onOpenPiece }: {
+  found?: FoundPiece | null; onOpenFound?: () => void; debug?: string | null;
   onStart: (s: Side) => void; onEnd: (s: Side) => void; pieceId?: string | null; onOpenPiece?: () => void;
 }) {
   const [tools, setTools] = useState(false);

@@ -8,7 +8,7 @@ import { usePose } from '../hooks/usePose';
 import { useSprayEngine, type Blocker } from '../hooks/useSprayEngine';
 import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
-import { BLOCKER_LINE, CreateHud, Reticle, type HudLine } from '../components/HUD';
+import { CreateHud, Reticle } from '../components/HUD';
 import { GUTTER } from '../ui/theme';
 import { DiscoveryCues } from '../components/DiscoveryOverlay';
 import { PieceDetail } from '../components/SpatialViewer';
@@ -35,7 +35,6 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
   useKeepAwake();
   const [perm, requestPerm] = useCameraPermissions();
   const settings = useStore((s) => s.settings);
-  const painter = useStore((s) => s.painter);
   const location = useStore((s) => s.location);
   const debug = useStore((s) => s.debug);
   const setDebug = useStore((s) => s.setDebug);
@@ -46,7 +45,6 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
   const discovery = useDiscovery(pose);
   const discoveryRef = useRef(discovery);
   discoveryRef.current = discovery;
-  const [hinted, setHinted] = useState(true); // first-run hint, hidden after the first spray
   const [detail, setDetail] = useState<Canvas | null>(null);
 
   useVolumeTrigger(settings.volumeButtons && active, { onHoldStart: engine.start, onHoldEnd: engine.end });
@@ -61,7 +59,6 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
       setUi((p) => (p.spraying === spraying && p.blocker === blocker ? p : { spraying, blocker }));
       const d = useStore.getState().debug;
       const held = engine.held.current ?? '-';
-      if (held !== '-') setHinted(false);
       const bl = engine.blocker.current ?? '-';
       if (d.held !== held || d.blocker !== bl || d.walls !== discoveryRef.current.walls.length || d.poseReady !== pose.current.ready)
         setDebug({ held, blocker: bl, walls: discoveryRef.current.walls.length, poseReady: pose.current.ready });
@@ -82,11 +79,6 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
   }
 
   const found = discovery.justFound;
-  const notice: HudLine | null = ui.blocker ? BLOCKER_LINE[ui.blocker]
-    : found ? null
-    : discovery.focused ? { title: `${discovery.focused.author_name}'s piece`.toUpperCase(), sub: 'TAP TO VIEW', icon: 'eye', onPress: () => setDetail(discovery.focused) }
-    : hinted && (painter?.strokes ?? 0) < 5 ? { title: 'SHAKE TO CHARGE', sub: settings.volumeButtons ? 'THEN HOLD A COLOUR OR VOL+ / VOL−' : 'THEN HOLD A COLOUR TO SPRAY' }
-    : null;
 
   return (
     <View style={styles.root}>
@@ -97,7 +89,6 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
       <CreateHud
         found={found}
         onOpenFound={() => found && setDetail(found)}
-        notice={notice}
         debug={settings.debugHud ? `vol events ${debug.volEvents} (last ${debug.lastVol}) · held ${debug.held} · block ${debug.blocker} · walls ${debug.walls} · pose ${debug.poseReady ? 'ok' : '…'} · gps ${location ? `±${Math.round(location.accuracy)}m` : '…'} · surface ${debug.surface}` : null}
         onStart={engine.start}
         onEnd={engine.end}
