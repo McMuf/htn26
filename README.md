@@ -87,7 +87,7 @@ Each platform relocalises only against its own saved maps and places the other p
 from the painter's viewpoint, so paint is shared between an iPhone and an S25 at metres-then-snap
 accuracy rather than exactly. Android quads are named `paint-a-…` so both clients can tell whose
 frame a stroke belongs to. Setup steps (phone, API key, EAS) are in `goal2.md`; the shared
-backend the two platforms paint into is `goal1.md`.
+Supabase backend every client paints into is documented in `goal1.md`.
 
 ## AR approach: real surfaces with ARKit (and a compass fallback)
 

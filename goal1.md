@@ -1,26 +1,101 @@
-# Goal 1 — two phones painting the same wall
+# Goal 1 — a web version anyone can join by scanning a QR code
 
-**Done when:** you paint on phone A and it shows up on phone B (or on the website) within a couple
-of seconds, and walking up to someone else's piece later still shows it.
+**Done when:** someone points their camera at a QR code, types a name, and is drawing seconds
+later — and a second person who scans the same code sees those strokes appear live, both ways. No
+accounts, no profile, no tabs. One screen.
 
-This goal is about the **backend and sharing**. It doesn't need the Android build at all — an
-iPhone plus the website is enough to finish it. The Android app is [goal2.md](goal2.md).
+The Android app is [goal2.md](goal2.md) and doesn't block this.
 
 ---
 
-## Where it stands
+## This is mostly a trim, not a build
 
-| | |
+`web/` is already a working client — it's what the judges' site runs on:
+
+| Already there | Where |
 |---|---|
-| Supabase project | **done** — `xevbnegilqjyjzxhrcwo`, yours |
-| Schema + AR migration + seed | **done**, one paste of `supabase/setup_all.sql` |
-| Anonymous sign-in | **done** (needed a *Save changes* click the dashboard hides below the fold) |
-| Keys wired into the app, website and EAS | **done**, committed |
-| Verified from here | all six checks pass, see below |
-| **Left for you** | restart Metro, redo onboarding on the iPhone, run the two-client test |
+| A painting screen (camera passthrough, compass-anchored strokes, hold-to-spray) | `web/src/screens/PaintScreen.tsx` |
+| "Type your tag → start" | `web/src/screens/NameScreen.tsx` |
+| Strokes syncing live between clients (realtime insert + a 15 s poll backup) | `web/src/data/sync.ts` |
+| The Supabase project behind it, set up and verified | done — see *The backend* below |
 
-The old shared project was missing the AR columns — every AR stroke was refused, which is why
-nothing ever synced. That's fixed: the app now points at your own project.
+So the work is mostly **removing** things and **changing how people get in**. Four changes.
+
+## The four changes
+
+### 1. Delete the login
+
+`/paint` currently shows an email + password form (`AuthScreen`) before anything else. That's the
+biggest thing standing between a QR scan and drawing. Replace it with
+`supabase.auth.signInAnonymously()` fired on load — anonymous sign-in is already enabled on the
+project — so the first thing a scanner sees is the name prompt. Keep the email form reachable only
+as a fallback if anonymous sign-in is ever turned off.
+
+### 2. Strip the shell to one screen
+
+`App.tsx` renders a three-tab shell: PAINT / MAP / BOARD, plus a settings sheet. All of it goes
+except the paint screen and the minimum HUD it needs. `MapScreen`, `LeaderboardScreen`,
+`SettingsScreen` and the tab bar stop being rendered (the files can stay for the judges' site).
+
+### 3. Make the QR *be* the room
+
+This is the real design decision, and it's why scanning works at all.
+
+Today a client joins a canvas by **standing within 15 m of it** (`CANVAS_JOIN_RADIUS_M`, GPS).
+That's fine for two phones on the same street and bad for everything else: browser geolocation
+indoors drifts, and a laptop resolves by IP — often kilometres off. Two people scanning the same
+code in the same room would each start their own wall and see nothing of each other.
+
+Fix: put the wall's id in the link the QR encodes — `/paint?w=<canvas id>` — and have the client
+join *that* canvas instead of guessing from GPS. Everyone who scans the same code paints the same
+wall, in the same room or on different continents. No parameter in the URL → fall back to today's
+GPS behaviour, so the existing phone flow is untouched.
+
+Also worth removing for this version: the **25 km Waterloo geofence** blocks painting outside
+Waterloo, and its bypass lives in the settings screen we're deleting. A QR room should skip it.
+
+### 4. Deploy it and generate the QR
+
+iOS Safari only grants camera and motion over **HTTPS**, so this has to be the deployed URL, not
+`localhost`. Deploy `web/` to Vercel, then generate a QR for
+`https://<your-site>/paint?w=<canvas id>` and put the image somewhere you can show on a screen or
+print.
+
+## Two decisions I need from you
+
+**A. Does the QR mean "this wall" or just "this app"?**
+
+- **A shared room (recommended):** the QR carries a wall id; everyone who scans it draws on the
+  same wall wherever they are. This is what "scan and draw together" normally means, it demos on a
+  laptop, and it survives bad indoor GPS.
+- **Keep GPS:** the QR is only a link to the app, and people still have to be within 15 m of each
+  other. Truer to the original "paint is tied to a place" idea, much more fragile in a room.
+
+**B. What does the drawing surface look like?**
+
+The paint screen composites strokes over the live camera. For a web version that might be handed
+to anyone, the options are: keep the camera (feels like the real app, needs permission and a rear
+camera), or draw on a flat background (works on a laptop, loses the AR feel). Keeping the camera
+with a graceful fallback to flat is possible but is extra work.
+
+Say the word on A and B and I'll implement the rest — it's all code on my side.
+
+## Then: the test that says it's done
+
+1. Open the deployed `/paint?w=…` link on phone 1. Type a name. You should be drawing without
+   ever seeing a login.
+2. Scan the same QR on phone 2 (or just open the link in another browser). Type a different name.
+3. Draw on phone 1 → it appears on phone 2 within a second or two, without either of you
+   reloading. Draw on phone 2 → it comes back the other way.
+4. Reload both. The wall still has everything on it (strokes are stored, not just broadcast).
+5. Hand the QR to someone who's never seen the app: from scan to first stroke with nobody
+   explaining anything is the actual bar.
+
+## The backend (already done)
+
+Goal 1 used to be about this part, and it's finished. Your own Supabase project
+(`xevbnegilqjyjzxhrcwo`) has the schema, the AR migration, the seed pieces and anonymous sign-in
+turned on, and every client — phone app, website, painter — points at it:
 
 ```
 ok  schema.sql ran (strokes table reachable)
@@ -31,151 +106,34 @@ ok  worldmaps storage bucket exists
 ok  anonymous sign-in enabled
 ```
 
-Re-run any time with `npm run supabase:check` (add `--anon` to include the sign-in test, which
-creates one throwaway user).
+`npm run supabase:check` re-runs that (`--anon` includes the sign-in test, which creates one
+throwaway user).
 
-## What has to be true for paint to travel
+**If you also run the phone app against this project:** restart Metro with
+`npx expo start --dev-client -c` (`-c` matters — `EXPO_PUBLIC_*` is inlined at bundle time), and on
+an iPhone that already had the app, sign out and redo onboarding, because the saved painter belongs
+to the old project's auth user. Queued strokes drain by themselves; the backlog is capped at 120.
 
-Worth knowing, because every failure below is one broken link in this chain:
-
-1. Both clients are signed in against **the same project** — that's `.env` plus a Metro restart.
-2. Both are standing within **15 m of the same canvas** (`CANVAS_JOIN_RADIUS_M`), otherwise phone B
-   starts its own canvas instead of joining yours.
-3. The stroke **inserts** into `strokes` (needs the AR columns, and RLS needs `author_id` to be
-   your signed-in user).
-4. **Realtime** delivers the insert to the other client; a 15-second poll is the backup.
-5. The other client **renders** it — how accurately is the AR question, see the table further down.
-
-## Step 1 — point the phones at the backend
-
-The keys are already in `.env`. They're inlined when Metro bundles, so:
+**Pointing at a different project later:** create it, paste `supabase/setup_all.sql` into the SQL
+editor (it warns about destructive statements — on a fresh project there's nothing to lose), turn
+on **Allow anonymous sign-ins** under Authentication → Sign In / Providers *and press Save changes
+at the bottom*, copy the **publishable** key (never `service_role` — it bypasses RLS), then:
 
 ```powershell
-npx expo start --dev-client -c
+node scripts/use_supabase.mjs https://<ref>.supabase.co <publishable key>
 ```
 
-`-c` matters. Without it Metro can serve a cached bundle still carrying the old project's URL.
+That writes `.env`, `web/.env`, `web/.env.production` and `eas.json`, and re-runs the checks.
 
-**On each iPhone that already has the app**, the saved painter belongs to the *old* project's auth
-user, so it can't write to yours: open **Profile → gear → Settings → SIGN OUT** (or **REDO
-ONBOARDING**) and pick your tag again. Deleting and reinstalling gives a properly clean slate —
-otherwise old cached canvases still show in Explore and Vault.
+## What will bite
 
-Queued strokes drain on their own: the backlog the old project kept refusing is capped at 120 and
-gets retried against the new one.
-
-## Step 2 — the two-client test
-
-You don't need two phones for most of this. The website talks to the same project, so it works as
-the second client.
-
-**With one phone + the website**
-
-1. Phone: paint a stroke.
-2. Open the site's `/world` on any browser. Your canvas appears as a marker, with the paint drawn
-   into it, within a few seconds.
-3. Open `/paint` on a second browser (or a laptop) standing in the same place and paint — the
-   phone should pick that stroke up live.
-
-**With two phones** (the real test)
-
-1. Both phones open the app, **standing within 15 m of each other**.
-2. Phone A paints. Phone B should show the stroke within a second or two without either of you
-   touching anything.
-3. Phone B paints on the same wall; phone A gets it back.
-4. Walk away and return: the piece is still there, and the first person to arrive who hasn't seen
-   it gets the discovery beat — shimmer, then "YOU FOUND A PIECE", and `views` ticks up.
-
-If both phones are iPhones this is the exact-placement case. Mixed iPhone/Android is looser — the
-table below says how much.
-
-## Step 3 — check the dashboard
-
-After one stroke:
-
-| Where | What you should see |
-|---|---|
-| **Table editor → painters** | one row per tag |
-| **Table editor → canvases** | a row at your lat/lng |
-| **Table editor → strokes** | a row with `anchor_id` and `transform` **filled in**, not null |
-| **Storage → worldmaps** | ~5 s after you stop painting: `<canvas-id>.arworldmap` from an iPhone (Android writes `.arcore.json`, and only with its API key set up — goal 2) |
-| **Metro terminal** | no `uploadStroke failed, queued` warnings |
-
-The three seed pieces around E7 are already in `canvases`, so Explore has something in it before
-you paint anything.
-
-## What "sharing" actually gives you
-
-Strokes always sync. Where they *land* depends on the pair of clients:
-
-| Painter → viewer | What the viewer sees |
-|---|---|
-| iPhone → iPhone, same spot, map resolves | Paint on the exact wall spot. This is the ARWorldMap path |
-| iPhone → iPhone, map fails to resolve (15 s) | "Piece placed from memory · walk to where it was painted", then it snaps onto a detected wall |
-| iPhone ↔ Android | Always the placed-from-memory path: each platform only relocalises its own maps. Stand roughly where the painter stood |
-| Either phone → website | Direction-accurate: the site projects AR strokes onto its compass sphere. Good for judging, not for placement |
-| Website → phone | Compass strokes render as an overlay on the AR view |
-| Live, while both paint | Realtime insert, so a second or two; 15-second polling if realtime drops |
-
-**Distances that matter** (`src/config.ts`): join a canvas within **15 m**, paint renders from
-**35 m**, the pull/shimmer starts at **80 m**, a piece counts as discovered inside **14 m**, and
-the app fetches canvases within **600 m**. Painting at all requires being inside the **25 km**
-Waterloo geofence — flip **Settings → Paint anywhere** to test elsewhere.
-
-## Troubleshooting
-
-| What you see | What it means |
-|---|---|
-| `column strokes.anchor_id does not exist` | Pointed at a project without the AR migration. Paste `supabase/setup_all.sql` |
-| `Anonymous sign-ins are disabled` | The toggle didn't save — the dashboard needs **Save changes** at the bottom of Sign In / Providers |
-| `new row violates row-level security policy` | Signed out, or the painter row belongs to the old project — sign out and redo onboarding |
-| `Invalid API key` / everything offline | Wrong key, or Metro wasn't restarted with `-c` |
-| Paint never reaches the other client | Realtime isn't on those tables — re-run `schema.sql`; its last block adds them to `supabase_realtime` |
-| Two phones each paint their own canvas | You're more than 15 m apart, or GPS accuracy is poor indoors — check the accuracy readout in the debug HUD |
-| Undo comes back after a refresh | The `delete own stroke` policy is missing — re-run `migration_ar.sql` |
-| `Bucket not found` on world maps | Same file — it creates `worldmaps` |
-| Strokes upload but the piece is in the wrong place | That's placement, not sync. See the table above, and goal 2 §5 for the Android compass limits |
-
-## If you ever point at a different project
-
-1. <https://supabase.com/dashboard> → **New project**. Any name, the region closest to you
-   (Canada Central / US East for Waterloo); save the database password somewhere, you won't need
-   it for the app but you can't see it again. Provisioning takes ~2 min.
-2. **SQL Editor → New query →** paste `supabase/setup_all.sql` → **Run**. It will warn about
-   destructive statements (`drop policy if exists`, the seed's cleanup `delete`); on a fresh
-   project there's nothing to lose. (`node scripts/gen_setup_sql.mjs` rebuilds that file if you
-   edit `schema.sql`, `migration_ar.sql` or `seed.sql`.)
-3. **Authentication → Sign In / Providers →** turn on **Allow anonymous sign-ins**, then scroll
-   down and press **Save changes**. Optionally turn **Confirm email** off too: if anonymous
-   sign-in is ever disabled, onboarding falls back to email + password, and with confirmation on
-   that waits for an emailed link.
-4. **Project Settings → API Keys →** copy the **publishable** key. Never `service_role`: the
-   publishable key is meant to ship in a client and RLS is what protects writes, while
-   `service_role` bypasses RLS entirely — in an app bundle it lets anyone read and delete
-   everything.
-5. ```powershell
-   node scripts/use_supabase.mjs https://<ref>.supabase.co <publishable key>
-   ```
-   That writes `.env`, `web/.env`, `web/.env.production` and `eas.json`, then re-runs the checks.
-   By hand instead: `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_KEY` in `.env` and under
-   `eas.json` → `build.development.env`, and `VITE_SUPABASE_URL` / `VITE_SUPABASE_KEY` in
-   `web/.env` and `web/.env.production`.
-6. Restart Metro with `-c`, and sign out / redo onboarding on each phone.
-
-**Going back** to the old backend is just swapping the two values in `.env` and restarting Metro —
-keep them in a comment if you want the option during the demo. **What doesn't move:** pieces
-painted against the old project stay there, since you can't export from a project you don't own.
-Your own walls still render on your phone from its local cache.
-
-## The companion website
-
-`web/` is a separate Vite app with its own variable names, already pointed at your project:
-
-```sh
-VITE_SUPABASE_URL=https://xevbnegilqjyjzxhrcwo.supabase.co
-VITE_SUPABASE_KEY=<publishable key>
-```
-
-If it's deployed on Vercel, set those two in the project's **Environment Variables** and redeploy —
-they're baked in at build time there too. Until you do, the deployed site still reads the old
-project and will look empty next to your phone.
+- **Tags are unique.** `painters.name` has a `unique` constraint, so the second person to type
+  "ADARSH" gets *That tag is taken — pick another*. In a room full of people scanning a code that's
+  friction; the fix is to auto-suffix (`ADARSH-2`) rather than to reject them.
+- **Every scan creates an auth user.** Anonymous sign-ins are cheap but they are rows, and Supabase
+  counts monthly active users. Fine for a demo, worth knowing before it's on a poster.
+- **iOS Safari needs a gesture** before camera, motion and audio — the paint screen's START button
+  already covers that, so it has to stay.
+- **Sync is per wall, not per person.** Everyone on the wall sees everything; there's no undo for
+  someone else's paint and no moderation beyond the existing report flow.
+- **Realtime on the free tier** is fine for a handful of painters. A crowd is untested.
