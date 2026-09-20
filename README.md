@@ -80,8 +80,8 @@ so every screen, the spray model and the stroke format are shared. Per-platform 
 | world frame | ARKit `gravityAndHeading` gives true north | recovered by averaging the compass against ARCore's yaw for ~2 s, then locked (a few degrees of error) |
 | saved piece | `ARWorldMap` in Supabase Storage | Cloud Anchors + a JSON index (`<canvas>.arcore.json`), needs an ARCore API key; without one, pieces come back "placed from memory" |
 | volume trigger | inferred from volume changes (~0.4 s release lag) | real key events, swallowed while painting (no volume panel) |
+| undo / wall photo | SceneKit snapshot + per-quad stroke history | same behaviour: `glReadPixels` on an overlay-free frame, same history |
 | widgets | WidgetKit | — |
-| glass panels | live blur | denser tint (expo-blur needs a blur target on Android) |
 
 Each platform relocalises only against its own saved maps and places the other platform's strokes
 from the painter's viewpoint, so paint is shared between an iPhone and an S25 at metres-then-snap

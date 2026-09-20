@@ -146,7 +146,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
   /** Strokes you painted this session, newest last - what undo walks back through. */
   private val myStrokes = mutableListOf<Pair<String, String>>() // quad id, stroke id
   private var lastTick = 0L
-  private var snapshotJob: SnapshotJob? = null
+  @Volatile private var snapshotJob: SnapshotJob? = null // set from JS, consumed on the GL thread
 
   private class SnapshotJob(val path: String, val promise: Promise)
 

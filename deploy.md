@@ -166,16 +166,19 @@ run on real hardware. In rough order of what's most likely to need fixing:
 4. **Volume rocker:** holding VOL+ / VOL− sprays, and the Samsung volume panel should *not* appear
    (Android swallows the keys while the Create tab is open). Turn it off in Settings if it's
    annoying.
-5. **Aim the compass check:** paint a stroke facing a wall, then look at the piece from the side.
+5. **Undo and the wall photo:** spray, then hit undo — the stroke disappears and the wall repaints
+   with everyone else's paint intact. A few seconds after spraying, the Vault should show a photo
+   of the wall (camera + paint, no reticle or grids).
+6. **Aim the compass check:** paint a stroke facing a wall, then look at the piece from the side.
    If paint sits at the wrong angle from a *second* device, the compass calibration is the suspect
    (see A9).
-6. **Leave and return:** switch tabs and come back — paint keeps its place (the session resumes).
+7. **Leave and return:** switch tabs and come back — paint keeps its place (the session resumes).
    Kill the app, reopen within 15 m: with Cloud Anchors the piece resolves; without, it should say
    "placed from memory".
-7. **Cross-platform:** paint on Android, then open the same spot on the iPhone (and the reverse).
+8. **Cross-platform:** paint on Android, then open the same spot on the iPhone (and the reverse).
    Each phone relocalises its own pieces exactly, and shows the other phone's pieces placed from
    the painter's viewpoint — so stand roughly where the other person stood.
-8. **Widgets are iPhone-only** — the Android build simply has none.
+9. **Widgets are iPhone-only** — the Android build simply has none.
 
 ## A9. Known limits on Android
 
