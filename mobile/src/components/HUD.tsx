@@ -80,19 +80,16 @@ export function Reticle({ spraying }: { spraying: boolean }) {
 /** A hold fills an empty can and both colours in this long — slow enough to read as an action. */
 const HOLD_FILL_SECONDS = 1.2;
 /**
- * Hold-the-strip-to-refill is a development convenience, not a feature: shaking the can is the
- * interaction, and the whole economy (a can that runs down, a rattle that fills it) only means
- * anything if refilling costs you the shake. __DEV__ is false in a release build, so the shipped
- * app has no hold at all and the strip goes back to being a readout.
+ * Can charge as a strip across the deck. Runs down over a minute; shake to refill — or hold the
+ * strip, which does the shaking for you, in every build.
  *
- * It earns its place in development because the shake is genuinely awkward to test against: you
- * are already holding the phone at a wall with one hand, a shake hard enough to register loses
- * your aim, and in a dev build it fights expo-dev-menu for the same gesture
- * (scripts/dev_menu_shake.mjs).
+ * Shaking is the intended interaction and the label keeps saying so: the economy only means
+ * anything if refilling normally costs you the shake. The hold was briefly gated behind __DEV__,
+ * which compiled it out of exactly the build a demo runs on, leaving no way out of an empty can
+ * in front of an audience if shake detection misfires. An escape hatch that is absent when it is
+ * needed is not an escape hatch, and a judge pressing the strip is a smaller problem than a dead
+ * can on stage.
  */
-const DEV_HOLD_TO_FILL = __DEV__;
-
-/** Can charge as a strip across the deck. Runs down over a minute; shake to refill. */
 export function ChargeMeter() {
   const shake = useStore((s) => s.shake);
   const [filling, setFilling] = useState(false);
@@ -138,12 +135,11 @@ export function ChargeMeter() {
       <Text style={[styles.chargeText, low && !filling && { color: C.purpleHi }]}>{filling ? 'FILL' : low ? 'SHAKE' : `${Math.round(shake * 100)}%`}</Text>
     </>
   );
-  if (!DEV_HOLD_TO_FILL) return <View style={styles.charge} pointerEvents="none">{body}</View>;
   return (
     <Pressable
       style={styles.charge}
       hitSlop={10}
-      accessibilityLabel="Developer: hold to refill the can and the paint"
+      accessibilityLabel="Hold to shake the can and refill the paint"
       onPressIn={() => { haptic.tap(); setFilling(true); }}
       onPressOut={() => setFilling(false)}
     >

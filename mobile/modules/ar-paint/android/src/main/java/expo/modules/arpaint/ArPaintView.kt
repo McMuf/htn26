@@ -56,18 +56,22 @@ import kotlin.math.min
  *
  * DETECTION: horizontal + vertical plane finding, plus ARCore's Depth API (depth-from-motion on
  * phones without a depth sensor, e.g. Galaxy S25), which lets planes form on walls too blank to
- * give up feature points. The reticle hit-tests detected plane polygons first, then a plane's
- * extension — and nothing else. The overhang scales with the plane, so a wall stays paintable past
- * the patch ARCore has found while a chair seat stays chair-sized. Only floors and walls count;
- * ceilings, and the depth/feature points ARCore also offers, are rejected. See [raycastCenter].
+ * give up feature points. The reticle takes the nearest usable plane — its polygon, or its
+ * extension within an overhang that scales per axis with that plane's own extents, so a wall stays
+ * paintable past the patch ARCore has found while a chair seat stays chair-sized. Nothing else:
+ * ceilings, and the depth/feature points ARCore also offers, are rejected. Upward-facing surfaces
+ * are all paintable, so that includes tables and seats as well as the floor — what is excluded is
+ * geometry that was never detected as a plane. See [raycastCenter].
  *
  * ANCHORING: every quad rides an ARCore anchor (attached to its plane when it has one), is snapped
  * onto a real plane when one appears (< 15 cm, < 14°) and re-snapped as ARCore refines it.
  *
  * MOVED SURFACES: ARCore assumes nothing in the world moves, so paint on a chair that gets pushed
  * away is left hanging in the air. [verifySurfaces] samples the depth map where each piece on a
- * furniture-sized plane sits, and hides the ones the camera can now see straight through. Hidden,
- * not deleted: bring the chair back and the paint comes back on it.
+ * piece of furniture sits — see [isFurniture], which means raised, upward-facing and small enough
+ * to carry, never a wall or a floor — and hides the ones the camera can now see straight through.
+ * Hidden, not deleted, and the verdict is dropped the moment a quad stops being eligible: bring
+ * the chair back and the paint comes back on it.
  *
  * FRAME: ARCore's yaw is arbitrary; [HeadingEstimator] recovers the north-aligned frame the iPhone
  * uses, and everything crossing to JS (stroke transforms, viewer positions) is expressed in it.
@@ -86,7 +90,9 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     // ---- surface verification (see verifySurfaces) ----
     /** Anything whose smaller side is under this can be picked up and carried off: a chair, a box,
      *  a laptop. A wall or a floor cannot, and is never subjected to the check. */
-    const val FURNITURE_MAX_M = 2f
+    const val FURNITURE_MAX_M = 1.6f
+    /** A surface must stand this clear of the floor before it counts as something you could move. */
+    const val FURNITURE_MIN_RISE_M = 0.15f
     const val VERIFY_INTERVAL_MS = 200L
     /** Measured depth must be this far behind the paint before it counts as seeing through it. */
     const val DEPTH_CLEAR_MARGIN_M = 0.25f
@@ -95,6 +101,28 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     /** Depth-from-motion is only trustworthy in this band. */
     const val DEPTH_NEAR_M = 0.4f
     const val DEPTH_FAR_M = 4f
+    /**
+     * How far past a plane's edge still counts as "on it" rather than a guess. This is the width
+     * of ARCore's polygon noise, not a design choice: inside it the near surface keeps the
+     * reticle, outside it a real surface behind is allowed to take over, which is what makes a
+     * line drawn off a table edge drop onto the floor promptly instead of hanging in the air.
+     */
+    const val EDGE_SLOP_M = 0.05f
+    /**
+     * How far behind a guessed extension a real polygon hit may be and still take over. Under it,
+     * the real surface is the one you are pointing at — the next face of a pillar, the floor below
+     * a table edge. Over it, the polygon is merely somewhere further along the same ray, like the
+     * floor several metres past a wall, and the nearer surface keeps the reticle.
+     */
+    const val HANDOVER_M = 1.2f
+    /**
+     * How square-on the ray must meet a plane for its extension to count: below this it is being
+     * seen edge-on, where the hit position swings wildly for a millimetre of plane error. 0.2 is
+     * about 78 degrees off the normal, so ordinary steep painting is unaffected.
+     */
+    const val EXTENSION_MIN_INCIDENCE = 0.2f
+    /** Normals this far from parallel mean two different surfaces meeting — a corner, not a gap. */
+    const val PERPENDICULAR_DOT = 0.5f // 60 degrees apart
     val CROSS_X = intArrayOf(0, -1, 1, 0, 0)
     val CROSS_Y = intArrayOf(0, 0, 0, -1, 1)
 
@@ -584,6 +612,11 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
         if (p.trackingState != TrackingState.TRACKING || p.subsumedBy != null) continue
         // don't draw a grid on something the reticle refuses to paint — a ceiling reads as a target
         if (p.type == Plane.Type.HORIZONTAL_DOWNWARD_FACING) continue
+        // Nor on a surface you are behind. Nothing here writes depth, so a grid cannot be occluded
+        // by the thing in front of it: the far face of a pillar would draw straight over the near
+        // one, reading as a grid hovering off the surface rather than lying on it. The hit test
+        // has always rejected these planes; the overlay was still drawing them.
+        if (((cameraPos - planeCenter(p)) dot planeNormal(p)) <= 0f) continue
         val fade = min(1f, (now - seen) / 350f)
         val opacity = (if (p == aimedPlane) 0.55f else 0.16f) * fade
         planeRenderer.draw(viewProj, M.fromPose(p.centerPose), p.polygon, p.type == Plane.Type.VERTICAL, opacity)
@@ -618,6 +651,11 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
         continue
       }
       if (p.trackingState != TrackingState.TRACKING) continue
+      // the lowest upward-facing plane is the floor; everything raised above it might be furniture
+      if (p.type == Plane.Type.HORIZONTAL_UPWARD_FACING) {
+        val y = planeCenter(p).y
+        if (floorY.isNaN() || y < floorY) floorY = y
+      }
       val isNew = !planes.containsKey(p)
       if (isNew) planes[p] = now
       // ARCore refines a plane's depth/tilt for a while after it appears: keep our quads on it
@@ -703,8 +741,27 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
   }
 
   /** Bind an estimated quad to a real plane and pull it onto that plane. */
-  /** Small enough to be picked up and carried off. A wall or a floor is not. */
-  private fun isFurniture(p: Plane?) = p != null && min(p.extentX, p.extentZ) <= FURNITURE_MAX_M
+  /** Lowest upward-facing plane seen this session — the floor, as far as we can tell. */
+  private var floorY = Float.NaN
+
+  /**
+   * Small enough to be picked up and carried off, which is the only thing that justifies hiding
+   * its paint when depth disagrees.
+   *
+   * The old test was `min(extentX, extentZ) <= 2 m`, which called most real walls furniture: a
+   * vertical plane's two extents are BOTH in-plane (width along the wall, height up it), so a wall
+   * panned at chest height — 4 m by 1.1 m — was "furniture-sized" and its paint became eligible to
+   * vanish on a noisy depth vote. Three corrections: only upward-facing planes qualify, since a
+   * wall cannot be carried off; the larger extent is tested, so a long thin strip is not furniture;
+   * and it must stand clear of the floor, because the floor itself is upward-facing and starts out
+   * small.
+   */
+  private fun isFurniture(p: Plane?): Boolean {
+    if (p == null || p.type != Plane.Type.HORIZONTAL_UPWARD_FACING) return false
+    if (max(p.extentX, p.extentZ) > FURNITURE_MAX_M) return false
+    if (floorY.isNaN()) return false
+    return planeCenter(p).y - floorY > FURNITURE_MIN_RISE_M
+  }
 
   private fun adopt(q: PaintQuad, plane: Plane, now: Long) {
     q.plane = plane
@@ -726,7 +783,16 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     val angle = acos((pn dot q.normal).coerceIn(-1f, 1f))
     if (!force && abs(off) <= 0.012f && angle <= Math.toRadians(2.0).toFloat()) return
     q.lastSnap = now
-    q.transform = quadFrame(c - pn * off, pn)
+    // Re-project the quad's OWN in-plane axis rather than rebuilding the frame from scratch.
+    // quadFrame derives a horizontal surface's X from heading.east(), and the heading is
+    // provisional for the first 1.5-8 s; rebuilding here meant a tag sprayed on the floor in the
+    // first seconds visibly swung about its own centre the moment the compass settled, carrying
+    // every mark on the quad with it. Correcting height and tilt must not re-decide which way is
+    // along the surface.
+    val prevX = M.col(q.transform, 0)
+    val projected = prevX - pn * (prevX dot pn)
+    val x = if (projected.length > 1e-3f) projected.normalized() else M.col(quadFrame(c, pn), 0)
+    q.transform = M.fromAxes(x, pn, x cross pn, c - pn * off)
     anchorQuad(q)
   }
 
@@ -750,15 +816,27 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     return true
   }
 
+  /**
+   * Put a loose quad back on a surface — the nearest one that will have it.
+   *
+   * This used to take the first plane in `planes`, which is a LinkedHashMap, so the winner was
+   * whichever ARCore happened to notice first. With a bookcase standing half a metre in front of a
+   * wall, or a rug on a floor, that is a coin toss, and `adopt` force-snaps, so the piece teleports
+   * up to 60 cm onto the wrong one of two parallel surfaces. It runs on plane subsumption and on
+   * anchor loss, not just on load, so the coin was being tossed during ordinary tracking.
+   */
   private fun attachLooseToNearbyPlane(q: PaintQuad) {
     val now = SystemClock.elapsedRealtime()
-    for (p in planes.keys) {
-      if (p.trackingState != TrackingState.TRACKING || p.subsumedBy != null) continue
-      if (tryAdopt(q, p, now)) return
-    }
+    val candidates = planes.keys
+      .filter { it.trackingState == TrackingState.TRACKING && it.subsumedBy == null }
+      .sortedBy { abs((q.center - planeCenter(it)) dot planeNormal(it)) }
+    for (p in candidates) if (tryAdopt(q, p, now)) return
   }
 
   // ---- surface verification --------------------------------------------------------------
+
+  /** The plane the reticle was on last frame; it gets a wider margin, see raycastCenter. */
+  private var stickyPlane: Plane? = null
 
   private var lastVerify = 0L
   /** Pieces eligible for the check, and how many are currently hidden — reported to the debug HUD. */
@@ -802,7 +880,14 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       val buf = plane.buffer.order(ByteOrder.nativeOrder()).asShortBuffer()
       val stride = plane.rowStride / 2
       for (q in quads.values) {
-        if (!q.placed || !q.onFurniture) continue
+        if (!q.placed || !q.onFurniture) {
+          // No longer eligible — a wall that grew, or a quad that lost its plane. Its last verdict
+          // must not stick: otherwise a piece hidden while it was briefly furniture-shaped stays
+          // invisible for the rest of the session, with nothing left to ever re-examine it.
+          q.missing = false
+          q.missScore = 0f
+          continue
+        }
         val delta = depthDelta(frame, q.center, img.width, img.height, buf, stride) ?: continue
         q.missScore = (q.missScore + if (delta > DEPTH_CLEAR_MARGIN_M) 1f else -2f).coerceIn(0f, MISS_TO_HIDE)
         val missing = q.missScore >= MISS_TO_HIDE
@@ -846,8 +931,12 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     var n = 0
     for (i in 0 until 5) {
       val raw = buf.get((ty + CROSS_Y[i]) * stride + (tx + CROSS_X[i])).toInt() and 0xFFFF
-      val mm = raw and 0x1FFF        // low 13 bits: millimetres
-      if (mm == 0 || (raw shr 13) == 0) continue // no reading, or zero confidence
+      // Low 13 bits are millimetres. There was a confidence test on the top 3 bits here and it was
+      // wrong whichever way DEPTH16 is read: under Android's convention 0 means *full* confidence,
+      // so it threw away the best texels and took the median of the worst; and if ARCore leaves
+      // those bits clear, it rejected every sample and the whole check silently never ran.
+      val mm = raw and 0x1FFF
+      if (mm == 0) continue
       depthSamples[n++] = mm / 1000f
     }
     if (n < 3) return null
@@ -880,34 +969,104 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     // A ceiling is a plane you can neither reach nor meant to paint; ARCore calls it downward-facing.
     fun paintable(p: Plane) = p.type == Plane.Type.VERTICAL || p.type == Plane.Type.HORIZONTAL_UPWARD_FACING
     /**
-     * How far past its seen edge a plane may still be painted. Proportional to the plane's own
-     * smaller dimension, because the flat 0.9 m this used to be turned every piece of furniture
-     * into a shelf: scan a chair and its ~45 cm seat became a 2.25 m plate floating at seat
-     * height, paintable from across the room. A wall does want the slack — ARCore finds walls one
-     * patch at a time — and a wall is large enough to earn it. Now a chair gets ~13 cm, a
-     * half-found wall ~35 cm, a floor the old 0.9 m.
+     * How far past its seen edge a plane may still be painted, along one of its own axes. Per
+     * axis, not one radius, because a plane's two extents mean different things: ARCore usually
+     * finds a wall as a wide, short strip, and an isotropic margin derived from the short side
+     * then refuses the rest of the wall you can plainly see gridded in front of you. Scaling each
+     * axis by its own extent keeps a chair seat chair-sized while letting a wall extend along
+     * itself.
+     *
+     * `sticky` widens it for the plane the reticle was already on. Extents and centre are
+     * re-estimated every frame, so a fixed boundary makes the reticle blink on and off at the
+     * edge and chops a stroke into dashes; the surface you are already painting gets the benefit
+     * of the doubt.
      */
-    fun slack(p: Plane) = min(0.9f, max(0.06f, 0.3f * min(p.extentX, p.extentZ)))
+    fun allowance(extent: Float, sticky: Boolean) =
+      min(0.9f, max(0.06f, 0.3f * extent)) * (if (sticky) 1.6f else 1f)
+    // Not `> 0f`: hitPos is on the plane, so this is the camera's signed distance to it, and
+    // leaning in to 5 cm on a blank wall lets ARCore's own depth error push it negative — the
+    // reticle would die while the plane grid was still being drawn under it.
     fun usable(p: Plane, hitPos: V3) =
       p.trackingState == TrackingState.TRACKING && p.subsumedBy == null && paintable(p) &&
-        ((cameraPos - hitPos) dot planeNormal(p)) > 0f
+        ((cameraPos - hitPos) dot planeNormal(p)) > -0.03f
 
+    // One pass, in ARCore's order, which is nearest first — two passes (every polygon hit, then
+    // every extension) meant a far plane always beat a near one, so aiming at a chair seat whose
+    // ragged polygon just missed sent the reticle to the floor two metres behind it.
+    //
+    // But "nearest wins" alone is too greedy in the other direction: draw a line off a table edge
+    // and down onto the floor, and the table's extension — which is nearer than the floor — keeps
+    // winning for as long as it is in range, so the line hangs at table height before dropping.
+    //
+    // So the extension is split in two. A few centimetres past the edge is polygon raggedness, and
+    // that beats anything behind it. Further out is a guess, held only as a fallback: if some
+    // farther plane reports a real polygon hit, that is a surface actually there and it wins.
+    //
+    // "Close behind" is the whole rule, and it is a distance rather than a kind of surface: the
+    // floor metres past a wall does not take over, so a wall stays paintable from one patch, while
+    // the next face of a pillar or the floor under a table edge does, because it is right there.
+    // Two things can be held while scanning on: `edge`, a hit just past a ragged polygon but still
+    // inside the surface's real extent, and `guess`, a hit genuinely out beyond it.
+    var edge: Hit? = null
+    var edgeDist = 0f
+    var guess: Hit? = null
+    var guessDist = 0f
     for (h in hits) {
       val p = h.trackable as? Plane ?: continue
       val t = M.fromPose(h.hitPose)
-      if (usable(p, M.pos(t)) && p.isPoseInPolygon(h.hitPose)) return Hit(t, p, HitKind.PLANE, p.type == Plane.Type.VERTICAL || M.isVertical(t))
-    }
-    for (h in hits) {
-      val p = h.trackable as? Plane ?: continue
-      val t = M.fromPose(h.hitPose)
-      if (!usable(p, M.pos(t))) continue
-      // only trust the extension close to the part of the plane ARCore has actually seen
-      val l = M.transformPoint(M.invert(M.fromPose(p.centerPose)), M.pos(t))
+      val pos = M.pos(t)
+      if (!usable(p, pos)) continue
+      val sticky = p === stickyPlane
+      val dist = cameraPos.distance(pos)
+
+      if (p.isPoseInPolygon(h.hitPose)) {
+        // Real geometry, so it outranks a held extension — but not unconditionally.
+        val held = edge ?: guess
+        val takesOver = when {
+          held == null -> true
+          // Still inside the near surface, just outside its ragged outline. Only a surface facing
+          // a different way takes over, because that is a corner. A parallel one close behind is
+          // the floor showing through a gap in a chair seat's polygon, and following it there is
+          // what used to throw the reticle to the floor mid-stroke.
+          edge != null -> dist - edgeDist <= HANDOVER_M &&
+            (held.plane?.let { abs(planeNormal(p) dot planeNormal(it)) < PERPENDICULAR_DOT } ?: true)
+          // Genuinely past the edge, so any real surface close behind wins, parallel or not: the
+          // floor under a table edge, or the next face of a pillar.
+          else -> dist - guessDist <= HANDOVER_M
+        }
+        if (!takesOver) break
+        stickyPlane = p
+        return Hit(t, p, HitKind.PLANE, p.type == Plane.Type.VERTICAL || M.isVertical(t))
+      }
+
+      // Grazing extensions are the pillar problem. Sweeping round a corner, the face you have
+      // just left is seen edge-on, and its invisible continuation lies right across the face you
+      // are now aiming at. Anything met this obliquely is not what the reticle is pointed at, and
+      // its hit position is wildly sensitive to a millimetre of plane error, which is what makes
+      // the paint stutter at a corner instead of turning it.
+      if (abs(((pos - cameraPos).normalized()) dot planeNormal(p)) < EXTENSION_MIN_INCIDENCE) continue
+
+      val l = M.transformPoint(M.invert(M.fromPose(p.centerPose)), pos)
       val dx = max(0f, abs(l.x) - p.extentX / 2)
       val dz = max(0f, abs(l.z) - p.extentZ / 2)
-      if (hypot(dx, dz) < slack(p)) return Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL)
+      // within a few centimetres of the edge this is polygon raggedness, not a real overshoot.
+      // Held rather than returned: at a pillar corner the next face is a real surface a few
+      // centimetres behind this one, and returning here handed it seven centimetres of every
+      // corner, four times around.
+      if (hypot(dx, dz) < EDGE_SLOP_M * (if (sticky) 1.5f else 1f)) {
+        if (edge == null) {
+          edge = Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
+          edgeDist = dist
+        }
+      } else if (guess == null && (dx / allowance(p.extentX, sticky)).let { it * it } +
+          (dz / allowance(p.extentZ, sticky)).let { it * it } < 1f) {
+        guess = Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
+        guessDist = dist
+      }
     }
-    return null
+    val best = edge ?: guess
+    stickyPlane = best?.plane
+    return best
   }
 
   // ---- paint loop --------------------------------------------------------------------------
@@ -939,15 +1098,23 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
   private fun quadFor(hit: Hit, now: Long): PaintQuad {
     val p = M.pos(hit.transform)
     val n = M.col(hit.transform, 1).normalized()
+    // `missing` quads are excluded throughout: they are not drawn, so painting into one means
+    // spraying at a surface, seeing nothing appear, and shipping the stroke to everyone else
+    // anyway. Better to start a fresh quad on the surface that is actually there.
     hit.plane?.let { plane ->
       for (q in quads.values) {
-        if (!q.placed || q.plane != plane) continue
+        if (!q.placed || q.missing || q.plane != plane) continue
         val l = q.local(p)
-        if (q.contains(l.u, l.v)) return q
+        if (l.d < 0.08f && q.contains(l.u, l.v)) return q
       }
     }
     for (q in quads.values) {
-      if (!q.placed) continue
+      if (!q.placed || q.missing) continue
+      // A quad is 5 m across, so proximity alone joins things that are not the same surface: two
+      // chairs of the same height side by side, a counter and its island, a doorsill and the
+      // floor. If both this hit and this quad know which plane they are on and they disagree,
+      // they are different surfaces however close they look.
+      if (hit.plane != null && q.plane != null && q.plane !== hit.plane) continue
       val l = q.local(p)
       if (l.d < 0.08f && q.contains(l.u, l.v) && (n dot q.normal) > 0.95f) {
         if (q.plane == null && hit.plane != null) adopt(q, hit.plane, now) // estimated quad meets its real wall
