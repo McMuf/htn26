@@ -223,20 +223,26 @@ function applyStrokesChunked(rows: Stroke[], cache: boolean): Promise<void> {
  * Throws with a readable message on failure.
  */
 export async function ensurePainter(userId: string, name: string): Promise<Painter> {
-  const { data, error } = await supabase.from('painters').insert({ id: userId, name }).select().single();
-  if (error) {
-    if (error.code === '23505') {
-      const text = `${error.message} ${error.details ?? ''}`;
-      if (/painters_pkey|\(id\)/.test(text)) {
-        const existing = await fetchPainter(userId);
-        if (existing) { useStore.getState().setOnline(true); return existing; }
-      }
-      throw new Error('That tag is taken — pick another.');
+  // painters.name is unique project-wide. Somebody who just scanned a QR code shouldn't be sent
+  // back to the keyboard because a stranger already took the tag, so try ADARSH, ADARSH-2, ADARSH-3.
+  const base = name.slice(0, 18);
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    const candidate = attempt === 1 ? name : `${base}-${attempt}`;
+    const { data, error } = await supabase.from('painters').insert({ id: userId, name: candidate }).select().single();
+    if (!error) {
+      useStore.getState().setOnline(true);
+      return { id: data.id, name: data.name, paint_used: data.paint_used, strokes: data.strokes };
     }
-    throw new Error(error.message);
+    if (error.code !== '23505') throw new Error(error.message);
+    const text = `${error.message} ${error.details ?? ''}`;
+    if (/painters_pkey|\(id\)/.test(text)) {
+      // this browser already has a painter row: keep the tag it picked before
+      const existing = await fetchPainter(userId);
+      if (existing) { useStore.getState().setOnline(true); return existing; }
+      throw new Error(error.message);
+    }
   }
-  useStore.getState().setOnline(true);
-  return { id: data.id, name: data.name, paint_used: data.paint_used, strokes: data.strokes };
+  throw new Error('That tag is taken — pick another.');
 }
 
 /** Existing painter row for a signed-in user, or null if they haven't picked a tag yet. */

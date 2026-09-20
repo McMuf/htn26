@@ -2,11 +2,14 @@ import { useState, type FormEvent } from 'react';
 import { hasBackend, supabase } from '../lib/supabase';
 
 /**
+ * Fallback only. Scanning the QR signs people in anonymously; this form appears when that fails
+ * (anonymous sign-ins disabled on the project, or the server is unreachable).
+ *
  * Email + password, one button. "Sign in" tries to sign in; if the account doesn't exist it
  * creates it and signs in. If the project has "Confirm email" on, sign-up returns no session
  * and we tell the user to tap the link in their inbox and press the button again.
  */
-export function AuthScreen() {
+export function AuthScreen({ note }: { note?: string }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,8 +42,9 @@ export function AuthScreen() {
   return (
     <div className="form-screen">
       <form className="form" onSubmit={go} noValidate>
-        <div className="brand">TAGGED</div>
+        <div className="brand">FRESCO</div>
         <div className="sub">r/place, but graffiti in the real world.</div>
+        {note && <div className="hint">Could not start a guest session ({note}). Sign in instead.</div>}
         <label className="label" htmlFor="auth-email">Email</label>
         <input
           id="auth-email" className="input" type="email" inputMode="email" autoComplete="email"

@@ -103,3 +103,17 @@
 /* base (the paint client's reset is not loaded here) */
 html, body, #root { margin: 0; min-height: 100%; background: #07070c; }
 *, *::before, *::after { box-sizing: border-box; }
+
+/* ---- scan to paint ------------------------------------------------------- */
+.scan {
+  display: flex; gap: 28px; align-items: center; flex-wrap: wrap;
+  margin: 8px auto 0; padding: 22px 24px; max-width: 980px;
+  border: 1px solid #ffffff1a; border-radius: 18px; background: #ffffff08;
+}
+.scan-copy { flex: 1 1 320px; }
+.scan-copy h3 { margin: 0 0 6px; font-size: 20px; }
+.scan-copy p { margin: 0 0 10px; color: #ffffffb0; line-height: 1.5; max-width: 52ch; }
+.scan-url { color: var(--accent, #ff2d95); font-size: 13px; word-break: break-all; }
+.scan-qr { border-radius: 12px; background: #fff; padding: 8px; flex: 0 0 auto; }
+.scan-qr--empty { width: 220px; height: 220px; background: #ffffff12; }
+@media (max-width: 640px) { .scan { justify-content: center; text-align: center; } }

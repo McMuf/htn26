@@ -1,3 +1,15 @@
+> **This branch (`web-deploy`) is what Vercel builds.** It is `main` plus the `web/` directory
+> only — the QR entry flow, anonymous sign-in and the keys for the live Supabase project — so
+> native/Android work can never break the deployed site. Nothing else on this branch is current;
+> the phone app lives on `main` and `adarsh-samsung`.
+>
+> Vercel settings: **Production Branch** `web-deploy`, **Root Directory** `web`. The Supabase keys
+> are committed in `web/.env.production`, so no dashboard environment variables are needed — and
+> if any `VITE_SUPABASE_*` variables *are* set there they win over the committed file, so they
+> must hold the same values or be deleted.
+>
+> To pull in later web changes: `git checkout web-deploy && git checkout <branch> -- web/`.
+
 # Tagged — mobile web
 
 Phone-browser version of Tagged (Vite + React 19 + TypeScript). Same Supabase project, tables,
