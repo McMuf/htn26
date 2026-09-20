@@ -71,7 +71,18 @@ struct MapSnap {
     let meta = wide ? p.wide : p.sq
     let url = dir.appendingPathComponent(wide ? "widgetmap_wide.png" : "widgetmap_sq.png")
     guard let img = UIImage(contentsOfFile: url.path) else { return nil }
-    return MapSnap(image: img, size: CGSize(width: meta.w, height: meta.h), pts: meta.pts)
+    // the look: streets as chunky pixels (each 4-point block becomes one flat pixel)
+    return MapSnap(image: pixelate(img, cell: 4), size: CGSize(width: meta.w, height: meta.h), pts: meta.pts)
+  }
+}
+
+/// Downsamples an image so each `cell`-point block becomes one flat pixel (drawn back up with no interpolation).
+func pixelate(_ img: UIImage, cell: CGFloat) -> UIImage {
+  let w = max(1, Int(img.size.width / cell)), h = max(1, Int(img.size.height / cell))
+  let fmt = UIGraphicsImageRendererFormat(); fmt.scale = 1
+  return UIGraphicsImageRenderer(size: CGSize(width: w, height: h), format: fmt).image { ctx in
+    ctx.cgContext.interpolationQuality = .none
+    img.draw(in: CGRect(x: 0, y: 0, width: w, height: h))
   }
 }
 
@@ -96,9 +107,9 @@ struct MapPlate: View {
     GeometryReader { g in
       ZStack {
         if let m = entry.map {
-          Image(uiImage: m.image).resizable().scaledToFill().frame(width: g.size.width, height: g.size.height).clipped()
-            .saturation(0).colorMultiply(T.purpleHi)
-          Rectangle().fill(T.bg.opacity(0.22))
+          Image(uiImage: m.image).interpolation(.none).resizable().scaledToFill().frame(width: g.size.width, height: g.size.height).clipped()
+            .saturation(0).colorMultiply(T.purpleHi).brightness(-0.08)
+          Rectangle().fill(T.bg.opacity(0.35))
           let sx = g.size.width / m.size.width, sy = g.size.height / m.size.height
           ForEach(m.pts, id: \.id) { p in
             let d: CGFloat = 11 + 7 * CGFloat(p.w)
@@ -176,7 +187,7 @@ struct CanSlot: View {
   let color: Color; let level: Double; let name: String; let cell: CGFloat
   var body: some View {
     VStack(spacing: 3) {
-      CanIcon(color: color, level: level, cell: cell, logo: true)
+      CanIcon(color: color, level: level, cell: cell, logo: true, puff: true)
       HStack(spacing: 4) {
         Notched(n: 1.5).fill(color).frame(width: 10, height: 10).overlay(Notched(n: 1.5).stroke(T.ink, lineWidth: 1.5))
         Text("\(Int(level))%").font(PF.display(11)).foregroundStyle(.white)
