@@ -285,3 +285,123 @@ input { -webkit-user-select: text; user-select: text; }
 @media (prefers-reduced-motion: reduce) {
   .spark, .edge, .card, .reticle.on, .can-body.wobble, .sheet, .sheet-backdrop { animation-duration: 0.01ms; animation-iteration-count: 1; }
 }
+
+
+/* ==========================================================================
+   Pixel arcade — the phone's Create screen, ported. Flat colours, hard edges,
+   notched corners, hard shadows, no blur. Mirrors src/ui/theme.ts + PixelBox.
+   ========================================================================== */
+:root {
+  --ink: #0a0620;        /* outline + hard shadow */
+  --plate: #120a2e;      /* camera overlay plate: colourless, so the only colour is paint */
+  --plate-hi: #2a1c5c;
+  --panel: #2c1868;
+  --panel-hi: #4327a8;
+  --pix-green: #59d92d; --pix-green-hi: #9cff6b;
+  --pix-red: #ff3d55;
+  --dim: #cdbff5;
+  --font-display: 'Pixelify Sans', system-ui, sans-serif;
+  --font-label: 'Silkscreen', ui-monospace, monospace;
+}
+
+/* The building block: PixelBox as one element — hard border, notched corners, slab underneath. */
+.px-box {
+  position: relative;
+  background: var(--plate);
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 0 4px 0 0 var(--ink);
+  clip-path: polygon(3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% - 3px),
+                     calc(100% - 3px) 100%, 3px 100%, 0 calc(100% - 3px), 0 3px);
+  color: #fff;
+}
+
+/* ---- charge rail (left edge) --------------------------------------------- */
+.can { display: none; }  /* replaced by .charge */
+.meters { display: none; } /* paint level now lives inside the hold buttons, as on the phone */
+.charge {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  width: 52px; padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  z-index: 3; pointer-events: none;
+}
+.charge-can {
+  width: 18px; height: 24px; background: #fff;
+  clip-path: polygon(0 6px, 6px 6px, 6px 0, 12px 0, 12px 6px, 18px 6px, 18px 100%, 0 100%);
+}
+.charge-can.wobble { animation: can-wobble 220ms ease-in-out infinite alternate; }
+@keyframes can-wobble { from { transform: rotate(-12deg); } to { transform: rotate(12deg); } }
+.charge-bar { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+.charge-bar .seg { display: block; height: 8px; background: #ffffff1c; }
+.charge-bar .seg.on { background: #fff; }
+.charge-text { font-family: var(--font-label); font-size: 9px; letter-spacing: 0.5px; color: var(--dim); }
+
+/* ---- status plates -------------------------------------------------------- */
+.hud-line {
+  margin: 0 auto 8px; padding: 8px 12px; max-width: 86vw; text-align: center;
+  pointer-events: none;
+}
+.hud-line.warn { border-color: var(--pix-red); box-shadow: 0 4px 0 0 var(--pix-red); }
+.hud-line-title { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 1px; }
+.hud-line-sub { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; color: var(--dim); margin-top: 2px; }
+.hud-stack {
+  position: absolute; left: 0; right: 0; top: 18%; display: flex; flex-direction: column;
+  align-items: center; z-index: 3; pointer-events: none;
+}
+.banner { display: none; } /* blockers come through .hud-line now */
+
+/* ---- hold buttons + tools -------------------------------------------------- */
+.hold-row {
+  position: fixed; left: 12px; right: 12px; bottom: calc(var(--sab) + 14px);
+  display: flex; gap: 8px; align-items: stretch; z-index: 3;
+}
+.hold-btn {
+  flex: 1; min-height: 60px; padding: 8px 10px; display: flex; align-items: center; gap: 8px;
+  overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none;
+  background: var(--plate); border-color: var(--ink);
+}
+.hold-btn.pressed { background: #3a2a78; transform: translateY(4px); box-shadow: 0 0 0 0 var(--ink); }
+.hold-fill { position: absolute; left: 0; top: 0; bottom: 0; opacity: 0.35; pointer-events: none; }
+.hold-swatch { width: 26px; height: 26px; background: #fff; border: 3px solid var(--ink); flex: 0 0 auto; z-index: 1; }
+.hold-text { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; z-index: 1; }
+.hold-name {
+  font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 0.5px; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30vw;
+}
+.hold-sub { font-family: var(--font-label); font-size: 9px; letter-spacing: 0.5px; color: var(--dim); }
+.tools-btn { width: 56px; flex: 0 0 auto; display: grid; place-items: center; }
+.tools-glyph {
+  width: 22px; height: 16px; background:
+    linear-gradient(#fff, #fff) 0 0 / 22px 3px no-repeat,
+    linear-gradient(#fff, #fff) 0 7px / 22px 3px no-repeat,
+    linear-gradient(#fff, #fff) 0 14px / 22px 3px no-repeat;
+}
+
+/* ---- reticle --------------------------------------------------------------- */
+.reticle {
+  position: relative; width: 46px; height: 46px; border: 0; border-radius: 0; background: none;
+  display: grid; place-items: center;
+}
+.reticle .reticle-arm { position: absolute; background: #fff; box-shadow: 0 0 0 2px #0a062088; }
+.reticle .reticle-arm.t, .reticle .reticle-arm.b { width: 3px; height: 12px; left: 50%; margin-left: -1.5px; }
+.reticle .reticle-arm.l, .reticle .reticle-arm.r { height: 3px; width: 12px; top: 50%; margin-top: -1.5px; }
+.reticle .reticle-arm.t { top: 0; } .reticle .reticle-arm.b { bottom: 0; }
+.reticle .reticle-arm.l { left: 0; } .reticle .reticle-arm.r { right: 0; }
+.reticle-dot { width: 5px; height: 5px; border-radius: 0; background: #fff; box-shadow: 0 0 0 2px #0a062088; }
+.reticle.on { animation: reticle-pulse 180ms ease-in-out infinite alternate; }
+.reticle.off .reticle-arm, .reticle.off .reticle-dot { background: var(--pix-red); }
+
+/* ---- gate, top bar, notices ------------------------------------------------ */
+.gate { background: linear-gradient(#1c0f42, #07030f); }
+.gate .brand { font-family: var(--font-display); font-weight: 700; letter-spacing: 4px; }
+.gate .sub { font-weight: 700; color: var(--dim); }
+.gate-btn {
+  font-family: var(--font-display); font-weight: 700; letter-spacing: 1px; font-size: 18px;
+  background: var(--pix-green); color: #fff; border: 3px solid var(--ink); border-radius: 0;
+  box-shadow: 0 5px 0 0 var(--ink); padding: 14px 22px;
+  clip-path: polygon(3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% - 3px),
+                     calc(100% - 3px) 100%, 3px 100%, 0 calc(100% - 3px), 0 3px);
+}
+.gate-btn:active { transform: translateY(5px); box-shadow: 0 0 0 0 var(--ink); }
+.topbar-brand { font-family: var(--font-display); font-weight: 700; letter-spacing: 3px; }
+.topbar-status, .hintline span, .debugline { font-family: var(--font-label); letter-spacing: 0.5px; }
+.notice { font-weight: 700; }

@@ -2,10 +2,29 @@ import { CAP_RADIUS_DEG, WALL_PITCH_RANGE, WALL_PX_PER_DEG, WALL_YAW_RANGE, type
 import { seededRng } from '../lib/ids';
 import type { Stroke, StrokePoint } from '../types';
 
-export const WALL_W = 2 * WALL_YAW_RANGE * WALL_PX_PER_DEG; // 2160
-export const WALL_H = 2 * WALL_PITCH_RANGE * WALL_PX_PER_DEG; // 1440
+const D2R = Math.PI / 180;
+/**
+ * The raster is the texture of a FLAT wall standing in front of the canvas's spot, not a sheet of
+ * angular space: a direction (yaw, pitch) lands where that ray pierces the plane (gnomonic
+ * projection). That is what lets PaintLayer draw it in perspective, so paint foreshortens when you
+ * look along the wall instead of sliding about like a sticker on a sphere.
+ *
+ * Units on the plane are "at unit distance", so tan(angle); PX_PER_UNIT converts them to raster
+ * pixels and is the same on both axes, which keeps the pixels square.
+ */
+export const WALL_W = Math.round(2 * WALL_YAW_RANGE * WALL_PX_PER_DEG); // 1320
+const PX_PER_UNIT = (WALL_W / 2) / Math.tan(WALL_YAW_RANGE * D2R);
+export const WALL_H = Math.round(2 * Math.tan(WALL_PITCH_RANGE * D2R) * PX_PER_UNIT);
+/** Half-extent of the plane in "unit distance" units — PaintLayer sizes the surface from these. */
+export const WALL_HALF_X = Math.tan(WALL_YAW_RANGE * D2R);
+export const WALL_HALF_Y = Math.tan(WALL_PITCH_RANGE * D2R);
+/** True when a direction (relative to the canvas heading) is on this wall at all. */
+export function onWall(yaw: number, pitch: number) {
+  return Math.abs(yaw) <= WALL_YAW_RANGE && Math.abs(pitch) <= WALL_PITCH_RANGE;
+}
 
 const TAU = Math.PI * 2;
+const clampDeg = (v: number, limit: number) => (v < -limit ? -limit : v > limit ? limit : v);
 const MAX_POINT_SIZE_DEG = 90; // anything larger is a corrupt row, not paint
 const GRADIENT_CACHE_MAX = 1024;
 
@@ -57,8 +76,27 @@ export class Wall {
     this.canvas.height = 1;
   }
 
+  /** Direction (canvas-relative degrees) → the point where that ray hits the wall, in raster px. */
   static toPx(yaw: number, pitch: number) {
-    return { x: (yaw + WALL_YAW_RANGE) * WALL_PX_PER_DEG, y: (WALL_PITCH_RANGE - pitch) * WALL_PX_PER_DEG };
+    const y = clampDeg(yaw, WALL_YAW_RANGE) * D2R;
+    const p = clampDeg(pitch, WALL_PITCH_RANGE) * D2R;
+    return {
+      x: WALL_W / 2 + Math.tan(y) * PX_PER_UNIT,
+      y: WALL_H / 2 - (Math.tan(p) / Math.cos(y)) * PX_PER_UNIT,
+    };
+  }
+
+  /**
+   * Raster px per degree at that spot. Constant on a sphere, not on a plane: the same nozzle
+   * spread covers more of the wall the further along it you aim, which is what makes the paint
+   * look like it is lying on a surface.
+   */
+  static pxPerDeg(yaw: number, pitch: number) {
+    const y = clampDeg(yaw, WALL_YAW_RANGE) * D2R;
+    const p = clampDeg(pitch, WALL_PITCH_RANGE) * D2R;
+    const kx = PX_PER_UNIT / (Math.cos(y) * Math.cos(y));
+    const ky = PX_PER_UNIT / (Math.cos(p) * Math.cos(p) * Math.cos(y));
+    return D2R * Math.sqrt(kx * ky);
   }
 
   /** Skia-style blurred disc: radius r, Gaussian sigma `blur` (wall px), colour at `alpha`. */
@@ -115,7 +153,7 @@ export class Wall {
   dab(yaw: number, pitch: number, radiusDeg: number, alpha: number, color: string, rng: () => number) {
     if (!this.ctx) return;
     const { x, y } = Wall.toPx(yaw, pitch);
-    const r = radiusDeg * WALL_PX_PER_DEG;
+    const r = radiusDeg * Wall.pxPerDeg(yaw, pitch);
     const rgb = parseColor(color);
     const dark = darken(rgb, 0.72);
     // edge-darkening halo
@@ -140,8 +178,9 @@ export class Wall {
   drip(yaw: number, pitch: number, lengthDeg: number, alpha: number, color: string, rng: () => number) {
     if (!this.ctx) return;
     const { x, y } = Wall.toPx(yaw, pitch);
-    const len = lengthDeg * WALL_PX_PER_DEG;
-    const w = (0.18 + rng() * 0.12) * WALL_PX_PER_DEG;
+    const scale = Wall.pxPerDeg(yaw, pitch);
+    const len = lengthDeg * scale;
+    const w = (0.18 + rng() * 0.12) * scale;
     const steps = Math.max(4, Math.floor(len / (w * 0.6)));
     const rgb = parseColor(color);
     let px = x + (rng() - 0.5) * w;

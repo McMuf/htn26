@@ -6,7 +6,7 @@ import { useDiscovery } from '../hooks/useDiscovery';
 import { sfx } from '../audio/sfx';
 import { reportCanvas } from '../data/sync';
 import { useStore } from '../store';
-import { BlockerBanner, CanMeter, HoldButtons, PaintMeters, Reticle } from '../components/HUD';
+import { BlockerBanner, CanMeter, HoldButtons, Line, Reticle } from '../components/HUD';
 import { DiscoveryOverlay } from '../components/DiscoveryOverlay';
 import type { Blocker } from '../types';
 
@@ -19,7 +19,7 @@ import type { Blocker } from '../types';
  * volume keys. iOS only grants motion / audio / camera access from a tap, hence the START gate.
  */
 type Props = { active: boolean; locationStatus: 'pending' | 'granted' | 'denied' };
-type Ui = { spraying: boolean; blocker: Blocker; yaw: number };
+type Ui = { spraying: boolean; blocker: Blocker; yaw: number; offWall: boolean };
 
 const LOCATION_DENIED_MSG = 'Location blocked — Tagged needs GPS to place your paint. Allow location for this site and reload.';
 const CAMERA_RESTART_MSG = 'Camera stopped — tap here to restart it.';
@@ -64,7 +64,7 @@ export function PaintScreen({ active, locationStatus }: Props) {
   const [starting, setStarting] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [notices, setNotices] = useState<string[]>([]);
-  const [ui, setUi] = useState<Ui>({ spraying: false, blocker: null, yaw: 0 });
+  const [ui, setUi] = useState<Ui>({ spraying: false, blocker: null, yaw: 0, offWall: false });
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const wakeRef = useRef<WakeLockSentinel | null>(null);
@@ -77,7 +77,10 @@ export function PaintScreen({ active, locationStatus }: Props) {
       const spraying = eng.sprayingNow.current && !eng.blocker.current;
       const blocker = eng.held.current ? eng.blocker.current : null;
       const yaw = Math.round(p.yaw) % 360;
-      setUi((prev) => (prev.spraying === spraying && prev.blocker === blocker && prev.yaw === yaw ? prev : { spraying, blocker, yaw }));
+      // only complain about aim while someone is actually holding a colour down
+      const offWall = !!eng.held.current && !eng.blocker.current && eng.offWall.current;
+      setUi((prev) => (prev.spraying === spraying && prev.blocker === blocker && prev.yaw === yaw && prev.offWall === offWall
+        ? prev : { spraying, blocker, yaw, offWall }));
       const d = useStore.getState().debug;
       const held = eng.held.current ?? '-';
       const bl = eng.blocker.current ?? '-';
@@ -247,12 +250,15 @@ export function PaintScreen({ active, locationStatus }: Props) {
         <>
           <video ref={videoRef} className="cam" playsInline muted autoPlay disablePictureInPicture />
           <PaintLayer walls={discovery.walls} />
-          <Reticle spraying={ui.spraying} />
-          <PaintMeters />
+          <Reticle spraying={ui.spraying} offWall={ui.offWall} />
           <CanMeter />
           <DiscoveryOverlay d={discovery} onReport={onReport} />
-          <BlockerBanner blocker={ui.blocker} />
-          <HoldButtons onStart={engine.start} onEnd={engine.end} keyboard={active} />
+          <div className="hud-stack">
+            {ui.blocker ? <BlockerBanner blocker={ui.blocker} />
+              : ui.offWall ? <Line title="AIM AT THE WALL" sub="THE PIECE IS THE FLAT SURFACE IN FRONT OF YOU" />
+              : null}
+          </div>
+          <HoldButtons onStart={engine.start} onEnd={engine.end} keyboard={active} onTools={() => setSettingsOpen(true)} />
 
           <div className="topbar">
             <div className="topbar-brand">FRESCO</div>

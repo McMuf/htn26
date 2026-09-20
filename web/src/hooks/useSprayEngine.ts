@@ -6,7 +6,7 @@ import {
 } from '../config';
 import { haversineM, wrap360, wrapDiff } from '../lib/geo';
 import { seededRng, uuid } from '../lib/ids';
-import { capRadius, getWall } from '../paint/Wall';
+import { capRadius, getWall, onWall } from '../paint/Wall';
 import { sfx } from '../audio/sfx';
 import { useStore } from '../store';
 import { createCanvas, uploadStroke } from '../data/sync';
@@ -20,6 +20,8 @@ export type SprayEngine = {
   blocker: RefObject<Blocker>;
   held: RefObject<Side | null>;
   sprayingNow: RefObject<boolean>;
+  /** true while the reticle is past the edge of the wall — nothing to paint on */
+  offWall: RefObject<boolean>;
 };
 
 // ---- haptics: navigator.vibrate stands in for expo-haptics (absent on iOS Safari → no-op) -----
@@ -56,6 +58,8 @@ export function useSprayEngine(): SprayEngine {
   const lastTick = useRef(0);
   const hapticsAt = useRef(0);
   const blocker = useRef<Blocker>(null);
+  /** true while the reticle is past the edge of the wall, so the HUD can say so */
+  const offWall = useRef(false);
   const sprayingNow = useRef(false);
 
   // can charge decay + paint regen, always running
@@ -193,6 +197,14 @@ export function useSprayEngine(): SprayEngine {
       const pitch = pr.pitch;
       const radius = capRadius(opt.cap) * (0.75 + 0.35 * strength);
       const alpha = 0.16 * flow;
+      // the wall is a finite surface: aim off its edge and there is nothing to paint on, the same
+      // way the phone refuses to spray when its reticle isn't on a detected plane
+      if (!onWall(yaw, pitch)) {
+        offWall.current = true;
+        sfx.setHiss(false, 0, 0);
+        return;
+      }
+      offWall.current = false;
       const wall = getWall(canvas.id);
       const pt: StrokePoint = [round2(yaw), round2(pitch), round2(radius), round2(alpha), 0];
       wall.applyPoint(pt, opt.color, rng.current);
@@ -231,7 +243,7 @@ export function useSprayEngine(): SprayEngine {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  return { start, end, onShake, blocker, held, sprayingNow };
+  return { start, end, onShake, blocker, held, sprayingNow, offWall };
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100;

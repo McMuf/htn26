@@ -1,9 +1,8 @@
 import { useEffect, useRef, type CSSProperties, type JSX } from 'react';
-import { WALL_PITCH_RANGE, WALL_PX_PER_DEG, WALL_YAW_RANGE } from '../config';
 import { clamp, wrapDiff } from '../lib/geo';
 import { getPose } from '../hooks/usePose';
 import { useStore } from '../store';
-import { getWall, hasWall } from './Wall';
+import { WALL_HALF_X, WALL_HALF_Y, getWall, hasWall } from './Wall';
 
 export type WallView = {
   canvasId: string;
@@ -11,85 +10,63 @@ export type WallView = {
   resolve: number; // 0 = invisible/blurred, 1 = crisp
 };
 
-// Full-screen bitmaps are redrawn on every pose change; above 2× the blur pass stops fitting a frame.
-const MAX_DPR = 2;
 const D2R = Math.PI / 180;
+/** Where the wall stands, in CSS px. Arbitrary: the perspective divide only cares about ratios. */
+const WALL_DISTANCE = 1200;
 
 // fixed, under the HUD (which should sit at z-index ≥ 10), over the camera <video> (z-index ≤ 1)
 const STYLE: CSSProperties = {
   position: 'fixed', inset: 0, width: '100%', height: '100%',
   pointerEvents: 'none', zIndex: 2, display: 'block', touchAction: 'none',
+  overflow: 'hidden', perspectiveOrigin: '50% 50%',
 };
 
 /**
- * Draws every nearby wall raster over the camera (port of the native PaintLayer). The view
- * transform maps the wall's angular space onto the screen using the current pose: yaw offsets
- * slide it sideways, pitch slides it vertically, and the phone's roll rotates it about the
- * screen centre so paint stays level with the world. Runs its own rAF loop off getPose() so it
- * never re-renders React; a frame is only repainted when the pose, the FOV, the wall list or
- * the shared wallVersion changed.
+ * Draws every nearby wall as what it is: a flat surface standing in front of the spot its author
+ * painted from. Each wall's raster is parked in a 3D-transformed element, so the browser gives it
+ * a real perspective divide — look along the wall and the paint foreshortens, tilt and it keeps
+ * its horizon, exactly like paint on a wall. (It used to be blitted with a 2D translate + rotate,
+ * which never foreshortens: paint slid around the screen like a sticker on a sphere, which is the
+ * "it doesn't sit on surfaces" feeling.)
+ *
+ * The wall element holds the Wall's own offscreen canvas, so painting shows up with no per-frame
+ * blit; a frame only rewrites transforms, which stay on the compositor. Runs its own rAF loop off
+ * getPose() so it never re-renders React.
+ *
+ * What this still isn't: plane *detection*. A browser has no depth sensor and no position
+ * tracking, so the wall is where the canvas says it is rather than where the real wall is, and
+ * walking around doesn't parallax. On the phone, ARKit/ARCore do the real thing.
  */
 export function PaintLayer({ walls }: { walls: WallView[] }): JSX.Element {
-  const ref = useRef<HTMLCanvasElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
   const wallsRef = useRef(walls);
   wallsRef.current = walls;
 
   useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const host = hostRef.current;
+    if (!host) return;
+    /** one positioned element per canvas, holding that Wall's raster */
+    const mounted = new Map<string, HTMLDivElement>();
 
-    let dpr = 1, cssW = 0, cssH = 0;
-    let dirty = true;
-    let lastYaw = NaN, lastPitch = NaN, lastRoll = NaN, lastHfov = NaN, lastVersion = -1;
-    let lastWalls: WallView[] | null = null;
-
-    const fit = () => {
-      dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
-      const w = canvas.clientWidth || window.innerWidth;
-      const h = canvas.clientHeight || window.innerHeight;
-      const pw = Math.max(1, Math.round(w * dpr)), ph = Math.max(1, Math.round(h * dpr));
-      if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
-      cssW = w; cssH = h;
-      dirty = true;
-    };
-    fit();
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fit) : null;
-    ro?.observe(canvas);
-    window.addEventListener('resize', fit);
-    window.addEventListener('orientationchange', fit);
-
-    const draw = (yaw: number, pitch: number, roll: number, hfov: number, ws: WallView[]) => {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (!ws.length || cssW <= 0 || cssH <= 0 || !(hfov > 0)) return;
-      // screen px per degree: hfov spans the phone's SHORT edge in either orientation (the web is
-      // not portrait-locked, and roll already levels the layer in landscape)
-      const s = Math.min(cssW, cssH) / hfov;
-      const k = s / WALL_PX_PER_DEG; // wall px → screen px
-      const cx = cssW / 2, cy = cssH / 2;
-      for (const w of ws) {
-        if (!hasWall(w.canvasId)) continue; // nothing painted there yet — skip allocating a blank raster
-        const wall = getWall(w.canvasId);
-        const resolve = clamp(w.resolve, 0, 1);
-        const dYaw = wrapDiff(w.heading, yaw);
-        ctx.save();
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.translate(cx, cy);
-        ctx.rotate(-roll * D2R);
-        ctx.translate((dYaw - WALL_YAW_RANGE) * s, -(WALL_PITCH_RANGE - pitch) * s);
-        ctx.scale(k, k);
-        ctx.globalAlpha = 0.15 + 0.85 * resolve;
-        const blur = (1 - resolve) * 22; // in wall px; resolves from a smear into a piece
-        if (blur > 0.5) {
-          // canvas filters work in output-bitmap pixels regardless of the CTM; Safari may ignore this
-          // property entirely, in which case the alpha ramp alone carries the resolve effect.
-          try { ctx.filter = `blur(${(blur * k * dpr).toFixed(2)}px)`; } catch {}
-        }
-        try { ctx.drawImage(wall.canvas, 0, 0); } catch {}
-        ctx.restore();
-      }
+    const surfaceFor = (id: string) => {
+      let el = mounted.get(id);
+      if (el) return el;
+      const wall = getWall(id);
+      el = document.createElement('div');
+      el.style.cssText = [
+        'position:absolute', 'left:50%', 'top:50%',
+        `width:${2 * WALL_HALF_X * WALL_DISTANCE}px`,
+        `height:${2 * WALL_HALF_Y * WALL_DISTANCE}px`,
+        'margin-left:' + -WALL_HALF_X * WALL_DISTANCE + 'px',
+        'margin-top:' + -WALL_HALF_Y * WALL_DISTANCE + 'px',
+        'transform-origin:50% 50%', 'will-change:transform', 'backface-visibility:hidden',
+      ].join(';');
+      const c = wall.canvas;
+      c.style.cssText = 'width:100%;height:100%;display:block';
+      el.appendChild(c);
+      host.appendChild(el);
+      mounted.set(id, el);
+      return el;
     };
 
     let raf = 0;
@@ -98,24 +75,53 @@ export function PaintLayer({ walls }: { walls: WallView[] }): JSX.Element {
       const pose = getPose();
       const st = useStore.getState();
       const hfov = st.settings.hfov;
-      const version = st.wallVersion;
-      const ws = wallsRef.current;
-      if (!dirty && pose.yaw === lastYaw && pose.pitch === lastPitch && pose.roll === lastRoll &&
-        hfov === lastHfov && version === lastVersion && ws === lastWalls) return;
-      lastYaw = pose.yaw; lastPitch = pose.pitch; lastRoll = pose.roll;
-      lastHfov = hfov; lastVersion = version; lastWalls = ws;
-      dirty = false;
-      draw(pose.yaw, pose.pitch, pose.roll, hfov, ws);
+      const w = host.clientWidth || window.innerWidth;
+      const h = host.clientHeight || window.innerHeight;
+      if (!(hfov > 0) || w <= 0 || h <= 0) return;
+
+      // hfov spans the short edge in either orientation (roll levels the layer in landscape)
+      const focal = (Math.min(w, h) / 2) / Math.tan((hfov * D2R) / 2);
+      host.style.perspective = `${focal.toFixed(1)}px`;
+      // CSS puts the eye `focal` in front of the z = 0 plane, so a wall parked at translateZ(-R)
+      // sits at depth focal + R and lands at half the angle it should. Step out to the eye first,
+      // rotate there, then go R along the rotated view axis: that is the plain pinhole camera,
+      // checked against focal·tan(angle) in the browser.
+      const eye = focal.toFixed(1);
+
+      const live = new Set<string>();
+      for (const wv of wallsRef.current) {
+        if (!hasWall(wv.canvasId)) continue; // nothing painted there yet — don't allocate a blank raster
+        live.add(wv.canvasId);
+        const el = surfaceFor(wv.canvasId);
+        const resolve = clamp(wv.resolve, 0, 1);
+        // where this wall's centre sits relative to where we are looking
+        const dYaw = wrapDiff(wv.heading, pose.yaw);
+        // roll levels it, pitch swings it up/down, yaw swings it left/right, then it stands off
+        // at WALL_DISTANCE along that direction — so it always faces its own spot, like a wall.
+        el.style.transform =
+          `translateZ(${eye}px) rotateZ(${(-pose.roll).toFixed(2)}deg) rotateX(${pose.pitch.toFixed(2)}deg) ` +
+          `rotateY(${(-dYaw).toFixed(2)}deg) translateZ(${-WALL_DISTANCE}px)`;
+        el.style.opacity = (0.15 + 0.85 * resolve).toFixed(3);
+        // resolves from a smear into a piece as you walk up to it
+        const blur = (1 - resolve) * 26;
+        el.style.filter = blur > 0.5 ? `blur(${blur.toFixed(1)}px)` : '';
+      }
+
+      // walls that dropped out of range: unmount, but leave their raster alive in the Wall cache
+      for (const [id, el] of mounted) {
+        if (live.has(id)) continue;
+        el.remove();
+        mounted.delete(id);
+      }
     };
     raf = requestAnimationFrame(frame);
 
     return () => {
       cancelAnimationFrame(raf);
-      ro?.disconnect();
-      window.removeEventListener('resize', fit);
-      window.removeEventListener('orientationchange', fit);
+      for (const [, el] of mounted) el.remove();
+      mounted.clear();
     };
   }, []);
 
-  return <canvas ref={ref} style={STYLE} aria-hidden="true" />;
+  return <div ref={hostRef} style={STYLE} aria-hidden="true" />;
 }

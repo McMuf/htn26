@@ -18,9 +18,12 @@ export const HFOV_DEG = 36;
 // the AR frame is already magnetic.
 export const MAG_DECLINATION_DEG = -9.7;
 // Offscreen wall raster: pixels per degree. 12 px/deg over ±90° yaw × ±60° pitch = 2160×1440.
-export const WALL_PX_PER_DEG = 12;
-export const WALL_YAW_RANGE = 90;
-export const WALL_PITCH_RANGE = 60;
+export const WALL_PX_PER_DEG = 12; // raster resolution near the middle of the wall
+// How much of a flat wall one canvas covers, as angles from the spot its author stood on. A
+// tangent plane can't reach 90° (that is parallel to the wall), and past ~55° you are looking
+// along it rather than at it, so this is the useful extent of "the wall in front of me".
+export const WALL_YAW_RANGE = 55;
+export const WALL_PITCH_RANGE = 40;
 
 // ---- canvases / geo --------------------------------------------------------
 export const CANVAS_JOIN_RADIUS_M = 15;

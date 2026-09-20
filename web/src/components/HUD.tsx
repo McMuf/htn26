@@ -1,85 +1,87 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PAINT_MAX, SHAKE_MIN_TO_SPRAY } from '../config';
+import { PAINT_EMPTY_THRESHOLD, PAINT_MAX, PAINT_REGEN_PER_SEC, SHAKE_MIN_TO_SPRAY } from '../config';
 import { useStore } from '../store';
 import type { Blocker, Side } from '../types';
 
-/** Web port of ../../src/components/HUD.tsx — reanimated → CSS animations, Pressable → pointer events. */
+/**
+ * Web port of the phone's Create HUD (../../src/components/HUD.tsx): the same pixel-arcade
+ * furniture — a charge rail down the left, status plates stacked under it, and two chunky
+ * hold-to-spray buttons with a tools button beside them. Reanimated becomes CSS animation and
+ * Pressable becomes pointer events; the pixel "boxes" are the .px-box class in styles.css.
+ */
 
-export function Reticle({ spraying }: { spraying: boolean }) {
+export function Reticle({ spraying, offWall = false }: { spraying: boolean; offWall?: boolean }) {
   return (
     <div className="reticle-wrap">
-      <div className={`reticle${spraying ? ' on' : ''}`}>
+      <div className={`reticle${spraying ? ' on' : ''}${offWall ? ' off' : ''}`}>
+        <span className="reticle-arm t" />
+        <span className="reticle-arm r" />
+        <span className="reticle-arm b" />
+        <span className="reticle-arm l" />
         <div className="reticle-dot" />
       </div>
     </div>
   );
 }
 
-export function PaintMeters() {
-  const paint = useStore((s) => s.paint);
-  const settings = useStore((s) => s.settings);
-  return (
-    <div className="meters">
-      <Meter label="HOLD A" color={settings.optionA.color} value={paint.A} cap={settings.optionA.cap} />
-      <Meter label="HOLD B" color={settings.optionB.color} value={paint.B} cap={settings.optionB.cap} />
-    </div>
-  );
-}
-
-function Meter({ label, color, value, cap }: { label: string; color: string; value: number; cap: string }) {
-  const frac = value / PAINT_MAX;
-  return (
-    <div className="meter">
-      <div className="meter-bg">
-        <div className="meter-bar" style={{ height: `${Math.max(2, frac * 100)}%`, backgroundColor: color, opacity: frac < 0.15 ? 0.5 : 1 }} />
-      </div>
-      <div className="meter-label">{label}</div>
-      <div className="meter-sub" style={{ color }}>{cap}</div>
-      <div className="meter-pct">{Math.round(frac * 100)}%</div>
-    </div>
-  );
-}
-
+/** Can charge as a slim rail down the left edge — shake to refill, like the phone's. */
 export function CanMeter() {
   const shake = useStore((s) => s.shake);
   const low = shake < SHAKE_MIN_TO_SPRAY;
+  const segs = 8;
+  const lit = Math.round(Math.max(0, Math.min(1, shake)) * segs);
   return (
-    <div className="can">
-      <div className={`can-body${low ? ' wobble' : ''}`}>
-        <div className="can-nozzle" />
-        <div className="can-fill-bg">
-          <div className="can-fill" style={{ height: `${Math.round(shake * 100)}%`, backgroundColor: low ? '#ff5c1a' : '#7cff3a' }} />
-        </div>
+    <div className="charge px-box" aria-hidden="true">
+      <div className={`charge-can${low ? ' wobble' : ''}`} />
+      <div className="charge-bar">
+        {Array.from({ length: segs }, (_, i) => (
+          <span key={i} className={segs - 1 - i < lit ? 'seg on' : 'seg'} />
+        ))}
       </div>
-      <div className={`can-label${low ? ' low' : ''}`}>{low ? 'SHAKE CAN' : `charge ${Math.round(shake * 100)}%`}</div>
+      <div className="charge-text">{low ? 'SHAKE' : `${Math.round(shake * 100)}%`}</div>
     </div>
   );
 }
 
-const BLOCKER_MSG: Record<Exclude<Blocker, null>, string> = {
-  'no-location': 'Waiting for GPS…',
-  'outside-geofence': 'Outside Waterloo Region — paint zone',
-  shake: 'Shake the can first!',
-  empty: 'Out of paint — wait for it to refill',
-  'no-sensors': 'No compass yet — allow motion access and move the phone',
+const BLOCKER_MSG: Record<Exclude<Blocker, null>, { title: string; sub?: string }> = {
+  'no-location': { title: 'WAITING FOR GPS' },
+  'outside-geofence': { title: 'OUTSIDE THE PAINT ZONE', sub: 'WATERLOO REGION ONLY' },
+  shake: { title: 'SHAKE TO CHARGE', sub: 'THEN HOLD A COLOUR' },
+  empty: { title: 'OUT OF PAINT', sub: 'IT REFILLS ON ITS OWN' },
+  'no-sensors': { title: 'NO COMPASS YET', sub: 'ALLOW MOTION ACCESS AND MOVE THE PHONE' },
 };
-// orientation events are flowing but no absolute (magnetic-north) heading has been applied yet
-const NO_COMPASS_FIX_MSG = 'No compass fix yet — hold the phone upright and move it in a figure-8 to calibrate';
+const NO_COMPASS_FIX_MSG = { title: 'NO COMPASS FIX YET', sub: 'HOLD IT UPRIGHT AND MOVE IN A FIGURE-8' };
+
+/** One status plate. The phone stacks these in the middle of the screen; so do we. */
+export function Line({ title, sub, tone }: { title: string; sub?: string; tone?: 'warn' }) {
+  return (
+    <div className={`hud-line px-box${tone === 'warn' ? ' warn' : ''}`} role="status">
+      <div className="hud-line-title">{title}</div>
+      {sub ? <div className="hud-line-sub">{sub}</div> : null}
+    </div>
+  );
+}
 
 export function BlockerBanner({ blocker }: { blocker: Blocker }) {
   const sensors = useStore((s) => s.debug.sensors);
   if (!blocker) return null;
   const msg = blocker === 'no-sensors' && sensors === 'relative' ? NO_COMPASS_FIX_MSG : BLOCKER_MSG[blocker];
-  return <div className="banner" role="status">{msg}</div>;
+  return <Line title={msg.title} sub={msg.sub} tone="warn" />;
 }
 
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
 /**
- * Two big hold-to-spray buttons (the web has no volume buttons). Pointer events cover touch,
- * mouse and pen; ArrowUp / ArrowDown hold on a keyboard for desktop testing. Everything is
- * released if the page hides or loses focus so a stroke can never get stuck "on".
+ * Two big hold-to-spray buttons and the tools button, as on the phone: each carries its colour
+ * swatch, the paint left as a fill behind the label, and a refill countdown when it runs dry.
+ * Pointer events cover touch, mouse and pen; ArrowUp / ArrowDown hold on a keyboard for desktop
+ * testing. Everything releases if the page hides or loses focus so a stroke can't get stuck on.
  */
-export function HoldButtons({ onStart, onEnd, keyboard = true }: { onStart: (s: Side) => void; onEnd: (s: Side) => void; keyboard?: boolean }) {
+export function HoldButtons({ onStart, onEnd, keyboard = true, onTools }: {
+  onStart: (s: Side) => void; onEnd: (s: Side) => void; keyboard?: boolean; onTools?: () => void;
+}) {
   const settings = useStore((s) => s.settings);
+  const paint = useStore((s) => s.paint);
   const [pressed, setPressed] = useState<Record<Side, boolean>>({ A: false, B: false });
   const cbs = useRef({ onStart, onEnd });
   useEffect(() => { cbs.current = { onStart, onEnd }; });
@@ -110,25 +112,36 @@ export function HoldButtons({ onStart, onEnd, keyboard = true }: { onStart: (s: 
     <div className="hold-row">
       {(['A', 'B'] as Side[]).map((side) => {
         const opt = side === 'A' ? settings.optionA : settings.optionB;
-        const on = pressed[side];
+        const left = paint[side];
+        const pct = Math.round((left / PAINT_MAX) * 100);
+        const empty = left <= PAINT_EMPTY_THRESHOLD;
+        const sub = empty ? `REFILL ${mmss(Math.ceil((PAINT_MAX - left) / PAINT_REGEN_PER_SEC))}` : `${pct}%`;
         return (
           <button
             key={side}
             type="button"
-            className={`hold-btn${on ? ' pressed' : ''}`}
-            style={{ borderColor: opt.color, backgroundColor: on ? `${opt.color}cc` : '#0008' }}
+            className={`hold-btn px-box${pressed[side] ? ' pressed' : ''}`}
             aria-label={`Hold to spray option ${side} (${opt.name})`}
-            aria-pressed={on}
-            onPointerDown={(e) => { e.preventDefault(); press(side, true); }}
+            onPointerDown={(e) => { e.preventDefault(); (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); press(side, true); }}
             onPointerUp={() => press(side, false)}
             onPointerCancel={() => press(side, false)}
             onPointerLeave={() => press(side, false)}
             onContextMenu={(e) => e.preventDefault()}
           >
-            HOLD {side}
+            <span className="hold-fill" style={{ width: `${pct}%`, backgroundColor: opt.color }} aria-hidden="true" />
+            <span className="hold-swatch" style={{ backgroundColor: opt.color }} aria-hidden="true" />
+            <span className="hold-text">
+              <span className="hold-name">{opt.name.toUpperCase()}</span>
+              <span className="hold-sub">{sub}</span>
+            </span>
           </button>
         );
       })}
+      {onTools ? (
+        <button type="button" className="tools-btn px-box" aria-label="Colours and settings" onClick={onTools}>
+          <span className="tools-glyph" aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   );
 }
