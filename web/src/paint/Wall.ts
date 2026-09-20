@@ -12,8 +12,12 @@ const D2R = Math.PI / 180;
  * Units on the plane are "at unit distance", so tan(angle); PX_PER_UNIT converts them to raster
  * pixels and is the same on both axes, which keeps the pixels square.
  */
-export const WALL_W = Math.round(2 * WALL_YAW_RANGE * WALL_PX_PER_DEG); // 1320
-const PX_PER_UNIT = (WALL_W / 2) / Math.tan(WALL_YAW_RANGE * D2R);
+// Resolution is set where it matters — the middle of the wall, where you spend most of a stroke.
+// Deriving the raster from the angular extent instead (W = 2·range·pxPerDeg) quietly cost a third
+// of the pixels per degree when the mapping became gnomonic, which made paint land coarse and the
+// soft edges of a dab band. Pin the centre to WALL_PX_PER_DEG and let the raster size follow.
+const PX_PER_UNIT = WALL_PX_PER_DEG / D2R;
+export const WALL_W = Math.round(2 * Math.tan(WALL_YAW_RANGE * D2R) * PX_PER_UNIT);
 export const WALL_H = Math.round(2 * Math.tan(WALL_PITCH_RANGE * D2R) * PX_PER_UNIT);
 /** Half-extent of the plane in "unit distance" units — PaintLayer sizes the surface from these. */
 export const WALL_HALF_X = Math.tan(WALL_YAW_RANGE * D2R);
