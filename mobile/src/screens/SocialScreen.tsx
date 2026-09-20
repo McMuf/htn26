@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Platform, Share, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
 import { makeImageFromView } from '@shopify/react-native-skia';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { Avatar, Btn, Chip, Header, Panel, Pill, Rank, Screen, T, Tile } from '../ui/kit';
+import { Avatar, Btn, Chip, Header, Panel, Pill, Rank, Row, Screen, T, Tile, Wordmark } from '../ui/kit';
+import { Bands } from '../ui/Bands';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
 import { PieceImage } from '../ui/StrokeThumb';
-import { C, F, TONES, outline, ui } from '../ui/theme';
+import { haptic } from '../ui/haptics';
+import { C, F, GUTTER, TONES, outline, ui } from '../ui/theme';
 import { useStore } from '../store';
 import { MOCK_ACTIVITY, MOCK_FRIENDS } from '../data/mock';
 import { fetchLeaderboard } from '../data/sync';
@@ -17,10 +17,11 @@ import { CREWS, colorName, dayStats } from '../lib/economy';
 import { PALETTE } from '../config';
 import type { Painter } from '../types';
 
-const CARD_W = Dimensions.get('window').width - 36;
+const CARD_W = Dimensions.get('window').width - GUTTER * 2;
+const CARD_PAD = 14;
 const hueOf = (name: string) => PALETTE[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % (PALETTE.length - 1)];
 
-/** Share card (Airbuds layout, real numbers), a live leaderboard, your crew, and sample friends. */
+/** Share card (real numbers), a live leaderboard, your crew, and sample friends. */
 export function SocialScreen() {
   const painter = useStore((s) => s.painter);
   const settings = useStore((s) => s.settings);
@@ -52,54 +53,56 @@ export function SocialScreen() {
 
   const share = async () => {
     setSharing(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    const msg = `My Fresco week · ${painter?.name ?? 'anon'} · ${Math.round(painter?.paint_used ?? 0)} paint sprayed`;
+    haptic.heavy();
+    const msg = `My Cospray week · ${painter?.name ?? 'anon'} · ${Math.round(painter?.paint_used ?? 0)} paint sprayed`;
     try {
       const img = await makeImageFromView(cardRef);
       if (!img) throw new Error('snapshot failed');
-      const f = new File(Paths.cache, 'fresco-card.png');
+      const f = new File(Paths.cache, 'cospray-card.png');
       f.write(img.encodeToBytes());
       // RN's Share can't attach a file on Android
-      if (Platform.OS === 'android') await Sharing.shareAsync(f.uri, { mimeType: 'image/png', dialogTitle: 'Share your Fresco card' });
+      if (Platform.OS === 'android') await Sharing.shareAsync(f.uri, { mimeType: 'image/png', dialogTitle: 'Share your Cospray card' });
       else await Share.share({ url: f.uri, message: msg });
     } catch { await Share.share({ message: `${msg} · ${found} walls found` }).catch(() => {}); }
     setSharing(false);
   };
 
   return (
-    <Screen tone="magenta" loading={loading} onRefresh={loadBoard}>
-      <Header title="SOCIAL" right={<Pill icon="flame" value={stats.streak} iconColor={C.orange} alt="#ffd21f" />} />
+    <Screen loading={loading} onRefresh={loadBoard}>
+      <Header title="SOCIAL" right={<Pill icon="flame" value={stats.streak} iconColor={C.red} alt={C.yellow} />} />
 
       {/* the shareable card: this exact view is snapshotted to a PNG */}
-      <View style={styles.cardShadow}>
-        <View ref={cardRef} collapsable={false} style={styles.card}>
-          <LinearGradient colors={['#6a1a78', '#2a0d3f', '#150626']} locations={[0, 0.42, 1]} style={StyleSheet.absoluteFill} />
-          <Text style={styles.big}>top walls</Text>
-          <LinearGradient colors={['#2a0d3f00', '#2a0d3f']} style={styles.fade} pointerEvents="none" />
-          <View style={styles.pills}>
+      <View ref={cardRef} collapsable={false}>
+        <PixelBox fill={C.tile} n={6} depth={6} contentStyle={{ padding: CARD_PAD, gap: 12, overflow: 'hidden' }}>
+          <Bands width={CARD_W} height={CARD_BAND_H} top={C.purpleLo} bottom={C.tile} style={styles.band} />
+          <View style={styles.cardHead}>
+            <Wordmark size="sm" />
+            <T v="label">MY WEEK</T>
+          </View>
+          <T v="eyebrow">TOP WALLS</T>
+          <View style={styles.trio}>
             {[0, 1, 2].map((i) => {
               const w = topWalls[i];
               const c = w ? canvases[w[0]] : null;
               return (
                 <View key={i} style={{ flex: 1, alignItems: 'center', gap: 6 }}>
-                  <View style={styles.pill}>
-                    {w ? <PieceImage canvasId={w[0]} width={PILL_W} height={PILL_H} radius={PILL_W / 2} /> : <View style={styles.pillEmpty}><Text style={styles.q}>?</Text></View>}
-                    <View style={styles.badge}><Text style={styles.badgeText}>{i + 1}</Text></View>
+                  <View style={styles.thumb}>
+                    {w ? <PieceImage canvasId={w[0]} width={THUMB} height={THUMB} /> : <View style={styles.thumbEmpty}><Text style={styles.q}>?</Text></View>}
+                    <View style={styles.rank}><Rank n={i + 1} /></View>
                   </View>
                   <Text style={styles.cap} numberOfLines={1}>{w ? (c?.title ?? 'a wall') : 'paint more'}</Text>
                 </View>
               );
             })}
           </View>
-          <Text style={[styles.big, { marginTop: 4 }]}>on repeat</Text>
-          <LinearGradient colors={['#15062600', '#150626']} style={styles.fade2} pointerEvents="none" />
-          <View style={styles.pills}>
+          <T v="eyebrow">ON REPEAT</T>
+          <View style={styles.trio}>
             {[0, 1, 2].map((i) => {
               const col = topColors[i];
               return (
                 <View key={i} style={{ flex: 1, alignItems: 'center', gap: 6 }}>
-                  <View style={[styles.sq, { backgroundColor: col ? col[0] : '#2b2059' }]}>{!col && <Text style={styles.q}>?</Text>}</View>
-                  <View style={styles.times}><Text style={styles.timesText}>{col ? `${col[1]} times` : '—'}</Text></View>
+                  <View style={[styles.sq, { backgroundColor: col ? col[0] : C.well }]}>{!col && <Text style={styles.q}>?</Text>}</View>
+                  <PixelBox fill={C.plate} depth={0} bw={2} n={2} contentStyle={{ paddingHorizontal: 8, paddingVertical: 3 }}><Text style={styles.timesText}>{col ? `${col[1]} times` : '—'}</Text></PixelBox>
                   <Text style={styles.cap} numberOfLines={1}>{col ? colorName(col[0]).toLowerCase() : 'no colour'}</Text>
                 </View>
               );
@@ -113,14 +116,11 @@ export function SocialScreen() {
           <View style={styles.foot}>
             <View>
               <Text style={styles.footName}>{painter?.name ?? 'anon'}</Text>
-              <Text style={styles.footSub}>{crew ? crew.name.toLowerCase() : 'this week on the wall'}</Text>
+              <Text style={styles.footSub}>{crew ? crew.name : 'this week on the wall'}</Text>
             </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.footSub}>join me on</Text>
-              <Text style={styles.footBrand}>fresco</Text>
-            </View>
+            <T v="micro">JOIN ME ON COSPRAY</T>
           </View>
-        </View>
+        </PixelBox>
       </View>
       <Btn label={sharing ? '…' : 'SHARE TO STORY'} icon="share" tone="green" size="lg" disabled={sharing} onPress={share} />
 
@@ -141,21 +141,19 @@ export function SocialScreen() {
 
       <Panel title="FRIENDS" right={<T v="label" color={C.faint}>SAMPLE DATA</T>}>
         {MOCK_FRIENDS.map((f) => (
-          <View key={f.id} style={styles.friend}>
-            <Avatar name={f.name} color={f.color} size={38} />
-            <View style={{ flex: 1 }}>
-              <T v="body" style={{ fontWeight: '700' }}>{f.name}</T>
-              <T v="small">{f.status}</T>
-            </View>
-            <T v="label" color={f.online ? C.greenHi : C.faint}>{f.online ? 'ONLINE' : 'AWAY'}</T>
-            {f.streak > 0 && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}><PixelIcon name="flame" size={24} color={C.orange} alt={C.yellow} /><Text style={styles.streak}>{f.streak}</Text></View>}
-          </View>
+          <Row key={f.id} leading={<Avatar name={f.name} color={f.color} size={38} />} title={f.name} meta={f.status}
+            trailing={
+              <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                <T v="micro" color={f.online ? C.greenHi : C.faint}>{f.online ? 'ONLINE' : 'AWAY'}</T>
+                {f.streak > 0 && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}><PixelIcon name="flame" size={24} color={C.red} alt={C.yellow} /><Text style={styles.streak}>{f.streak}</Text></View>}
+              </View>
+            } />
         ))}
       </Panel>
       <Panel title="ACTIVITY" right={<T v="label" color={C.faint}>SAMPLE DATA</T>}>
         {MOCK_ACTIVITY.map((a) => (
-          <View key={a.id} style={styles.friend}>
-            <T v="small" style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: '#fff' }}>{a.who}</Text> {a.what}</T>
+          <View key={a.id} style={styles.line}>
+            <T v="small" style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: C.white }}>{a.who}</Text> {a.what}</T>
             <T v="small">{a.when}</T>
           </View>
         ))}
@@ -175,25 +173,25 @@ function Podium({ rows, me }: { rows: Painter[]; me?: string }) {
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
         {p ? (
           <>
-            {place === 1 && <PixelIcon name="crown" size={24} color={C.yellow} alt="#c48f00" />}
+            {place === 1 && <PixelIcon name="crown" size={24} color={C.yellow} alt={C.yellowLo} />}
             <Avatar name={p.name} color={hueOf(p.name)} size={place === 1 ? 52 : 44} />
             <Text style={styles.pName} numberOfLines={1}>{p.name}</Text>
-            <Text style={styles.pPaint}>{Math.round(p.paint_used)}</Text>
+            <T v="mono">{Math.round(p.paint_used)}</T>
           </>
-        ) : <Text style={styles.pPaint}>—</Text>}
+        ) : <T v="mono">—</T>}
         <PixelBox fill={t.fill} hi={t.hi} lo={t.lo} depth={4} style={{ width: '100%' }} contentStyle={{ height: h, alignItems: 'center', paddingTop: 8 }}>
-          <Text style={{ fontFamily: F.display, fontSize: 28, color: place === 3 ? '#fff' : '#2a1a00' }}>{place}</Text>
+          <Text style={{ fontFamily: F.display, fontSize: 28, color: t.text }}>{place}</Text>
         </PixelBox>
       </View>
     );
   };
   return (
-    <Panel title="TOP PAINTERS" tone="purple" right={<T v="label" color="#fff">LIVE</T>}>
+    <Panel title="TOP PAINTERS" tone="purple" right={<T v="eyebrow">LIVE</T>}>
       {rows.length === 0 ? <T v="sub">No painters yet. Go tag something.</T> : (
         <>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>{col(second, 2)}{col(first, 1)}{col(third, 3)}</View>
           {rows.slice(3, 10).map((p, i) => (
-            <View key={p.id} style={[styles.friend, p.id === me && { backgroundColor: '#ffffff18' }]}>
+            <View key={p.id} style={[styles.line, p.id === me && { backgroundColor: C.line }]}>
               <Rank n={i + 4} />
               <T v="body" style={{ flex: 1, fontWeight: '700' }} numberOfLines={1}>{p.name}</T>
               <T v="small">{Math.round(p.paint_used)} paint</T>
@@ -205,31 +203,25 @@ function Podium({ rows, me }: { rows: Painter[]; me?: string }) {
   );
 }
 
-const PILL_W = (CARD_W - 32 - 24) / 3, PILL_H = Math.round(PILL_W * 1.5);
+const CARD_BAND_H = 64;
+const THUMB = Math.floor((CARD_W - CARD_PAD * 2 - 24) / 3);
 const styles = StyleSheet.create({
-  cardShadow: { backgroundColor: C.ink, paddingBottom: 6 },
-  card: { borderWidth: 3, borderColor: C.ink, padding: 16, paddingTop: 6, backgroundColor: '#150626', overflow: 'hidden' },
-  big: { fontFamily: F.display, fontSize: 62, color: '#c9b8ff', opacity: 0.6, textAlign: 'center', letterSpacing: -1, marginBottom: -34 },
-  fade: { position: 'absolute', left: 0, right: 0, top: 44, height: 40 },
-  fade2: { position: 'absolute', left: 0, right: 0, top: 44 + PILL_H + 92, height: 40 },
-  pills: { flexDirection: 'row', gap: 12, marginTop: 4, marginBottom: 14 },
-  pill: { width: PILL_W, height: PILL_H },
-  pillEmpty: { flex: 1, borderRadius: PILL_W / 2, backgroundColor: '#2b2059', alignItems: 'center', justifyContent: 'center' },
-  q: { fontFamily: F.display, fontSize: 30, color: '#6a5aa8' },
-  badge: { position: 'absolute', right: -2, bottom: 6, width: 28, height: 28, borderRadius: 14, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  badgeText: { fontFamily: F.display, fontSize: 16, color: '#1c0f42' },
-  cap: { ...ui(13, '600'), color: '#e6dcff', maxWidth: PILL_W + 12, textAlign: 'center' },
-  sq: { width: PILL_W, height: PILL_W, alignItems: 'center', justifyContent: 'center' },
-  times: { backgroundColor: '#ffffff26', paddingHorizontal: 10, paddingVertical: 4 },
-  timesText: { ...ui(12.5, '700'), color: '#fff' },
-  tiles: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  band: { position: 'absolute', left: 0, top: 0 },
+  cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 40 },
+  trio: { flexDirection: 'row', gap: 12 },
+  thumb: { width: THUMB, height: THUMB, borderWidth: 3, borderColor: C.ink },
+  thumbEmpty: { flex: 1, backgroundColor: C.well, alignItems: 'center', justifyContent: 'center' },
+  rank: { position: 'absolute', left: -3, top: -3 },
+  q: { fontFamily: F.display, fontSize: 30, color: C.faint },
+  cap: { ...ui(12.5, '600'), color: C.dim, maxWidth: THUMB + 12, textAlign: 'center' },
+  sq: { width: THUMB, height: THUMB, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: C.ink },
+  timesText: { ...ui(12.5, '700'), color: C.white },
+  tiles: { flexDirection: 'row', gap: 8 },
   foot: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  footName: { fontFamily: F.display, fontSize: 18, color: '#fff', ...outline('#150626') },
-  footSub: { ...ui(12.5, '600'), color: '#bdaee8' },
-  footBrand: { fontFamily: F.display, fontSize: 22, color: '#fff' },
+  footName: { fontFamily: F.display, fontSize: 18, color: C.white, ...outline() },
+  footSub: { ...ui(12.5, '600'), color: C.dim },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  friend: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
-  streak: { ...ui(14, '700'), color: '#fff' },
-  pName: { ...ui(13, '700'), color: '#fff', maxWidth: 96 },
-  pPaint: { fontFamily: F.mono, fontSize: 22, color: C.phosphor },
+  line: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+  streak: { ...ui(14, '700'), color: C.white },
+  pName: { ...ui(13, '700'), color: C.white, maxWidth: 96 },
 });
