@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions } from 'react-native';
-import { AlphaType, Canvas, ColorType, Fill, FilterMode, ImageShader, MipmapMode, Path, Rect, Shader, Skia, useClock } from '@shopify/react-native-skia';
+import { AlphaType, Canvas, ColorType, Fill, FilterMode, ImageShader, MipmapMode, Rect, Shader, Skia, useClock } from '@shopify/react-native-skia';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { Backdrop } from '../ui/Backdrop';
 import { LOGO_CAN_H, LOGO_CAN_W, LogoCan } from '../ui/LogoCan';
@@ -20,6 +20,9 @@ const WATERLOO = { lat: 43.47, lng: -80.54 };
 const CITIES = [WATERLOO, { lat: 40.7, lng: -74 }, { lat: 37.8, lng: -122.4 }, { lat: 51.5, lng: -0.1 }, { lat: 48.9, lng: 2.3 }, { lat: 35.7, lng: 139.7 },
   { lat: -33.9, lng: 151.2 }, { lat: 19.4, lng: -99.1 }, { lat: -23.5, lng: -46.6 }, { lat: 28.6, lng: 77.2 }, { lat: 1.3, lng: 103.8 }, { lat: 30, lng: 31.2 }, { lat: 55.8, lng: 37.6 }, { lat: -1.3, lng: 36.8 }];
 const d2r = Math.PI / 180;
+// LogoCan sprite geometry: the nozzle sits near (12, 9) of the 28x62 grid and the puff points up-right
+const NOZZLE_X = 12 - LOGO_CAN_W / 2, NOZZLE_Y = 9 - LOGO_CAN_H / 2;
+const SPRAY_DIR = Math.atan2(-9, 14), SPRAY_DIR_FLIPPED = Math.atan2(-9, -14);
 
 /** Sphere point -> screen, sharing the maths with the shader. Worklet so the UI thread can place the chip and the can. */
 function project(latDeg: number, lngDeg: number, spin: number, cx: number, cy: number, r: number) {
@@ -119,19 +122,27 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
 
   // the zoom still lands on Waterloo, but nothing marks it on the sphere
   const wl = useDerivedValue(() => project(WATERLOO.lat, WATERLOO.lng, spin.value, CX, CY, R));
-  // the logo can orbits on an inclined ring. Two copies: one drawn under the globe (shown on the far
-  // half, so the Earth really occludes it) and one over it (near half), never both.
+  // The logo can orbits on an inclined ring, always aimed at the Earth, spraying it. Two copies: one
+  // drawn under the globe (shown on the far half, so the Earth really occludes it) and one over it.
+  // On the right-hand side the sprite is mirrored so the can never goes upside down.
   const CAN_CELL = 2, CAN_W = LOGO_CAN_W * CAN_CELL, CAN_H = LOGO_CAN_H * CAN_CELL;
   const orbit = useDerivedValue(() => {
     const a = spin.value * 2.2;
-    return { x: CX + R * 1.45 * Math.cos(a), y: CY + R * 0.5 * Math.sin(a) - R * 0.05, z: Math.sin(a), a };
+    const x = CX + R * 1.5 * Math.cos(a), y = CY + R * 0.55 * Math.sin(a) - R * 0.05, z = Math.sin(a);
+    const aim = Math.atan2(CY - y, CX - x); // screen angle from the can to the Earth's centre
+    const flip = Math.cos(aim) < 0; // aiming left: mirror the sprite
+    const rot = aim - (flip ? SPRAY_DIR_FLIPPED : SPRAY_DIR);
+    // nozzle position after the same rotation, for the spray stream
+    const nx = (flip ? -NOZZLE_X : NOZZLE_X) * CAN_CELL, ny = NOZZLE_Y * CAN_CELL;
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    return { x, y, z, rot, flip, nozzle: { x: x + nx * cr - ny * sr, y: y + nx * sr + ny * cr }, aim };
   });
   const canLayer = (front: boolean) => useAnimatedStyle(() => {
     const o = orbit.value;
     const show = front ? o.z >= 0 : o.z < 0;
     return {
       opacity: show ? 1 - enteringSV.value : 0,
-      transform: [{ translateX: o.x - CAN_W / 2 }, { translateY: o.y - CAN_H / 2 }, { rotate: `${-22 * Math.cos(o.a)}deg` }, { scale: 0.86 + 0.14 * Math.max(0, o.z) }],
+      transform: [{ translateX: o.x - CAN_W / 2 }, { translateY: o.y - CAN_H / 2 }, { rotate: `${o.rot}rad` }, { scaleX: o.flip ? -1 : 1 }, { scale: 0.86 + 0.14 * Math.max(0, o.z) }],
     };
   });
   const canFront = canLayer(true), canBack = canLayer(false);
@@ -177,8 +188,10 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
         <Burst origin={target} progress={burst} />
       </Animated.View>
       <Animated.View style={[styles.can, canFront]} pointerEvents="none"><LogoCan cell={CAN_CELL} /></Animated.View>
+      <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Spray orbit={orbit} clock={clock} cx={CX} cy={CY} r={R} fade={enteringSV} />
+      </Canvas>
       <Animated.View style={[styles.copy, { bottom: H * 0.1 }, copyStyle]} pointerEvents="none">
-        <Halo width={W} />
         <Wordmark />
         <Text style={styles.tag}>the world is your wall</Text>
         <Animated.Text style={[styles.cta, blinkStyle]}>▶ PRESS START</Animated.Text>
@@ -187,27 +200,24 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
   );
 }
 
-/** A dithered green spray cloud behind the wordmark. */
-function Halo({ width }: { width: number }) {
-  const w = Math.min(width, 320), h = 72;
-  const paths = useMemo(() => {
-    const rng = seededRng('halo');
-    const p = [Skia.Path.Make(), Skia.Path.Make(), Skia.Path.Make()];
-    for (let i = 0; i < 520; i++) {
-      const x = w / 2 + (rng() + rng() - 1) * w * 0.55, y = h / 2 + (rng() + rng() - 1) * h * 0.7;
-      const dn = Math.hypot((x - w / 2) / (w * 0.5), (y - h / 2) / (h * 0.6));
-      const k = dn < 0.45 ? 0 : dn < 0.8 ? 1 : 2;
-      p[k].addRect(Skia.XYWHRect(Math.floor(x / 4) * 4, Math.floor(y / 4) * 4, 4, 4));
-    }
-    return p;
-  }, [w]);
-  return (
-    <Canvas style={{ position: 'absolute', width: w, height: h, top: 4 }} pointerEvents="none">
-      <Path path={paths[0]} color={C.green} opacity={0.5} antiAlias={false} />
-      <Path path={paths[1]} color={C.greenLo} opacity={0.42} antiAlias={false} />
-      <Path path={paths[2]} color={C.purpleLo} opacity={0.5} antiAlias={false} />
-    </Canvas>
-  );
+/** Neon paint streaming from the can's nozzle onto the Earth: a few pixel dabs riding the ray, only while the can is in front. */
+const SPRAY_N = 18;
+function Spray({ orbit, clock, cx, cy, r, fade }: { orbit: { value: { z: number; nozzle: { x: number; y: number } } }; clock: { value: number }; cx: number; cy: number; r: number; fade: { value: number } }) {
+  return <>{Array.from({ length: SPRAY_N }, (_, i) => <SprayDab key={i} i={i} orbit={orbit} clock={clock} cx={cx} cy={cy} r={r} fade={fade} />)}</>;
+}
+function SprayDab({ i, orbit, clock, cx, cy, r, fade }: { i: number; orbit: { value: { z: number; nozzle: { x: number; y: number } } }; clock: { value: number }; cx: number; cy: number; r: number; fade: { value: number } }) {
+  const pos = useDerivedValue(() => {
+    const o = orbit.value;
+    const t = (clock.value / 1000 * 1.4 + i / SPRAY_N) % 1;
+    const dx = cx - o.nozzle.x, dy = cy - o.nozzle.y, len = Math.hypot(dx, dy);
+    const ux = dx / len, uy = dy / len;
+    const L = len - r + 2; // stop on the Earth's limb
+    const spread = (((i * 7919) % 11) / 10 - 0.5) * 14 * t; // widen along the way, like a spray cone
+    const x = o.nozzle.x + ux * t * L - uy * spread, y = o.nozzle.y + uy * t * L + ux * spread;
+    return { x: Math.floor(x / 3) * 3, y: Math.floor(y / 3) * 3, o: o.z >= 0 ? (1 - t * 0.6) * (1 - fade.value) : 0 };
+  });
+  const x = useDerivedValue(() => pos.value.x), y = useDerivedValue(() => pos.value.y), op = useDerivedValue(() => pos.value.o);
+  return <Rect x={x} y={y} width={3} height={3} color={C.green} opacity={op} />;
 }
 
 /** A few backdrop stars that flicker. */

@@ -30,35 +30,35 @@ export function Dock() {
   );
 }
 
-/** Side keys: lift when active, squash while pressed. */
+/** Side keys: the one you're on is a purple slab, lifted; squash while pressed. */
 function DockItem({ label, icon, active, onPress }: { label: string; icon: IconName; active: boolean; onPress: () => void }) {
   const s = useSharedValue(active ? 1 : 0);
   const d = useSharedValue(0);
   useEffect(() => { s.value = withSpring(active ? 1 : 0, { damping: 12, stiffness: 220 }); }, [active]);
   const lift = useAnimatedStyle(() => ({ transform: [{ translateY: -6 * s.value + 3 * d.value }] }));
-  const t = TONES.green;
+  const t = TONES.purple;
   return (
     <Pressable onPress={onPress} onPressIn={() => { d.value = withSpring(1, { damping: 20, stiffness: 400 }); }} onPressOut={() => { d.value = withSpring(0, { damping: 14, stiffness: 300 }); }} style={styles.item} hitSlop={2}>
       <Animated.View style={[styles.itemInner, lift]}>
         {active ? (
           <PixelBox fill={t.fill} hi={t.hi} lo={t.lo} depth={4} style={StyleSheet.absoluteFill} contentStyle={{ flex: 1 }}><View style={{ flex: 1 }} /></PixelBox>
         ) : null}
-        <PixelIcon name={icon} size={24} color={active ? C.greenInk : C.dim} alt={active ? C.greenLo : C.faint} />
-        <Text style={[styles.label, { color: active ? C.greenInk : C.dim }]} numberOfLines={1}>{label}</Text>
+        <PixelIcon name={icon} size={24} color={active ? C.white : C.dim} alt={active ? C.purpleHi : C.faint} />
+        <Text style={[styles.label, { color: active ? C.white : C.dim }]} numberOfLines={1}>{label}</Text>
       </Animated.View>
     </Pressable>
   );
 }
 
-/** The centre key: a purple slab like the rest of the bar until you're in the camera, then it lights up green. */
+/** The centre key: the can silhouette on a green slab; purple like any other current tab while you're in the camera. */
 function CreateKey({ active, onPress }: { active: boolean; onPress: () => void }) {
   const [down, setDown] = useState(false);
-  const t = TONES[active ? 'green' : 'purple'];
+  const t = TONES[active ? 'purple' : 'green'];
   return (
     <Pressable onPress={onPress} onPressIn={() => setDown(true)} onPressOut={() => setDown(false)} hitSlop={4} style={styles.item}>
       <PixelBox fill={t.fill} hi={t.hi} lo={t.lo} n={6} depth={down ? 1 : 4} style={{ marginTop: down ? 3 : 0, marginHorizontal: 3 }}
         contentStyle={styles.keyIn}>
-        <PixelIcon name="create" size={24} color={t.text} alt={active ? C.greenLo : C.purpleLo} />
+        <PixelIcon name="create" size={24} color={t.text} alt={active ? C.greenHi : C.greenLo} />
         <Text style={[styles.keyLabel, { color: t.text }]}>CREATE</Text>
       </PixelBox>
     </Pressable>
