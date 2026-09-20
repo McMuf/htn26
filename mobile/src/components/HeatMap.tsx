@@ -61,7 +61,7 @@ function GoogleHeat({ canvases, height, interactive }: Props) {
         showsPointsOfInterests={false} showsBuildings={false} showsTraffic={false}>
         {heat && <Overlay image={{ uri: heat.uri }} bounds={heat.bounds} opacity={1} />}
         {canvases.map((c) => (
-          <Marker key={c.id} coordinate={{ latitude: c.lat, longitude: c.lng }} title={`${c.author_name} · ${c.stroke_count} strokes`} description={`${c.views} views${discovered[c.id] ? ' · found' : ''}`} pinColor={discovered[c.id] ? C.green : C.purple} />
+          <Marker key={c.id} coordinate={{ latitude: c.lat, longitude: c.lng }} title={`${c.author_name} · ${c.stroke_count} strokes`} description={`${c.views} views${discovered[c.id] ? ' · found' : ''}`} pinColor={C.green} />
         ))}
       </MapView>
       {/* purple tint: colourise the dark tiles, then deepen the darks */}

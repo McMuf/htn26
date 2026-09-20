@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
 import { Btn, Card, Empty, Header, CoinPill, Screen, T } from '../ui/kit';
-import { PixelIcon } from '../ui/PixelIcon';
 import { PieceImage } from '../ui/StrokeThumb';
 import { C, GUTTER } from '../ui/theme';
 import { useStore } from '../store';
@@ -54,10 +53,7 @@ export function VaultScreen() {
       <View style={styles.grid}>
         {mine.map((c) => (
           <Card key={c.id} onPress={() => setOpen(c)} style={{ width: CELL }}>
-            <View>
-              <PieceImage canvasId={c.id} width={CELL - 16} height={Math.round((CELL - 16) * 0.78)} />
-              <View style={styles.badge}><PixelIcon name="cube" size={24} color={C.white} alt={C.green} /></View>
-            </View>
+            <PieceImage canvasId={c.id} width={CELL - 16} height={Math.round((CELL - 16) * 0.78)} />
             <View style={{ gap: 2 }}>
               <T v="card" numberOfLines={1}>{c.title ?? timeAgo(c.created_at)}</T>
               <T v="small" numberOfLines={1}>{c.views} views · {c.stroke_count} strokes</T>
@@ -73,5 +69,4 @@ export function VaultScreen() {
 
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  badge: { position: 'absolute', right: 4, bottom: 4, backgroundColor: C.ink + 'cc', padding: 2 },
 });

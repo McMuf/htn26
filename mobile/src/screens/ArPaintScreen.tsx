@@ -137,7 +137,8 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     scheduleMapSave();
     setPieceId(s.canvas_id);
     if (captureTimer.current) clearTimeout(captureTimer.current);
-    captureTimer.current = setTimeout(() => { captureWall(); }, 4000);
+    // shoot the wall soon after the stroke, while the phone is still aimed at it (leaving the tab pauses the session)
+    captureTimer.current = setTimeout(() => { captureWall(); }, 1200);
   } });
   engineRef.current = engine;
   // canvases with a world map we can use resolve by relocalisation; the rest (web-made, or the other platform's map) by proximity
