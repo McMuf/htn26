@@ -1,5 +1,6 @@
 import { Globe } from './Globe';
 import { useWorld } from './useWorld';
+import { ScanToPaint } from './ScanToPaint';
 
 export function Landing() {
   const w = useWorld();
@@ -24,6 +25,7 @@ export function Landing() {
         </div>
         <div className="hero-globe"><Globe size={Math.min(420, Math.floor(window.innerWidth * 0.9))} /></div>
       </section>
+      <ScanToPaint />
       <section className="how">
         <div className="card"><div className="k">01</div><h3>Shake the can</h3><p>Real accelerometer shake charges the can. Hollow rattle when it's low.</p></div>
         <div className="card"><div className="k">02</div><h3>Hold to spray</h3><p>Volume buttons or on-screen hold buttons. ARKit finds the wall; paint is composited into a texture glued to it.</p></div>

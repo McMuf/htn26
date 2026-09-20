@@ -20,8 +20,8 @@ export function NameScreen({ userId }: { userId: string }) {
   return (
     <div className="form-screen">
       <form className="form" onSubmit={go} noValidate>
-        <div className="brand">TAGGED</div>
-        <div className="sub">r/place, but graffiti in the real world.</div>
+        <div className="brand">FRESCO</div>
+        <div className="sub">Paint the walls around you. Everyone here sees it.</div>
         <label className="label" htmlFor="tag-name">Pick your tag (signs your pieces)</label>
         <input
           id="tag-name" className="input input--pink" type="text" autoComplete="nickname" autoCapitalize="characters"

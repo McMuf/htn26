@@ -236,7 +236,7 @@ export function PaintScreen({ active, locationStatus }: Props) {
     <div className={`paint${active ? '' : ' hidden'}`} aria-hidden={!active}>
       {!live ? (
         <div className="gate">
-          <div className="brand">TAGGED</div>
+          <div className="brand">FRESCO</div>
           <div className="sub">Aim your phone at a wall. Hold A or B to spray. Shake the phone to charge the can.</div>
           <button type="button" className="gate-btn" onClick={onGate} disabled={starting}>{starting ? 'STARTING…' : 'START PAINTING'}</button>
           <div className="hint">Uses your camera, motion sensors and location.</div>
@@ -255,7 +255,7 @@ export function PaintScreen({ active, locationStatus }: Props) {
           <HoldButtons onStart={engine.start} onEnd={engine.end} keyboard={active} />
 
           <div className="topbar">
-            <div className="topbar-brand">TAGGED</div>
+            <div className="topbar-brand">FRESCO</div>
             <div className="topbar-status">{painter?.name ?? '—'} · {online ? 'live' : 'offline'} · {ui.yaw}°</div>
             <button type="button" className="gear" aria-label="Settings" onClick={() => setSettingsOpen(true)}>⚙︎</button>
           </div>

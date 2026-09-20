@@ -8,88 +8,63 @@ The Android app is [goal2.md](goal2.md) and doesn't block this.
 
 ---
 
-## This is mostly a trim, not a build
+## Where it stands
 
-`web/` is already a working client — it's what the judges' site runs on:
+You picked: **walls stay where they are** — GPS-anchored canvases inside the Waterloo geofence, so
+people see the pieces (and each other) around them — and **camera passthrough** for the surface.
+The QR is the way in, not a private room.
 
-| Already there | Where |
+| | |
 |---|---|
-| A painting screen (camera passthrough, compass-anchored strokes, hold-to-spray) | `web/src/screens/PaintScreen.tsx` |
-| "Type your tag → start" | `web/src/screens/NameScreen.tsx` |
-| Strokes syncing live between clients (realtime insert + a 15 s poll backup) | `web/src/data/sync.ts` |
-| The Supabase project behind it, set up and verified | done — see *The backend* below |
+| No login — scanning signs you in anonymously | **done** |
+| One screen: name prompt → paint, no tabs, no map, no leaderboard | **done** |
+| Duplicate tags no longer dead-end you | **done** (ADARSH → ADARSH-2) |
+| A QR on the landing page pointing at this site's own `/paint` | **done** |
+| Deploy it so phones can reach it over HTTPS | **you** — see below |
+| Two phones, one wall, live | **you** — the test at the end |
 
-So the work is mostly **removing** things and **changing how people get in**. Four changes.
+Verified locally in a browser: `/paint` goes straight to *pick your tag* with no email form, a tag
+is accepted, and the paint screen loads behind it. What I can't check from here is a phone
+actually spraying — camera, compass and GPS need the real thing.
 
-## The four changes
+## What changed in the code
 
-### 1. Delete the login
+- **`web/src/App.tsx`** — `signInAnonymously()` on load, so the first thing a scanner sees is the
+  name prompt. The email form is still there as a fallback if anonymous sign-in is ever off, and
+  it now says why it appeared. The three-tab shell (PAINT / MAP / BOARD) is gone; the screen is
+  the wall. The settings sheet stayed, because that's where the colours and caps live — removing
+  it turned the paint screen's own settings button into a dead end, which I caught by clicking it.
+- **`web/src/data/sync.ts`** — `painters.name` is unique across the whole project, so the second
+  person to type ADARSH used to be bounced back to the keyboard. Now it tries ADARSH-2, ADARSH-3
+  and so on before giving up. Somebody who just scanned a code should not have to negotiate for a
+  name.
+- **`web/src/site/ScanToPaint.tsx`** — a "Scan to paint" panel on the landing page that renders a
+  QR of that site's own `/paint` URL in the browser, so it's right on localhost and right in
+  production without anyone regenerating an image.
+- **Brand** — the web client still said TAGGED in three places; it says FRESCO now.
 
-`/paint` currently shows an email + password form (`AuthScreen`) before anything else. That's the
-biggest thing standing between a QR scan and drawing. Replace it with
-`supabase.auth.signInAnonymously()` fired on load — anonymous sign-in is already enabled on the
-project — so the first thing a scanner sees is the name prompt. Keep the email form reachable only
-as a fallback if anonymous sign-in is ever turned off.
+## What's left for you
 
-### 2. Strip the shell to one screen
-
-`App.tsx` renders a three-tab shell: PAINT / MAP / BOARD, plus a settings sheet. All of it goes
-except the paint screen and the minimum HUD it needs. `MapScreen`, `LeaderboardScreen`,
-`SettingsScreen` and the tab bar stop being rendered (the files can stay for the judges' site).
-
-### 3. Make the QR *be* the room
-
-This is the real design decision, and it's why scanning works at all.
-
-Today a client joins a canvas by **standing within 15 m of it** (`CANVAS_JOIN_RADIUS_M`, GPS).
-That's fine for two phones on the same street and bad for everything else: browser geolocation
-indoors drifts, and a laptop resolves by IP — often kilometres off. Two people scanning the same
-code in the same room would each start their own wall and see nothing of each other.
-
-Fix: put the wall's id in the link the QR encodes — `/paint?w=<canvas id>` — and have the client
-join *that* canvas instead of guessing from GPS. Everyone who scans the same code paints the same
-wall, in the same room or on different continents. No parameter in the URL → fall back to today's
-GPS behaviour, so the existing phone flow is untouched.
-
-Also worth removing for this version: the **25 km Waterloo geofence** blocks painting outside
-Waterloo, and its bypass lives in the settings screen we're deleting. A QR room should skip it.
-
-### 4. Deploy it and generate the QR
-
-iOS Safari only grants camera and motion over **HTTPS**, so this has to be the deployed URL, not
-`localhost`. Deploy `web/` to Vercel, then generate a QR for
-`https://<your-site>/paint?w=<canvas id>` and put the image somewhere you can show on a screen or
-print.
-
-## Two decisions I need from you
-
-**A. Does the QR mean "this wall" or just "this app"?**
-
-- **A shared room (recommended):** the QR carries a wall id; everyone who scans it draws on the
-  same wall wherever they are. This is what "scan and draw together" normally means, it demos on a
-  laptop, and it survives bad indoor GPS.
-- **Keep GPS:** the QR is only a link to the app, and people still have to be within 15 m of each
-  other. Truer to the original "paint is tied to a place" idea, much more fragile in a room.
-
-**B. What does the drawing surface look like?**
-
-The paint screen composites strokes over the live camera. For a web version that might be handed
-to anyone, the options are: keep the camera (feels like the real app, needs permission and a rear
-camera), or draw on a flat background (works on a laptop, loses the AR feel). Keeping the camera
-with a graceful fallback to flat is possible but is extra work.
-
-Say the word on A and B and I'll implement the rest — it's all code on my side.
+1. **Deploy `web/`** (Vercel, root directory `web/`). iOS Safari only grants camera and motion
+   over HTTPS, so a phone can't use `localhost` — it has to be the deployed URL or a tunnel.
+2. **Point the deployment at the new Supabase project.** The repo's `web/.env` is already updated,
+   but Vercel bakes its own environment variables in at build time: set `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_KEY` to the values in `web/.env`, then redeploy. Until then the deployed site
+   still reads the old project and will look empty next to your phone.
+3. **Show the QR** — it's on the landing page of the deployed site.
 
 ## Then: the test that says it's done
 
-1. Open the deployed `/paint?w=…` link on phone 1. Type a name. You should be drawing without
-   ever seeing a login.
-2. Scan the same QR on phone 2 (or just open the link in another browser). Type a different name.
+1. Scan the QR on phone 1. Type a name. You should be drawing without ever seeing a login.
+2. Scan the same QR on phone 2, **standing next to phone 1**, and type a different name. (Within
+   15 m you join the same wall; further apart you each start your own, which is the point of
+   keeping walls geographic.)
 3. Draw on phone 1 → it appears on phone 2 within a second or two, without either of you
    reloading. Draw on phone 2 → it comes back the other way.
-4. Reload both. The wall still has everything on it (strokes are stored, not just broadcast).
-5. Hand the QR to someone who's never seen the app: from scan to first stroke with nobody
-   explaining anything is the actual bar.
+4. Reload both. The wall still has everything on it — strokes are stored, not just broadcast.
+5. Walk 30 m away and look back: the piece should still render (it fades in from ~35 m).
+6. Hand the QR to someone who has never seen the app. From scan to first stroke, with nobody
+   explaining anything, is the actual bar.
 
 ## The backend (already done)
 
@@ -127,9 +102,8 @@ That writes `.env`, `web/.env`, `web/.env.production` and `eas.json`, and re-run
 
 ## What will bite
 
-- **Tags are unique.** `painters.name` has a `unique` constraint, so the second person to type
-  "ADARSH" gets *That tag is taken — pick another*. In a room full of people scanning a code that's
-  friction; the fix is to auto-suffix (`ADARSH-2`) rather than to reject them.
+- **Tags are unique** project-wide, which is why duplicates now get a `-2` suffix instead of a
+  rejection. Six tries, then it does ask for a different name.
 - **Every scan creates an auth user.** Anonymous sign-ins are cheap but they are rows, and Supabase
   counts monthly active users. Fine for a demo, worth knowing before it's on a poster.
 - **iOS Safari needs a gesture** before camera, motion and audio — the paint screen's START button
@@ -137,3 +111,9 @@ That writes `.env`, `web/.env`, `web/.env.production` and `eas.json`, and re-run
 - **Sync is per wall, not per person.** Everyone on the wall sees everything; there's no undo for
   someone else's paint and no moderation beyond the existing report flow.
 - **Realtime on the free tier** is fine for a handful of painters. A crowd is untested.
+- **The paint screen animates before you press START.** Its render loop runs as soon as the screen
+  mounts, which on a phone means battery burn while somebody reads the intro. Pre-existing, not
+  from this work, worth fixing if the QR ends up on a poster.
+- **Indoor GPS drifts.** Two people in the same room can land on separate walls, since joining is
+  still by 15 m proximity. If that shows up in testing, the fix is to widen the join radius for
+  web clients or to put a wall id in the QR link after all.
