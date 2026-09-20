@@ -79,17 +79,20 @@ export function Reticle({ spraying }: { spraying: boolean }) {
 
 /** A hold fills an empty can and both colours in this long — slow enough to read as an action. */
 const HOLD_FILL_SECONDS = 1.2;
-
 /**
- * Can charge as a strip across the deck. Runs down over a minute; shake to refill — or hold the
- * strip, which does the shaking for you.
+ * Hold-the-strip-to-refill is a development convenience, not a feature: shaking the can is the
+ * interaction, and the whole economy (a can that runs down, a rattle that fills it) only means
+ * anything if refilling costs you the shake. __DEV__ is false in a release build, so the shipped
+ * app has no hold at all and the strip goes back to being a readout.
  *
- * The hold exists because a physical shake is a bad thing to depend on in front of an audience:
- * you are already holding the phone at a wall with one hand, a shake vigorous enough to register
- * loses your aim, and in a development build it fights expo-dev-menu for the same gesture
- * (scripts/dev_menu_shake.mjs). Holding tops up the paint as well as the charge, so there is no
- * way to end up stuck on either blocker mid-demo.
+ * It earns its place in development because the shake is genuinely awkward to test against: you
+ * are already holding the phone at a wall with one hand, a shake hard enough to register loses
+ * your aim, and in a dev build it fights expo-dev-menu for the same gesture
+ * (scripts/dev_menu_shake.mjs).
  */
+const DEV_HOLD_TO_FILL = __DEV__;
+
+/** Can charge as a strip across the deck. Runs down over a minute; shake to refill. */
 export function ChargeMeter() {
   const shake = useStore((s) => s.shake);
   const [filling, setFilling] = useState(false);
@@ -124,21 +127,27 @@ export function ChargeMeter() {
 
   const wobble = useAnimatedStyle(() => ({ transform: [{ rotate: `${rot.value}deg` }] }));
   const segs = 12, lit = Math.round(Math.max(0, Math.min(1, shake)) * segs);
-  return (
-    <Pressable
-      style={styles.charge}
-      hitSlop={10}
-      accessibilityLabel="Hold to shake the can and refill the paint"
-      onPressIn={() => { haptic.tap(); setFilling(true); }}
-      onPressOut={() => setFilling(false)}
-    >
+  const body = (
+    <>
       <Animated.View style={wobble}><PixelIcon name="can" size={24} color={C.white} alt={C.purpleHi} /></Animated.View>
       <View style={styles.hbar}>
         {Array.from({ length: segs }, (_, i) => (
           <View key={i} style={{ flex: 1, height: 10, backgroundColor: i < lit ? (low ? C.purpleHi : C.green) : C.line }} />
         ))}
       </View>
-      <Text style={[styles.chargeText, low && !filling && { color: C.purpleHi }]}>{filling ? 'FILL' : low ? 'HOLD' : `${Math.round(shake * 100)}%`}</Text>
+      <Text style={[styles.chargeText, low && !filling && { color: C.purpleHi }]}>{filling ? 'FILL' : low ? 'SHAKE' : `${Math.round(shake * 100)}%`}</Text>
+    </>
+  );
+  if (!DEV_HOLD_TO_FILL) return <View style={styles.charge} pointerEvents="none">{body}</View>;
+  return (
+    <Pressable
+      style={styles.charge}
+      hitSlop={10}
+      accessibilityLabel="Developer: hold to refill the can and the paint"
+      onPressIn={() => { haptic.tap(); setFilling(true); }}
+      onPressOut={() => setFilling(false)}
+    >
+      {body}
     </Pressable>
   );
 }
