@@ -56,6 +56,8 @@ export function useSprayEngine(): SprayEngine {
   const dwell = useRef<{ yaw: number; pitch: number; since: number; pooled: boolean }>({ yaw: 0, pitch: 0, since: 0, pooled: false });
   const lastLowRattle = useRef(0);
   const lastTick = useRef(0);
+  /** where the last dab of this stroke landed, for filling the gap to the next one */
+  const lastDab = useRef<{ yaw: number; pitch: number } | null>(null);
   const hapticsAt = useRef(0);
   const blocker = useRef<Blocker>(null);
   /** true while the reticle is past the edge of the wall, so the HUD can say so */
@@ -145,6 +147,7 @@ export function useSprayEngine(): SprayEngine {
     const canvas = pickCanvas();
     if (!canvas) return;
     activeCanvas.current = canvas;
+    lastDab.current = null;
     const opt = side === 'A' ? st.settings.optionA : st.settings.optionB;
     const pose = getPose();
     const s: Stroke = {
@@ -212,14 +215,33 @@ export function useSprayEngine(): SprayEngine {
       // way the phone refuses to spray when its reticle isn't on a detected plane
       if (!onWall(yaw, pitch)) {
         offWall.current = true;
+        lastDab.current = null; // coming back on-wall shouldn't draw a line across the gap
         sfx.setHiss(false, 0, 0);
         return;
       }
       offWall.current = false;
       const wall = getWall(canvas.id);
-      const pt: StrokePoint = [round2(yaw), round2(pitch), round2(radius), round2(alpha), 0];
-      wall.applyPoint(pt, opt.color, rng.current);
-      (s.points as StrokePoint[]).push(pt);
+      const emit = (y: number, p: number) => {
+        if (!onWall(y, p)) return;
+        const pt: StrokePoint = [round2(y), round2(p), round2(radius), round2(alpha), 0];
+        wall.applyPoint(pt, opt.color, rng.current);
+        (s.points as StrokePoint[]).push(pt);
+      };
+
+      // A tick is 30 Hz, so a quick sweep of the phone leaves the dabs spaced out and the stroke
+      // lands as a row of dots instead of a line. Walk the gap since the last dab in steps smaller
+      // than the nozzle. The extra dabs are pushed into the stroke like any other, so every client
+      // replays exactly what was painted.
+      const prev = lastDab.current;
+      if (prev) {
+        const dy = wrapDiff(yaw, prev.yaw), dp = pitch - prev.pitch;
+        const gap = Math.hypot(dy, dp);
+        const step = Math.max(0.25, radius * 0.45);
+        const n = Math.min(8, Math.floor(gap / step)); // cap it: a wild swing isn't a brush stroke
+        for (let i = 1; i <= n; i++) emit(prev.yaw + (dy * i) / (n + 1), prev.pitch + (dp * i) / (n + 1));
+      }
+      emit(yaw, pitch);
+      lastDab.current = { yaw, pitch };
 
       // dwell → pooling + drips
       const d = dwell.current;

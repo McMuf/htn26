@@ -59,6 +59,10 @@ export function PaintLayer({ walls }: { walls: WallView[] }): JSX.Element {
     const mounted = new Map<string, HTMLDivElement>();
     /** eased copy of our own GPS fix, so a noisy reading doesn't fling the walls about */
     let me: { lat: number; lng: number } | null = null;
+    /** last values written per element — a style write costs style recalc, and the dabs are being
+     *  composited on the same thread, so silence is what keeps a stroke landing evenly */
+    const written = new Map<string, { t: string; o: string; f: string }>();
+    let lastPerspective = '';
 
     const surfaceFor = (id: string) => {
       let el = mounted.get(id);
@@ -94,7 +98,8 @@ export function PaintLayer({ walls }: { walls: WallView[] }): JSX.Element {
 
       // hfov spans the short edge in either orientation (roll levels the layer in landscape)
       const focal = (Math.min(w, h) / 2) / Math.tan((hfov * D2R) / 2);
-      host.style.perspective = `${focal.toFixed(1)}px`;
+      const perspective = `${focal.toFixed(1)}px`;
+      if (perspective !== lastPerspective) { host.style.perspective = perspective; lastPerspective = perspective; }
       // CSS puts the eye `focal` in front of the z = 0 plane, so a wall parked at translateZ(-R)
       // sits at depth focal + R and lands at half the angle it should. Step out to the eye first,
       // rotate there, then go R along the rotated view axis: that is the plain pinhole camera,
@@ -137,15 +142,23 @@ export function PaintLayer({ walls }: { walls: WallView[] }): JSX.Element {
         // world, then turn the surface to face back the way its author was looking. The yaw term
         // is +yaw, not -yaw, because the walk that follows is expressed in world north/east:
         // checked against p·x/z for a wall seen from off to one side.
-        el.style.transform =
+        const transform =
           `translateZ(${eye}px) rotateZ(${(-pose.roll).toFixed(2)}deg) rotateX(${pose.pitch.toFixed(2)}deg) ` +
           `rotateY(${pose.yaw.toFixed(2)}deg) ` +
           `translate3d(${(east * PX_PER_M).toFixed(1)}px, 0px, ${(-north * PX_PER_M).toFixed(1)}px) ` +
           `rotateY(${(-wv.heading).toFixed(2)}deg)`;
-        el.style.opacity = (0.15 + 0.85 * resolve).toFixed(3);
-        // resolves from a smear into a piece as you walk up to it
-        const blur = (1 - resolve) * 26;
-        el.style.filter = blur > 0.5 ? `blur(${blur.toFixed(1)}px)` : '';
+        const opacity = (0.15 + 0.85 * resolve).toFixed(3);
+        // Resolves from a smear into a piece as you walk up to it. Quantised, because a filter
+        // forces the layer to re-rasterise and this one is ~2000 px across: re-blurring it every
+        // frame stutters the stroke you are painting.
+        const blurPx = Math.round((1 - resolve) * 26);
+        const filter = blurPx >= 1 ? `blur(${blurPx}px)` : '';
+
+        const prev = written.get(wv.canvasId);
+        if (!prev || prev.t !== transform) el.style.transform = transform;
+        if (!prev || prev.o !== opacity) el.style.opacity = opacity;
+        if (!prev || prev.f !== filter) el.style.filter = filter;
+        written.set(wv.canvasId, { t: transform, o: opacity, f: filter });
       }
 
       // walls that dropped out of range: unmount, but leave their raster alive in the Wall cache
@@ -153,6 +166,7 @@ export function PaintLayer({ walls }: { walls: WallView[] }): JSX.Element {
         if (live.has(id)) continue;
         el.remove();
         mounted.delete(id);
+        written.delete(id);
       }
     };
     raf = requestAnimationFrame(frame);
