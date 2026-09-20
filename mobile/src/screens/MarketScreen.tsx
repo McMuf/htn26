@@ -1,16 +1,16 @@
 import React, { useMemo } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { Canvas, Path, Skia } from '@shopify/react-native-skia';
-import { Btn, Header, IconBtn, Panel, Pill, Screen, T } from '../ui/kit';
+import { Btn, Panel, Pill, Screen, SheetHeader, T } from '../ui/kit';
+import { haptic } from '../ui/haptics';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
 import { PixelCan } from '../ui/PixelCan';
-import { C, F, ui, uiLabel } from '../ui/theme';
+import { C, F, GUTTER, TONES, ui, uiLabel } from '../ui/theme';
 import { useStore } from '../store';
 import { MARKET_CANS, MARKET_PAINTS, PAINT_PER_COIN, SOON, coinsOf, type Item } from '../lib/economy';
 
-const CARD = (Dimensions.get('window').width - 18 * 2 - 14) / 2;
+const CARD = (Dimensions.get('window').width - GUTTER * 2 - 14) / 2;
 
 /** Spend coins (earned by spraying and missions) on paints and can skins. Everything is stored on the device. */
 export function MarketScreen() {
@@ -21,19 +21,14 @@ export function MarketScreen() {
   const coins = coinsOf(painter, settings);
   const buy = (it: Item) => {
     if (coins < it.price || settings.owned.includes(it.id)) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    haptic.success();
     setSettings({ owned: [...settings.owned, it.id], spent: settings.spent + it.price });
   };
   const equip = (side: 'optionA' | 'optionB', it: Item) => setSettings({ [side]: { color: it.color, name: it.name } });
 
   return (
-    <Screen tone="blue" sheet>
-      <Header title="MARKET" sub="spend coins on paints and cans" right={
-        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Pill icon="coin" value={coins} iconColor={C.yellow} alt="#c48f00" />
-          <IconBtn icon="x" onPress={() => setSheet(null)} />
-        </View>
-      } />
+    <Screen sheet>
+      <SheetHeader title="MARKET" sub="spend coins on paints and cans" onClose={() => setSheet(null)} right={<Pill icon="coin" value={coins} />} />
       <Panel title="HOW TO EARN">
         <T v="body">Every {PAINT_PER_COIN} paint you spray earns 1 coin. Daily quests on Profile pay bonus coins.</T>
       </Panel>
@@ -89,7 +84,7 @@ export function MarketScreen() {
 
 function Card({ it, preview, children }: { it: Item; preview: React.ReactNode; children: React.ReactNode }) {
   return (
-    <PixelBox n={6} depth={5} fill="#22449a" hi="#3560c8" lo="#183578" style={{ width: CARD }} contentStyle={{ padding: 10, gap: 8 }}>
+    <PixelBox n={6} depth={5} fill={TONES.blue.fill} hi={TONES.blue.hi} lo={TONES.blue.lo} style={{ width: CARD }} contentStyle={{ padding: 10, gap: 8 }}>
       <View style={styles.preview}>{preview}</View>
       <View>
         <Text style={styles.name} numberOfLines={1}>{it.name}</Text>
@@ -97,7 +92,7 @@ function Card({ it, preview, children }: { it: Item; preview: React.ReactNode; c
       </View>
       {it.price > 0 && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <PixelIcon name="coin" size={24} color={C.yellow} alt="#c48f00" />
+          <PixelIcon name="coin" size={24} color={C.yellow} alt={C.yellowLo} />
           <Text style={styles.price}>{it.price}</Text>
         </View>
       )}
@@ -132,11 +127,11 @@ function Blob({ color }: { color: string }) {
 
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  preview: { height: 116, alignItems: 'center', justifyContent: 'center', backgroundColor: '#152b66', borderWidth: 3, borderColor: C.ink },
-  name: { fontFamily: F.display, fontSize: 16, color: '#fff' },
-  blurb: { ...ui(12.5, '500'), color: '#bcd0ff' },
+  preview: { height: 116, alignItems: 'center', justifyContent: 'center', backgroundColor: C.blueDeepLo, borderWidth: 3, borderColor: C.ink },
+  name: { fontFamily: F.display, fontSize: 17, color: C.white },
+  blurb: { ...ui(12.5, '500'), color: C.blueHi },
   price: { fontFamily: F.display, fontSize: 18, color: C.yellow },
   soon: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  soonChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#150a36', paddingHorizontal: 8, height: 28 },
+  soonChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.well, paddingHorizontal: 8, height: 28 },
   soonText: { ...uiLabel(10.5, 0.6), color: C.faint },
 });
