@@ -39,15 +39,20 @@ export const SHAKE_ACCEL_THRESHOLD = 2.4; // g, user acceleration magnitude
 export const SHAKE_GAIN_PER_EVENT = 0.18;
 
 // ---- Volume trigger --------------------------------------------------------
-export const VOLUME_BASELINE = 0.5;
+// The rocker is pinned here so a press reads as a delta either way — which also fixes the phone's
+// media volume, since you can't turn it up without spraying. High enough to actually hear the can,
+// with room left above for VOL+ to register (iOS steps in 1/16ths).
+export const VOLUME_BASELINE = 0.75;
 export const VOLUME_HOLD_TIMEOUT_MS = 380; // no repeat event for this long = released
 
 // ---- Spray ----------------------------------------------------------------
 // Each can is just a colour: one nozzle, and line width comes from the Create SIZE tool.
 export type SprayOption = { color: string; name: string };
-export const DEFAULT_OPTION_A: SprayOption = { color: '#ff2d95', name: 'Hot pink' };
-export const DEFAULT_OPTION_B: SprayOption = { color: '#19e6ff', name: 'Cyan' };
-export const PALETTE = ['#ff2d95', '#19e6ff', '#ffe600', '#7cff3a', '#ff5c1a', '#b26bff', '#ffffff', '#111111'];
+export const DEFAULT_OPTION_A: SprayOption = { color: '#59d92d', name: 'Neon green' };
+export const DEFAULT_OPTION_B: SprayOption = { color: '#4a22b8', name: 'Dark purple' };
+/** The old defaults (pre-Cospray); settings still holding them are migrated on load. */
+export const LEGACY_DEFAULTS = ['#ff2d95', '#19e6ff'];
+export const PALETTE = ['#59d92d', '#4a22b8', '#ff2d95', '#19e6ff', '#ffe600', '#7cff3a', '#ff5c1a', '#b26bff', '#ffffff', '#111111'];
 export const SPRAY_RADIUS_DEG = 1.9; // compass mode, size M
 export const SPRAY_RADIUS_M = 0.042; // ARKit, size M
 /** strokes.cap is a not-null column from when cans had fat/skinny nozzles; every stroke is now written with this. */

@@ -9,9 +9,8 @@ import { PressBox } from '../ui/kit';
 import { C, F, PLATE, PLATE_HI, TONES, ui, uiLabel } from '../ui/theme';
 
 /**
- * The reveal, drawn over the camera. A pixel shimmer pulls your eye toward an undiscovered piece
- * (edge arrow when it's off screen, twinkling squares where it is when on screen). The words that
- * go with it ("a piece is nearby", the found card) are rendered by the Create HUD's notice column.
+ * The reveal, drawn over the camera: twinkling squares where an undiscovered piece is, once it is on
+ * screen. Nothing points at it while it's off screen. The found card is rendered by the Create HUD.
  */
 export function DiscoveryCues({ d }: { d: Discovery }) {
   const { width, height } = useWindowDimensions();
@@ -19,10 +18,11 @@ export function DiscoveryCues({ d }: { d: Discovery }) {
   const pull = d.pull;
   if (!pull || d.justFound) return null;
   const onScreen = Math.abs(pull.relBearing) < hfov / 2 - 3;
+  if (!onScreen) return null;
   const x = width / 2 + pull.relBearing * (width / hfov);
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {onScreen ? <Shimmer x={x} y={height * 0.45} strength={1 - pull.resolve} /> : <EdgeArrow left={pull.relBearing < 0} strength={1 - pull.resolve * 0.5} />}
+      <Shimmer x={x} y={height * 0.45} strength={1 - pull.resolve} />
     </View>
   );
 }
@@ -48,19 +48,6 @@ function Spark({ i, x, y, t, strength }: { i: number; x: number; y: number; t: S
     };
   });
   return <Animated.View style={[styles.spark, st]} />;
-}
-
-function EdgeArrow({ left, strength }: { left: boolean; strength: number }) {
-  const t = useSharedValue(0);
-  useEffect(() => { t.value = withRepeat(withSequence(withTiming(1, { duration: 500 }), withTiming(0, { duration: 500 })), -1, true); }, []);
-  const st = useAnimatedStyle(() => ({ opacity: 0.5 + 0.5 * t.value * strength, transform: [{ translateX: (left ? -1 : 1) * (4 + 8 * t.value) }] }));
-  return (
-    <Animated.View pointerEvents="none" style={[styles.edge, left ? { left: 10 } : { right: 10 }, st]}>
-      <PixelBox fill={PLATE} hi={PLATE_HI} depth={3} style={{ width: 48 }} contentStyle={{ height: 44, alignItems: 'center', justifyContent: 'center' }}>
-        <PixelIcon name={left ? 'left' : 'right'} size={24} color={C.white} />
-      </PixelBox>
-    </Animated.View>
-  );
 }
 
 export type FoundPiece = { id: string; author_name: string; views: number };
@@ -99,7 +86,6 @@ export function timeAgo(iso: string) {
 
 const styles = StyleSheet.create({
   spark: { position: 'absolute', width: 9, height: 9, backgroundColor: C.white },
-  edge: { position: 'absolute', top: '45%' },
   cardIn: { padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
   cardEyebrow: { ...uiLabel(11, 1), color: C.green },
   cardTitle: { fontFamily: F.display, fontSize: 20, color: C.white },

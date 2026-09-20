@@ -13,6 +13,9 @@ instead of clicking — and levelled by RMS rather than peak so nothing arrives 
 `rattle` is deliberately short: it retriggers on every shake spike, so a long file would only ever
 be heard as its first few clicks.
 
+Levels are anchored to macOS system alerts (-11 to -16 dBFS RMS), which are tuned to be plainly
+audible on a small speaker. Quieter than about -20 dBFS in-app and you can't hear it outdoors.
+
 Run: python3 scripts/gen_sfx.py
 """
 import numpy as np, wave, os
@@ -68,10 +71,10 @@ def hiss():
     w = rng.standard_normal(n)
     # pink-ish base: summed lowpasses give the 1/f tilt white noise lacks
     pink = lowpass(w, 2500) * 0.6 + lowpass(w, 600) * 1.1 + w * 0.2
-    jet = band(pink, 850, 2300, poles=3)          # the nozzle's voice
+    jet = band(pink, 900, 2800, poles=3)          # the nozzle's voice
     body = lowpass(w, 450, poles=2) * 0.9         # pressure behind it
-    air = band(rng.standard_normal(n), 2800, 5200, poles=2) * 0.085  # a little top, not a hiss
-    x = jet + 0.55 * body + air
+    air = band(rng.standard_normal(n), 2800, 5200, poles=2) * 0.11  # a little top, not a hiss
+    x = jet + 0.35 * body + air  # a phone speaker can't reproduce much body, so don't spend level on it
     # slow breathing rather than a tremolo: three slow rates, none of them rhythmic
     tt = np.arange(n) / SR
     x *= 1 + 0.06 * np.sin(2 * np.pi * 3.1 * tt) + 0.04 * np.sin(2 * np.pi * 6.7 * tt + 1.1) + 0.03 * np.sin(2 * np.pi * 11.3 * tt + 2.3)
@@ -80,7 +83,7 @@ def hiss():
     a = np.sqrt(np.linspace(0, 1, f)); b = np.sqrt(np.linspace(1, 0, f))
     x[:f] = x[:f] * a + x[-f:] * b
     x = x[:-f]
-    return level(x, rms=0.11, peak=0.5)
+    return level(x, rms=0.17, peak=0.72)
 
 
 def impact(modes, amp=1.0, chiff=0.35, bright=4000):
@@ -110,7 +113,7 @@ def rattle():
     tt = np.arange(n) / SR
     out += 0.10 * np.sin(2 * np.pi * 430 * tt) * np.exp(-tt / 0.10)  # the can body, briefly
     out *= env(n, 0.003, 0.18)
-    return level(out, rms=0.13, peak=0.62)
+    return level(out, rms=0.20, peak=0.80)
 
 
 def empty_rattle():
@@ -131,7 +134,7 @@ def empty_rattle():
     out += 0.20 * np.sin(2 * np.pi * 300 * tt) * np.exp(-tt / 0.32)  # hollow = you hear the tin
     out += 0.06 * np.sin(2 * np.pi * 455 * tt) * np.exp(-tt / 0.22)
     out *= env(n, 0.004, 0.42)
-    return level(out, rms=0.10, peak=0.55)
+    return level(out, rms=0.16, peak=0.72)
 
 
 def pool():
@@ -153,7 +156,7 @@ def click():
     x = band(rng.standard_normal(n), 600, 3500, poles=2) * np.exp(-t / 0.006)
     x += 0.35 * np.sin(2 * np.pi * 1150 * t) * np.exp(-t / 0.010)
     x += 0.12 * np.sin(2 * np.pi * 2300 * t) * np.exp(-t / 0.005)
-    return level(x * np.minimum(t / 0.001, 1), rms=0.08, peak=0.45)
+    return level(x * np.minimum(t / 0.001, 1), rms=0.13, peak=0.6)
 
 
 os.makedirs(OUT, exist_ok=True)

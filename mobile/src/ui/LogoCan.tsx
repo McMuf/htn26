@@ -71,19 +71,20 @@ const PALETTE: Record<string, string> = {
 };
 export const LOGO_CAN_W = 28, LOGO_CAN_H = 62;
 
-export function LogoCan({ cell = 2 }: { cell?: number }) {
+/** `puff` false draws just the can (the green spray cloud is left out). */
+export function LogoCan({ cell = 2, puff = true }: { cell?: number; puff?: boolean }) {
   const paths = useMemo(() => {
     const m = new Map<string, ReturnType<typeof Skia.Path.Make>>();
     SPRITE.forEach((row, y) => {
       for (let x = 0; x < row.length; x++) {
         const c = row[x];
-        if (c === '.') continue;
+        if (c === '.' || (!puff && c === 'G' && y < 24)) continue;
         let p = m.get(c); if (!p) { p = Skia.Path.Make(); m.set(c, p); }
         p.addRect(Skia.XYWHRect(x * cell, y * cell, cell, cell));
       }
     });
     return [...m.entries()];
-  }, [cell]);
+  }, [cell, puff]);
   return (
     <Canvas style={{ width: LOGO_CAN_W * cell, height: LOGO_CAN_H * cell }} pointerEvents="none">
       {paths.map(([c, p]) => <Path key={c} path={p} color={PALETTE[c]} antiAlias={false} />)}

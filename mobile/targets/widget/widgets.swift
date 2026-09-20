@@ -32,13 +32,13 @@ struct CanEntry: TimelineEntry {
     let s = d?.object(forKey: "shake") as? Double ?? 100
     return CanEntry(
       date: Date(), paintA: a, paintB: b, shake: s,
-      colorA: Color(hex: d?.string(forKey: "colorA") ?? "#ff2d95"),
-      colorB: Color(hex: d?.string(forKey: "colorB") ?? "#19e6ff"),
+      colorA: Color(hex: d?.string(forKey: "colorA") ?? "#59d92d"),
+      colorB: Color(hex: d?.string(forKey: "colorB") ?? "#4a22b8"),
       tag: d?.string(forKey: "tag") ?? "COSPRAY",
       refillAtA: Date(timeIntervalSince1970: d?.object(forKey: "refillAtA") as? Double ?? 0),
       refillAtB: Date(timeIntervalSince1970: d?.object(forKey: "refillAtB") as? Double ?? 0),
       streak: d?.object(forKey: "streak") as? Int ?? 0,
-      nameA: d?.string(forKey: "nameA") ?? "Hot pink", nameB: d?.string(forKey: "nameB") ?? "Cyan",
+      nameA: d?.string(forKey: "nameA") ?? "Neon green", nameB: d?.string(forKey: "nameB") ?? "Dark purple",
       strokes: d?.object(forKey: "strokes") as? Int ?? 0, paintUsed: d?.object(forKey: "paintUsed") as? Int ?? 0,
       heat: HeatPayload.load(d))
   }

@@ -5,7 +5,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { useCameraPermissions } from 'expo-camera';
 import { File, Paths } from 'expo-file-system';
 import {
-  ArPaintView, arPlatform, canSnapshot, canUndo, hasCloudAnchors, hasLidar, strokePlatform, worldMapExtension,
+  ArPaintView, arPlatform, canSnapshot, hasCloudAnchors, hasLidar, strokePlatform, worldMapExtension,
   type ArHitEvent, type ArPaintViewRef, type ArStroke, type ArTrackingEvent, type HitKind,
 } from '../../modules/ar-paint';
 import { usePose } from '../hooks/usePose';
@@ -13,7 +13,7 @@ import { PaintLayer } from '../paint/PaintLayer';
 import { useArSpray } from '../hooks/useArSpray';
 import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
-import { BLOCKER_LINE, CreateHud, pullLine, type HudLine } from '../components/HUD';
+import { BLOCKER_LINE, CreateHud, type HudLine } from '../components/HUD';
 import { DiscoveryCues } from '../components/DiscoveryOverlay';
 import { PieceDetail } from '../components/SpatialViewer';
 import { laEnd } from '../lib/liveActivity';
@@ -133,31 +133,6 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
       return false;
     } finally { capturing.current = false; }
   }, []);
-
-  /** Take back your last stroke: the wall repaints without it and it leaves the shared canvas. */
-  const onUndo = useCallback(async () => {
-    let undone: { id: string } | null = null;
-    try { undone = (await viewRef.current?.undoLast()) ?? null; } catch (e) { console.warn('undo failed', e); }
-    if (undone) {
-      const st = useStore.getState();
-      const found = Object.entries(st.strokes).find(([, ss]) => ss.some((x) => x.id === undone!.id));
-      if (found) {
-        const [canvasId, ss] = found;
-        const gone = ss.find((x) => x.id === undone!.id)!;
-        st.removeStroke(canvasId, gone.id);
-        const p = st.painter;
-        if (p) st.setPainter({ ...p, strokes: Math.max(0, p.strokes - 1), paint_used: Math.max(0, p.paint_used - gone.paint_used) });
-      }
-      deleteStroke(undone.id);
-      if (settings.haptics) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => {});
-      // the wall photo now shows paint that isn't there any more
-      if (captureTimer.current) clearTimeout(captureTimer.current);
-      captureTimer.current = setTimeout(() => { captureWall(); }, 1500);
-    }
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-    setFlash(undone ? { title: 'LAST STROKE UNDONE', icon: 'undo' } : { title: 'NOTHING TO UNDO', sub: 'ONLY THE STROKES YOU PAINTED HERE', icon: 'undo' });
-    flashTimer.current = setTimeout(() => setFlash(null), 2200);
-  }, [captureWall, settings.haptics]);
 
   useEffect(() => () => { [flashTimer, captureTimer].forEach((t) => t.current && clearTimeout(t.current)); }, []);
 
@@ -324,7 +299,6 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const notice: HudLine | null = ui.blocker ? BLOCKER_LINE[ui.blocker]
     : flash ? flash
     : found ? null
-    : discovery.pull ? pullLine(discovery.pull)
     : mapNote ? mapNote
     : discovery.focused ? { title: `${discovery.focused.author_name}'s piece`.toUpperCase(), sub: 'TAP TO VIEW', icon: 'eye', onPress: () => setDetail(discovery.focused) }
     : hinted && (painter?.strokes ?? 0) < 5 ? { title: 'SHAKE TO CHARGE', sub: settings.volumeButtons ? 'THEN HOLD A COLOUR OR VOL+ / VOL−' : 'THEN HOLD A COLOUR TO SPRAY' }
@@ -357,7 +331,6 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
         debug={settings.debugHud ? `planes ${tracking.planes ?? 0} · quads ${surfaces} · ${arPlatform === 'arcore' ? `${tracking.depth ? 'depth' : 'no depth'} · compass ${tracking.heading ?? '…'}` : hasLidar ? 'lidar' : 'no lidar'} · hit ${hitInfo.kind} · surf ${moved.current.gone}/${moved.current.watched} · held ${ui.held} · block ${ui.blocker ?? '-'} · gps ${location ? `±${Math.round(location.accuracy)}m` : '…'} · map ${tracking.mapping || '-'}` : null}
         onStart={engine.start}
         onEnd={engine.end}
-        onUndo={canUndo ? onUndo : null}
         pieceId={pieceId}
         onOpenPiece={() => piece && setDetail(piece)}
       />

@@ -52,7 +52,7 @@ function GoogleHeat({ canvases, height, interactive }: Props) {
     return { latitude: loc?.lat ?? c?.lat ?? GEOFENCE.lat, longitude: loc?.lng ?? c?.lng ?? GEOFENCE.lng, latitudeDelta: 0.014, longitudeDelta: 0.014 };
   }, [loc?.lat, loc?.lng, canvases.length]);
   return (
-    <View style={[{ height }, interactive && StyleSheet.absoluteFill]}>
+    <View style={interactive ? styles.fill : { height }}>
       <MapView style={StyleSheet.absoluteFill} userInterfaceStyle="dark" showsUserLocation initialRegion={region}
         scrollEnabled={interactive} zoomEnabled={interactive} rotateEnabled={false} pitchEnabled={false} toolbarEnabled={false}>
         {canvases.map((c) => {
@@ -114,7 +114,7 @@ function PixelHeat({ canvases, height, interactive }: Props) {
   const scale = half > 0 ? half / plotted.reach : 0;
 
   return (
-    <View style={[{ height }, interactive && StyleSheet.absoluteFill]} onLayout={onLayout}>
+    <View style={interactive ? styles.fill : { height }} onLayout={onLayout}>
       <View style={styles.pixelBg}>
         {/* range rings, so distance is readable without a scale bar */}
         {[1, 0.66, 0.33].map((f) => (
@@ -159,6 +159,8 @@ function PixelHeat({ canvases, height, interactive }: Props) {
 }
 
 const styles = StyleSheet.create({
+  /** Interactive = fill whatever it's given; an explicit height would beat absoluteFill's bottom. */
+  fill: { flex: 1 },
   pixelBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: C.bg2, overflow: 'hidden' },
   ring: { position: 'absolute', left: '50%', top: '50%', borderWidth: 1, borderColor: C.line, opacity: 0.5 },
   blob: { position: 'absolute' },

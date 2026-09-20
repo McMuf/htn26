@@ -7,6 +7,8 @@ import { seededRng } from '../lib/ids';
 import type { Stroke } from '../types';
 
 export type Dab = { x: number; y: number; r: number; a: number; color: string };
+/** Ceiling on squares per thumbnail: past this you're paying the reconciler for pixels nobody sees. */
+const MAX_TILES = 700;
 
 /**
  * A piece as a pixel mosaic: every dab is snapped to a coarse grid, so a 4000-dab wall becomes at
@@ -17,11 +19,17 @@ export type Dab = { x: number; y: number; r: number; a: number; color: string };
  * `wall` puts the paint on a brick wall instead of a flat plate, for the places that show a piece
  * as a piece (Vault, Explore). A real photo of the wall, when the painter took one, beats both.
  */
-export function StrokeThumb({ canvasId, width, height, radius = 0, bg = '#171033', cell = 3, wall = false }: {
+export const StrokeThumb = React.memo(function StrokeThumb({ canvasId, width, height, radius = 0, bg = '#171033', cell = 3, wall = false }: {
   canvasId: string; width: number; height: number; radius?: number; bg?: string; cell?: number; wall?: boolean;
 }) {
   const strokes = useStore((s) => s.strokes[canvasId] ?? s.previewStrokes[canvasId]);
-  const tiles = useMemo(() => mosaic(layoutDabs(strokes ?? [], canvasId, width, height), cell), [strokes, canvasId, width, height, cell]);
+  const tiles = useMemo(() => {
+    const t = mosaic(layoutDabs(strokes ?? [], canvasId, width, height), cell);
+    // a 38px preview doesn't need a thousand squares, and this one sits over a live AR session
+    return t.length > MAX_TILES ? t.filter((_, i) => i % Math.ceil(t.length / MAX_TILES) === 0) : t;
+  }, [strokes, canvasId, width, height, cell]);
+  // keep the elements, not just the tiles: rebuilding them is what the reconciler pays for
+  const rects = useMemo(() => tiles.map((t, i) => <Rect key={i} x={t.x} y={t.y} width={t.s} height={t.s} color={t.color} opacity={t.a} />), [tiles]);
   const bricks = useMemo(() => (wall ? wallPaths(canvasId, width, height) : null), [wall, canvasId, width, height]);
   const clip = useMemo(() => (radius > 0 ? Skia.RRectXY(Skia.XYWHRect(0, 0, width, height), radius, radius) : Skia.RRectXY(Skia.XYWHRect(0, 0, width, height), 0, 0)), [radius, width, height]);
   return (
@@ -35,21 +43,21 @@ export function StrokeThumb({ canvasId, width, height, radius = 0, bg = '#171033
             <Path path={bricks.mortar} color={BRICK.mortar} antiAlias={false} />
           </>
         ) : null}
-        {tiles.map((t, i) => <Rect key={i} x={t.x} y={t.y} width={t.s} height={t.s} color={t.color} opacity={t.a} />)}
+        {rects}
       </Group>
     </Canvas>
   );
-}
+});
 
 /**
  * A piece the way you'd recognise it on the street: the photo the painter took of that wall if
  * there is one (Create → camera button, kept on the phone), otherwise the paint on a brick wall.
  */
-export function PieceImage({ canvasId, width, height, cell = 3, radius = 0 }: { canvasId: string; width: number; height: number; cell?: number; radius?: number }) {
+export const PieceImage = React.memo(function PieceImage({ canvasId, width, height, cell = 3, radius = 0 }: { canvasId: string; width: number; height: number; cell?: number; radius?: number }) {
   const photo = useStore((s) => s.photos[canvasId]);
   if (photo) return <Image source={{ uri: photo }} style={{ width, height, borderRadius: radius }} resizeMode="cover" />;
   return <StrokeThumb canvasId={canvasId} width={width} height={height} cell={cell} radius={radius} wall />;
-}
+});
 
 export const BRICK = { base: '#463c66', light: '#51466f', dark: '#352d55', mortar: '#2a2447' };
 

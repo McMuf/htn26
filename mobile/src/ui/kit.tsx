@@ -24,7 +24,7 @@ const TEXT: Record<V, TextStyle> = {
   micro: { ...uiLabel(10.5, 0.6), color: C.dim },
   num: { fontFamily: F.display, fontSize: 30, color: C.white, ...outline() },
   numBig: { fontFamily: F.display, fontSize: 34, color: C.white, ...outline() },
-  mono: { fontFamily: F.mono, fontSize: 22, color: C.greenHi },
+  mono: { fontFamily: F.display, fontSize: 20, letterSpacing: 0.5, color: C.greenHi },
 };
 export function T({ v = 'body', color, style, ...rest }: TextProps & { v?: V; color?: string }) {
   return <Text {...rest} style={[TEXT[v], color ? { color } : null, style]} />;
