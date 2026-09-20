@@ -1,16 +1,14 @@
 import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import { StyleSheet, Text, View } from 'react-native';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon } from '../ui/PixelIcon';
 import { PixelCan } from '../ui/PixelCan';
-import { Avatar, Btn, IconBtn, Panel, Pill, SegBar, Screen, T, Tile, hapticTap } from '../ui/kit';
-import { C, F, outline } from '../ui/theme';
+import { Avatar, Btn, Gauge, IconBtn, Panel, Pill, Screen, SegBar, T, Tile } from '../ui/kit';
+import { haptic } from '../ui/haptics';
+import { C, F, TONES, outline } from '../ui/theme';
 import { useStore } from '../store';
 import { PAINT_MAX, PAINT_REGEN_PER_SEC, SHAKE_MIN_TO_SPRAY } from '../config';
 import { CREWS, MISSIONS, coinsOf, colorName, dayKey, dayStats, skinColor } from '../lib/economy';
-
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 export function ProfileScreen() {
   const painter = useStore((s) => s.painter);
@@ -27,16 +25,14 @@ export function ProfileScreen() {
   const low = shake < SHAKE_MIN_TO_SPRAY;
 
   return (
-    <Screen tone="purple">
+    <Screen>
       <View style={styles.head}>
         <Avatar name={painter?.name} color={settings.avatarColor} size={52} />
         <View style={{ flex: 1 }}>
           <T v="h" numberOfLines={1}>{painter?.name ?? 'painter'}</T>
           <T v="small">{crew ? crew.name : 'NO CREW'} · {online ? 'LIVE' : 'OFFLINE'}</T>
         </View>
-        <Pressable onPress={() => { hapticTap(); setSheet('market'); }} hitSlop={4}>
-          <Pill icon="coin" value={coins} iconColor={C.yellow} alt="#c48f00" />
-        </Pressable>
+        <Pill icon="coin" value={coins} onPress={() => setSheet('market')} />
         <IconBtn icon="settings" onPress={() => setSheet('settings')} />
       </View>
 
@@ -46,14 +42,14 @@ export function ProfileScreen() {
             <PixelCan color={skinColor(settings.canSkin, settings.optionA.color)} level={paint.A / PAINT_MAX} cell={5} wobble={low} />
           </View>
           <View style={{ flex: 1, gap: 12 }}>
-            <Gauge label={colorName(settings.optionA.color)} color={settings.optionA.color} value={paint.A} />
-            <Gauge label={colorName(settings.optionB.color)} color={settings.optionB.color} value={paint.B} />
+            <Gauge label={colorName(settings.optionA.color)} color={settings.optionA.color} value={paint.A} max={PAINT_MAX} regenPerSec={PAINT_REGEN_PER_SEC} />
+            <Gauge label={colorName(settings.optionB.color)} color={settings.optionB.color} value={paint.B} max={PAINT_MAX} regenPerSec={PAINT_REGEN_PER_SEC} />
             <View style={{ gap: 4 }}>
               <View style={styles.rowBetween}>
-                <T v="label" color={C.white}>PRESSURE</T>
+                <T v="eyebrow">PRESSURE</T>
                 <T v="small">{Math.round(shake * 100)}%</T>
               </View>
-              <SegBar value={shake} color={low ? C.orange : C.greenHi} />
+              <SegBar value={shake} color={low ? C.red : C.greenHi} />
             </View>
           </View>
         </View>
@@ -62,7 +58,7 @@ export function ProfileScreen() {
 
       <Missions stats={stats} />
 
-      <Panel title="MARKET" right={<T v="label" color={C.white}>{coins} COINS</T>}>
+      <Panel title="MARKET" right={<T v="eyebrow">{coins} COINS</T>}>
         <T v="sub">New paints and can skins. Spray to earn coins; missions pay extra.</T>
         <Btn label="OPEN MARKET" icon="market" tone="blue" onPress={() => setSheet('market')} />
       </Panel>
@@ -80,27 +76,14 @@ export function ProfileScreen() {
   );
 }
 
-function Gauge({ label, color, value }: { label: string; color: string; value: number }) {
-  const secs = Math.ceil((PAINT_MAX - value) / PAINT_REGEN_PER_SEC);
-  const full = value / PAINT_MAX >= 0.995;
-  return (
-    <View style={{ gap: 4 }}>
-      <View style={styles.rowBetween}>
-        <T v="label" color={C.white}>{label}</T>
-        <T v="small">{full ? 'FULL' : `FULL IN ${mmss(secs)}`}</T>
-      </View>
-      <SegBar value={value / PAINT_MAX} color={color} />
-    </View>
-  );
-}
-
 /** Daily quests in the Subway Surfers layout: goal, progress box and a claim strip. */
 function Missions({ stats }: { stats: ReturnType<typeof dayStats> }) {
   const settings = useStore((s) => s.settings);
   const setSettings = useStore((s) => s.setSettings);
   const day = dayKey();
+  const deep = TONES.blueDeep;
   return (
-    <Panel title="DAILY QUESTS" tone="blue" right={<PixelIcon name="star" size={24} color={C.yellow} alt="#c48f00" />}>
+    <Panel title="DAILY QUESTS" tone="blue" right={<PixelIcon name="star" size={24} color={C.yellow} alt={C.yellowLo} />}>
       {MISSIONS.map((m) => {
         const key = `${day}:${m.id}`;
         const got = Math.min(m.goal, m.get(stats));
@@ -108,21 +91,21 @@ function Missions({ stats }: { stats: ReturnType<typeof dayStats> }) {
         const claimed = !!settings.claimed[key];
         const [pre, post] = m.title.split('{n}');
         return (
-          <PixelBox key={m.id} fill="#1f4fa8" hi="#2b63c8" lo="#173f88" depth={3} contentStyle={{ padding: 10, gap: 8 }}>
+          <PixelBox key={m.id} fill={deep.fill} hi={deep.hi} lo={deep.lo} depth={3} contentStyle={{ padding: 10, gap: 8 }}>
             <View style={styles.rowBetween}>
               <Text style={styles.mTitle}>{pre}<Text style={{ color: C.yellow }}>{m.hot}</Text>{post}</Text>
-              <PixelBox fill="#12306b" depth={0} bw={3} n={3} contentStyle={{ paddingHorizontal: 10, height: 30, justifyContent: 'center' }}>
-                <Text style={{ fontFamily: F.display, fontSize: 16, color: '#fff' }}>{got}/{m.goal}</Text>
+              <PixelBox fill={deep.lo} depth={0} bw={3} n={3} contentStyle={{ paddingHorizontal: 10, height: 30, justifyContent: 'center' }}>
+                <Text style={{ fontFamily: F.display, fontSize: 16, color: C.white }}>{got}/{m.goal}</Text>
               </PixelBox>
             </View>
             <View style={styles.rowBetween}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <PixelIcon name="coin" size={24} color={C.yellow} alt="#c48f00" />
+                <PixelIcon name="coin" size={24} color={C.yellow} alt={C.yellowLo} />
                 <Text style={{ fontFamily: F.display, fontSize: 16, color: C.yellow }}>+{m.reward}</Text>
               </View>
               {claimed ? <T v="label" color={C.greenHi}>CLAIMED</T> : (
                 <Btn label={done ? 'CLAIM' : 'IN PROGRESS'} tone={done ? 'green' : 'dark'} size="sm" disabled={!done} onPress={() => {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  haptic.success();
                   setSettings({ claimed: { ...settings.claimed, [key]: true }, bonus: settings.bonus + m.reward });
                 }} />
               )}
@@ -137,8 +120,8 @@ function Missions({ stats }: { stats: ReturnType<typeof dayStats> }) {
 const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   canRow: { flexDirection: 'row', gap: 14, alignItems: 'center' },
-  canBox: { width: 112, height: 150, alignItems: 'center', justifyContent: 'center', backgroundColor: '#150a36', borderWidth: 3, borderColor: C.ink },
+  canBox: { width: 112, height: 150, alignItems: 'center', justifyContent: 'center', backgroundColor: C.well, borderWidth: 3, borderColor: C.ink },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   tiles: { flexDirection: 'row', gap: 8 },
-  mTitle: { flex: 1, fontFamily: F.display, fontSize: 17, color: '#fff', ...outline('#173f88') },
+  mTitle: { flex: 1, fontFamily: F.display, fontSize: 17, color: C.white, ...outline(C.blueDeepLo) },
 });
