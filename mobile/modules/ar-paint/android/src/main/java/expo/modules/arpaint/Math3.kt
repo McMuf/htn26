@@ -92,4 +92,54 @@ object M {
   }
 
   fun isVertical(m: M4) = abs(m[5]) < 0.5f
+
+  /**
+   * Move a world pose toward where tracking now says it belongs, without showing the working.
+   *
+   * ARCore re-estimates an anchor every frame, so following its pose literally makes painted
+   * geometry shimmer: millimetre corrections, forty times a second, on something the eye knows is
+   * bolted to the floor. Three regimes:
+   *
+   *  - under the dead-band, nothing moves at all. Most corrections live here, and ignoring them is
+   *    what makes paint look painted rather than projected.
+   *  - a large correction is a relocalisation, not noise — the world frame itself moved, so go
+   *    there at once. Sliding a piece across the room would be worse than a cut.
+   *  - in between, ease, so a genuine refinement arrives as a settle rather than a pop.
+   *
+   * Rotation is slerped rather than interpolated component-wise, which would shear the quad.
+   */
+  fun settle(current: M4, target: M4, k: Float, deadM: Float, deadRad: Float, jumpM: Float): M4 {
+    val cp = toPose(current); val tp = toPose(target)
+    val dx = tp.tx() - cp.tx(); val dy = tp.ty() - cp.ty(); val dz = tp.tz() - cp.tz()
+    val dist = sqrt(dx * dx + dy * dy + dz * dz)
+    if (dist > jumpM) return target
+
+    var d = cp.qx() * tp.qx() + cp.qy() * tp.qy() + cp.qz() * tp.qz() + cp.qw() * tp.qw()
+    // a quaternion and its negation are the same rotation; take the short way round
+    val sign = if (d < 0f) -1f else 1f
+    d = abs(d).coerceAtMost(1f)
+    val angle = 2f * kotlin.math.acos(d) // radians between the two orientations
+    if (dist < deadM && angle < deadRad) return current
+
+    val t = k.coerceIn(0f, 1f)
+    val pos = floatArrayOf(cp.tx() + dx * t, cp.ty() + dy * t, cp.tz() + dz * t)
+    val q = FloatArray(4)
+    if (d > 0.9995f) { // all but parallel: lerp, since slerp is numerically unhappy here
+      q[0] = cp.qx() + (tp.qx() * sign - cp.qx()) * t
+      q[1] = cp.qy() + (tp.qy() * sign - cp.qy()) * t
+      q[2] = cp.qz() + (tp.qz() * sign - cp.qz()) * t
+      q[3] = cp.qw() + (tp.qw() * sign - cp.qw()) * t
+    } else {
+      val th = kotlin.math.acos(d)
+      val s = sin(th)
+      val a = sin((1f - t) * th) / s
+      val b = sin(t * th) / s
+      q[0] = cp.qx() * a + tp.qx() * sign * b
+      q[1] = cp.qy() * a + tp.qy() * sign * b
+      q[2] = cp.qz() * a + tp.qz() * sign * b
+      q[3] = cp.qw() * a + tp.qw() * sign * b
+    }
+    val l = sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]).takeIf { it > 1e-6f } ?: 1f
+    return fromPose(Pose(pos, floatArrayOf(q[0] / l, q[1] / l, q[2] / l, q[3] / l)))
+  }
 }

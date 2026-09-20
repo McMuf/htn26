@@ -97,6 +97,15 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     const val DEPTH_FAR_M = 4f
     val CROSS_X = intArrayOf(0, -1, 1, 0, 0)
     val CROSS_Y = intArrayOf(0, 0, 0, -1, 1)
+
+    // ---- how closely painted geometry follows its anchor (see M.settle) ----
+    /** Below this, a correction is noise and the paint does not move at all. */
+    const val POSE_DEADBAND_M = 0.004f
+    const val POSE_DEADBAND_RAD = 0.006f // ~0.35 degrees
+    /** Above this it isn't a correction, it's a relocalisation: go there at once. */
+    const val POSE_JUMP_M = 0.35f
+    /** Ease time constant, seconds: a real refinement lands in about a fifth of a second. */
+    const val POSE_EASE_TAU = 0.07f
   }
 
   private val onTracking by EventDispatcher()
@@ -532,7 +541,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     heading.addFrame(-M.col(M.fromPose(camera.displayOrientedPose), 2))
 
     updatePlanes(frame, now)
-    updateQuadPoses()
+    updateQuadPoses(now)
     verifySurfaces(frame, now)
 
     val hit = raycastCenter(frame)
@@ -619,16 +628,40 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     }
   }
 
-  private fun updateQuadPoses() {
+  private var lastPoseUpdate = 0L
+
+  /**
+   * Follow the anchors, but not slavishly. See [M.settle] for why: paint bolted to a floor should
+   * not shimmer because ARCore is still making up its mind about where the floor is.
+   *
+   * A STOPPED anchor used to leave the quad holding its last transform forever. That transform is
+   * expressed in a world frame ARCore has since abandoned, so the piece would sit at coordinates
+   * that no longer mean anything — which is how paint ends up somewhere else after you leave the
+   * tab and come back. Re-anchoring at the same apparent place puts it back in the live frame,
+   * and clearing the plane lets it re-adopt whatever surface is really there now.
+   */
+  private fun updateQuadPoses(now: Long) {
+    val dt = (now - lastPoseUpdate).coerceIn(0, 100) / 1000f
+    lastPoseUpdate = now
+    // exponential ease, frame-rate independent
+    val k = if (dt <= 0f) 1f else 1f - kotlin.math.exp(-dt / POSE_EASE_TAU)
     for (q in quads.values) {
       val a = q.anchor ?: continue
       when (a.trackingState) {
         TrackingState.TRACKING -> {
           val m = M.fromPose(a.pose)
-          q.transform = q.anchorOffset?.let { M.mul(m, it) } ?: m
+          val target = q.anchorOffset?.let { M.mul(m, it) } ?: m
+          q.transform = M.settle(q.transform, target, k, POSE_DEADBAND_M, POSE_DEADBAND_RAD, POSE_JUMP_M)
         }
-        TrackingState.STOPPED -> { q.anchor = null }
-        else -> {}
+        TrackingState.STOPPED -> {
+          q.anchor = null
+          if (q.placed) {
+            q.plane = null
+            anchorQuad(q)              // same place, but expressed in the frame ARCore is using now
+            attachLooseToNearbyPlane(q) // and back onto a real surface if one is there
+          }
+        }
+        else -> {} // PAUSED: hold the last good pose rather than guess
       }
     }
   }
