@@ -3,7 +3,13 @@
 > native/Android work can never break the deployed site. Nothing else on this branch is current;
 > the phone app lives on `main` and `adarsh-samsung`.
 >
-> Vercel settings: **Production Branch** `web-deploy`, **Root Directory** `web`. The Supabase keys
+> A `vercel.json` at the repo root pins the build (`cd web && npm run build`, output `web/dist`,
+> framework detection off), so the site builds whether or not the Root Directory is set to `web`.
+> Without it, Vercel sees the Expo app at the root and publishes something that isn't a website —
+> the browser just downloads a file.
+>
+> Vercel settings: **Production Branch** `web-deploy`, **Root Directory** `web` (or leave it at the
+> repo root — the root `vercel.json` handles it). The Supabase keys
 > are committed in `web/.env.production`, so no dashboard environment variables are needed — and
 > if any `VITE_SUPABASE_*` variables *are* set there they win over the committed file, so they
 > must hold the same values or be deleted.
