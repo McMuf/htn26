@@ -980,9 +980,11 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     //
     // So the extension is split in two. A few centimetres past the edge is polygon raggedness, and
     // that beats anything behind it. Further out is a guess, held only as a fallback: if some
-    // farther plane reports a real polygon hit, that is a surface actually there and it wins. The
-    // guess is what keeps a whole wall paintable from one detected patch, and it now yields the
-    // moment a genuine surface is underneath.
+    // farther plane reports a real polygon hit, that is a surface actually there and it wins.
+    //
+    // That demotion applies to horizontal planes only — see the note at the test below. A wall has
+    // nothing behind it to fall through to, so its extension is taken outright, which is what
+    // keeps a whole wall paintable from the one patch ARCore has found.
     var guess: Hit? = null
     for (h in hits) {
       val p = h.trackable as? Plane ?: continue
@@ -996,12 +998,20 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       val l = M.transformPoint(M.invert(M.fromPose(p.centerPose)), M.pos(t))
       val dx = max(0f, abs(l.x) - p.extentX / 2)
       val dz = max(0f, abs(l.z) - p.extentZ / 2)
-      if (hypot(dx, dz) < EDGE_SLOP_M * (if (sticky) 1.5f else 1f)) {
+      val atEdge = hypot(dx, dz) < EDGE_SLOP_M * (if (sticky) 1.5f else 1f)
+      val withinReach = (dx / allowance(p.extentX, sticky)).let { it * it } +
+        (dz / allowance(p.extentZ, sticky)).let { it * it } < 1f
+      // Only a raised horizontal surface has an edge you can step off — nothing lies behind a
+      // wall. So a wall's extension is taken at once, while a floor's or a table's is demoted to
+      // a guess that a real surface can outvote. Without that distinction walls stopped working
+      // entirely: aim anywhere outside the detected patch and the wall became a guess, while the
+      // same ray carried on to the floor beyond it, whose large well-formed polygon won every
+      // time. The reticle landed on the floor behind the wall.
+      if (atEdge || (withinReach && p.type == Plane.Type.VERTICAL)) {
         stickyPlane = p
         return Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
       }
-      if (guess == null && (dx / allowance(p.extentX, sticky)).let { it * it } +
-          (dz / allowance(p.extentZ, sticky)).let { it * it } < 1f) {
+      if (guess == null && withinReach) {
         guess = Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
       }
     }
