@@ -11,7 +11,6 @@ import { C, F, HOLD_BOTTOM, HOLD_H, PLATE, PLATE_HI, TONES, outline, ui, uiLabel
 import { isLight } from '../ui/color';
 import { OPACITY, THICKNESS, colorName, ownedPaints } from '../lib/economy';
 import { FoundCard, type FoundPiece } from './DiscoveryOverlay';
-import { PieceImage } from '../ui/StrokeThumb';
 
 /**
  * The Create overlay. Everything drawn over the camera is deliberately colourless (dark plates, white
@@ -19,8 +18,7 @@ import { PieceImage } from '../ui/StrokeThumb';
  * reporting live in the piece detail (Explore / Vault), reached from the found card.
  *
  * Layout never overlaps by construction:
- *  - top right: the piece you're painting so far
- *  - top centre column: at most one status line (surface / distance), the found card, one notice
+ *  - top centre: only the found card (and the debug line when that setting is on) — no status text
  *  - bottom deck: can charge + tools toggle on one strip, the two colours below; the tray opens above
  */
 export type HudLine = { title: string; sub?: string; icon?: IconName; onPress?: () => void };
@@ -39,19 +37,8 @@ export function CreateHud({ status, found, onOpenFound, notice, debug, onStart, 
   const [tools, setTools] = useState(false);
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <View style={styles.rightRail} pointerEvents="box-none">
-        {pieceId ? (
-          <Pressable onPress={() => { haptic.tap(); onOpenPiece?.(); }} hitSlop={4}>
-            <PixelBox fill={PLATE} hi={PLATE_HI} depth={4} contentStyle={styles.railThumb}>
-              <PieceImage canvasId={pieceId} width={38} height={38} cell={2} />
-            </PixelBox>
-          </Pressable>
-        ) : null}
-      </View>
       <View style={styles.column} pointerEvents="box-none">
-        {status ? <Line line={status} /> : null}
         {found ? <FoundCard c={found} onView={onOpenFound} /> : null}
-        {notice ? <Line line={notice} /> : null}
         {debug ? <Text style={styles.debug}>{debug}</Text> : null}
       </View>
       {tools && <ToolsTray />}
@@ -99,21 +86,6 @@ export function Reticle({ spraying }: { spraying: boolean }) {
   );
 }
 
-function Line({ line }: { line: HudLine }) {
-  const body = (
-    <PixelBox fill={PLATE} hi={PLATE_HI} depth={4} contentStyle={styles.lineIn}>
-      {line.icon ? <PixelIcon name={line.icon} size={24} color={C.white} /> : null}
-      <View style={{ flexShrink: 1, alignItems: line.icon || line.onPress ? 'flex-start' : 'center' }}>
-        <Text style={styles.lineTitle} numberOfLines={1}>{line.title}</Text>
-        {line.sub ? <Text style={styles.lineSub} numberOfLines={2}>{line.sub}</Text> : null}
-      </View>
-      {line.onPress ? <PixelIcon name="right" size={12} color={C.dim} /> : null}
-    </PixelBox>
-  );
-  if (!line.onPress) return <View pointerEvents="none">{body}</View>;
-  return <Pressable onPress={() => { haptic.tap(); line.onPress?.(); }} hitSlop={6}>{body}</Pressable>;
-}
-
 /** Can charge as a strip across the deck. Runs down over a minute; shake to refill. */
 export function ChargeMeter() {
   const shake = useStore((s) => s.shake);
@@ -128,13 +100,13 @@ export function ChargeMeter() {
   const segs = 12, lit = Math.round(Math.max(0, Math.min(1, shake)) * segs);
   return (
     <View style={styles.charge} pointerEvents="none">
-      <Animated.View style={wobble}><PixelIcon name="can" size={24} color={low ? C.red : C.white} /></Animated.View>
+      <Animated.View style={wobble}><PixelIcon name="can" size={24} color={C.white} alt={C.purpleHi} /></Animated.View>
       <View style={styles.hbar}>
         {Array.from({ length: segs }, (_, i) => (
-          <View key={i} style={{ flex: 1, height: 10, backgroundColor: i < lit ? (low ? C.red : C.green) : C.line }} />
+          <View key={i} style={{ flex: 1, height: 10, backgroundColor: i < lit ? (low ? C.purpleHi : C.green) : C.line }} />
         ))}
       </View>
-      <Text style={[styles.chargeText, low && { color: C.red }]}>{low ? 'SHAKE' : `${Math.round(shake * 100)}%`}</Text>
+      <Text style={[styles.chargeText, low && { color: C.purpleHi }]}>{low ? 'SHAKE' : `${Math.round(shake * 100)}%`}</Text>
     </View>
   );
 }
@@ -243,13 +215,7 @@ const styles = StyleSheet.create({
   tick: { position: 'absolute' },
   reticleDot: { width: 5, height: 5 },
 
-  rightRail: { position: 'absolute', top: 58, right: 12, width: RAIL_W, gap: 8 },
-  railThumb: { height: 42, alignItems: 'center', justifyContent: 'center' },
-
   column: { position: 'absolute', top: 58, left: 12 + RAIL_W + 8, right: 12 + RAIL_W + 8, alignItems: 'center', gap: 8 },
-  lineIn: { minHeight: 36, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lineTitle: { ...uiLabel(12.5, 0.6), color: C.white },
-  lineSub: { ...ui(11.5, '600'), color: C.dim, marginTop: 2 },
   debug: { ...ui(11, '600'), color: C.dim, textAlign: 'center', backgroundColor: C.ink + 'aa', paddingHorizontal: 4 },
 
   deck: { position: 'absolute', bottom: HOLD_BOTTOM, left: 12, right: 12 },
