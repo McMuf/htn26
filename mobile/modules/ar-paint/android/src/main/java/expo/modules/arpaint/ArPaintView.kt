@@ -675,11 +675,13 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     if ((pn dot q.normal) <= (if (q.loose) 0.94f else 0.97f)) return false // ~20° / ~14°
     val pc = planeCenter(plane)
     if (abs((q.center - pc) dot pn) >= (if (q.loose) 0.6f else 0.15f)) return false
-    // and the quad must overlap the plane's known extent (in-plane distance)
+    // and the quad must overlap the plane's known extent (in-plane distance). The allowance scales
+    // with the plane for the same reason the hit-test's does: a chair seat must not reach out and
+    // adopt paint that was put on the floor beside it.
     val l = M.transformPoint(M.invert(M.fromPose(plane.centerPose)), q.center)
     val dx = max(0f, abs(l.x) - plane.extentX / 2)
     val dz = max(0f, abs(l.z) - plane.extentZ / 2)
-    if (hypot(dx, dz) >= PaintQuad.SIZE_M / 2) return false
+    if (hypot(dx, dz) >= min(PaintQuad.SIZE_M / 2, max(0.3f, min(plane.extentX, plane.extentZ)))) return false
     adopt(q, plane, now)
     return true
   }
@@ -716,6 +718,15 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     val hits = try { frame.hitTest(viewportW / 2f, viewportH / 2f) } catch (e: Exception) { return null }
     // A ceiling is a plane you can neither reach nor meant to paint; ARCore calls it downward-facing.
     fun paintable(p: Plane) = p.type == Plane.Type.VERTICAL || p.type == Plane.Type.HORIZONTAL_UPWARD_FACING
+    /**
+     * How far past its seen edge a plane may still be painted. Proportional to the plane's own
+     * smaller dimension, because the flat 0.9 m this used to be turned every piece of furniture
+     * into a shelf: scan a chair and its ~45 cm seat became a 2.25 m plate floating at seat
+     * height, paintable from across the room. A wall does want the slack — ARCore finds walls one
+     * patch at a time — and a wall is large enough to earn it. Now a chair gets ~13 cm, a
+     * half-found wall ~35 cm, a floor the old 0.9 m.
+     */
+    fun slack(p: Plane) = min(0.9f, max(0.06f, 0.3f * min(p.extentX, p.extentZ)))
     fun usable(p: Plane, hitPos: V3) =
       p.trackingState == TrackingState.TRACKING && p.subsumedBy == null && paintable(p) &&
         ((cameraPos - hitPos) dot planeNormal(p)) > 0f
@@ -733,7 +744,7 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       val l = M.transformPoint(M.invert(M.fromPose(p.centerPose)), M.pos(t))
       val dx = max(0f, abs(l.x) - p.extentX / 2)
       val dz = max(0f, abs(l.z) - p.extentZ / 2)
-      if (hypot(dx, dz) < 0.9f) return Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL)
+      if (hypot(dx, dz) < slack(p)) return Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL)
     }
     return null
   }
