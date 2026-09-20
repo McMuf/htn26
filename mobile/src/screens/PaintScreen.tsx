@@ -11,7 +11,7 @@ import { useDiscovery } from '../hooks/useDiscovery';
 import { CreateHud, Reticle } from '../components/HUD';
 import { GUTTER } from '../ui/theme';
 import { PieceDetail } from '../components/SpatialViewer';
-import { laEnd } from '../lib/liveActivity';
+import { laEnd, laPose } from '../lib/liveActivity';
 import { useStore } from '../store';
 import type { Canvas } from '../types';
 
@@ -39,6 +39,7 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
   const setDebug = useStore((s) => s.setDebug);
   const engineRef = useRef<ReturnType<typeof useSprayEngine> | null>(null);
   const { yawSV, pitchSV, rollSV, pose } = usePose((m) => engineRef.current?.onShake(m));
+  laPose.current = pose;
   const engine = useSprayEngine(pose);
   engineRef.current = engine;
   const discovery = useDiscovery(pose);

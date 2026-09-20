@@ -179,12 +179,12 @@ struct CanIcon: View {
     let rows = CanIcon.rows
     let (r, g, b) = rgb(color)
     let filled = Int((max(0, min(100, level)) / 100 * Double(CanIcon.bodyBottom - CanIcon.bodyTop + 1)).rounded())
-    let skip = puff ? 0 : 24 // the spray puff rows
+    let skip = puff ? 0 : 8 // rows above the nozzle hold only the spray puff
     Canvas { ctx, _ in
       for (y, row) in rows.enumerated() {
         if y < skip { continue }
         for (x, ch) in row.enumerated() {
-          if ch == "." { continue }
+          if ch == "." || (!puff && y < 24 && (ch == "G" || ch == "g")) { continue } // the puff, when not wanted
           let rect = CGRect(x: CGFloat(x) * cell, y: CGFloat(y - skip) * cell, width: cell + 0.3, height: cell + 0.3)
           let inBody = !logo && y >= CanIcon.bodyTop && y <= CanIcon.bodyBottom
           let painted = inBody && (CanIcon.bodyBottom - y) < filled
@@ -213,5 +213,21 @@ struct CanIcon: View {
     let ui = UIColor(c); var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
     ui.getRed(&r, green: &g, blue: &b, alpha: &a)
     return (Double(r), Double(g), Double(b))
+  }
+}
+
+/// A map pin as pixel art: a notched square head on a short pointed tail; the tip is at the bottom centre.
+struct PixelPin: View {
+  var color: Color = T.green
+  var size: CGFloat = 12
+  var body: some View {
+    let c = size / 6
+    Canvas { ctx, _ in
+      let cells: [(Int, Int)] = [(1,0),(2,0),(3,0),(4,0), (0,1),(1,1),(2,1),(3,1),(4,1),(5,1), (0,2),(1,2),(2,2),(3,2),(4,2),(5,2), (1,3),(2,3),(3,3),(4,3), (2,4),(3,4), (2,5),(3,5)]
+      for (x, y) in cells { ctx.fill(Path(CGRect(x: CGFloat(x) * c - 1, y: CGFloat(y) * c - 1, width: c + 2, height: c + 2)), with: .color(T.ink)) }
+      for (x, y) in cells { ctx.fill(Path(CGRect(x: CGFloat(x) * c, y: CGFloat(y) * c, width: c + 0.3, height: c + 0.3)), with: .color(color)) }
+      ctx.fill(Path(CGRect(x: 2 * c, y: c, width: c + 0.3, height: c + 0.3)), with: .color(.white.opacity(0.85))) // a glint
+    }
+    .frame(width: size, height: size)
   }
 }

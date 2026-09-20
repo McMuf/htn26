@@ -61,7 +61,10 @@ function GoogleHeat({ canvases, height, interactive }: Props) {
         showsPointsOfInterests={false} showsBuildings={false} showsTraffic={false}>
         {heat && <Overlay image={{ uri: heat.uri }} bounds={heat.bounds} opacity={1} />}
         {canvases.map((c) => (
-          <Marker key={c.id} coordinate={{ latitude: c.lat, longitude: c.lng }} title={`${c.author_name} · ${c.stroke_count} strokes`} description={`${c.views} views${discovered[c.id] ? ' · found' : ''}`} pinColor={C.green} />
+          <Marker key={c.id} coordinate={{ latitude: c.lat, longitude: c.lng }} title={`${c.author_name} · ${c.stroke_count} strokes`} description={`${c.views} views${discovered[c.id] ? ' · found' : ''}`}
+            anchor={{ x: 0.5, y: 1 }} tracksViewChanges={false}>
+            <PixelPin hot={(weights[c.id] ?? 0) >= 0.7} />
+          </Marker>
         ))}
       </MapView>
       {/* purple tint: colourise the dark tiles, then deepen the darks */}
@@ -147,6 +150,20 @@ function PixelHeat({ canvases, height, interactive }: Props) {
       {/* the same two tint layers the map wears, so both routes read as one design */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.tint]} />
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.deepen]} />
+    </View>
+  );
+}
+
+/** A neon pixel pin: notched square head, short pointed tail, ink outline, a glint. */
+function PixelPin({ hot }: { hot: boolean }) {
+  const fill = hot ? C.greenHi : C.green;
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <View style={{ width: 16, height: 16, backgroundColor: C.ink, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 12, height: 12, backgroundColor: fill }}><View style={{ width: 3, height: 3, backgroundColor: C.white + 'cc', marginLeft: 2, marginTop: 2 }} /></View>
+      </View>
+      <View style={{ width: 8, height: 4, backgroundColor: C.ink, alignItems: 'center' }}><View style={{ width: 4, height: 2, backgroundColor: fill }} /></View>
+      <View style={{ width: 4, height: 4, backgroundColor: C.ink }} />
     </View>
   );
 }

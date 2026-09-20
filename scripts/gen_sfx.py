@@ -79,18 +79,42 @@ def load_ogg(path):
 AIR = load_ogg(os.path.join(OUT, 'src', 'can_of_compressed_air.ogg'))
 
 
+def biquad_peak(x, f0, q, gain_db):
+    """RBJ peaking EQ, for a nozzle resonance."""
+    A = 10 ** (gain_db / 40); w0 = 2 * np.pi * f0 / SR; al = np.sin(w0) / (2 * q)
+    b0, b1, b2 = 1 + al * A, -2 * np.cos(w0), 1 - al * A
+    a0, a1, a2 = 1 + al / A, -2 * np.cos(w0), 1 - al / A
+    b0, b1, b2, a1, a2 = b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0
+    y = np.zeros_like(x); x1 = x2 = y1 = y2 = 0.0
+    for i in range(len(x)):
+        y[i] = b0 * x[i] + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+        x2, x1, y2, y1 = x1, x[i], y1, y[i]
+    return y
+
+
 def hiss():
-    """The real aerosol jet: a steady 0.42s slice of the recording, looped with an equal-power
-    crossfade, the sizzle above ~7kHz shelved down and a little pressurised body added underneath
-    (phone speakers make raw compressed air sound thin)."""
-    x = AIR[int(0.36 * SR):int(0.78 * SR)].copy()
-    x = x - np.mean(x)
-    x = lowpass(x, 7000) * 0.85 + band(x, 300, 1800, poles=1) * 0.5
-    f = int(0.08 * SR)
+    """Spray paint, not compressed air: a dense jet with the atomiser's flutter. White noise is
+    band-limited to the jet (1.2–6.5 kHz), given a nozzle resonance around 3.6 kHz, then amplitude-
+    fluttered by slow random noise (the paint breaking up), with a low pressurised body underneath
+    and a touch of soft clipping for grit. 1.2 s equal-power loop."""
+    n = int(1.2 * SR)
+    w = rng.standard_normal(n)
+    jet = band(w, 1200, 6500, poles=2)
+    jet = biquad_peak(jet, 3600, 1.1, 5.0)
+    jet = biquad_peak(jet, 1900, 1.4, 2.5)
+    flutter = lowpass(rng.standard_normal(n), 45, poles=2)
+    flutter = 1 + 0.35 * flutter / (np.std(flutter) + 1e-9)
+    body = lowpass(rng.standard_normal(n), 380, poles=2)
+    body = body / (np.std(body) + 1e-9) * 0.12
+    x = jet / (np.std(jet) + 1e-9) * flutter + body
+    x = np.tanh(x * 0.9) / 0.9
+    tt = np.arange(n) / SR
+    x *= 1 + 0.05 * np.sin(2 * np.pi * 2.3 * tt) + 0.03 * np.sin(2 * np.pi * 5.1 * tt + 0.7)
+    f = int(0.1 * SR)
     a = np.sqrt(np.linspace(0, 1, f)); b = np.sqrt(np.linspace(1, 0, f))
     x[:f] = x[:f] * a + x[-f:] * b
     x = x[:-f]
-    return level(x, rms=0.16, peak=0.7)
+    return level(x, rms=0.15, peak=0.7)
 
 
 def click():

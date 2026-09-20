@@ -15,7 +15,7 @@ import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
 import { CreateHud } from '../components/HUD';
 import { PieceDetail } from '../components/SpatialViewer';
-import { laEnd } from '../lib/liveActivity';
+import { laEnd, laPose } from '../lib/liveActivity';
 import { useStore } from '../store';
 import { deleteStroke, downloadWorldMap, incrementViews, onRemoteStroke, uploadWorldMap, worldMapUsable } from '../data/sync';
 import { CANVAS_JOIN_RADIUS_M } from '../config';
@@ -62,6 +62,7 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
   const viewRef = useRef<ArPaintViewRef | null>(null);
   const engineRef = useRef<ReturnType<typeof useArSpray> | null>(null);
   const { pose, yawSV, pitchSV, rollSV } = usePose((m) => engineRef.current?.onShake(m));
+  laPose.current = pose;
   const mapCanvas = useRef<Canvas | null>(null); // canvas whose world map is loaded in the session
   const paintedThisSession = useRef(false);
   const failedMaps = useRef(new Set<string>());

@@ -35,8 +35,8 @@ class Sfx {
     try {
       p.volume = volume;
       p.setPlaybackRate(rate, 'low');
-      p.seekTo(0).catch(() => {});
-      p.play();
+      // a finished one-shot won't restart until the seek has landed
+      p.seekTo(0).then(() => p.play()).catch(() => { try { p.play(); } catch {} });
     } catch {}
   }
 

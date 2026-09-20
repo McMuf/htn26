@@ -85,6 +85,8 @@ export const canUndo: boolean = !!NativeModule?.hasUndo;
 export const arPlatform: ArPlatform | null = NativeModule ? (NativeModule.platform ?? 'arkit') : null;
 /** Android: Cloud Anchors are configured (ARCore API key present), so pieces can be saved for exact re-placement. */
 export const hasCloudAnchors: boolean = !!NativeModule?.cloudAnchors;
+/** Path of the App Group container expo-live-activity loads images from (iOS only). */
+export const liveActivityGroupPath: string | null = (NativeModule as any)?.liveActivityGroupPath ?? null;
 export const ArPaintView = (NativeModule ? requireNativeView('ArPaint') : () => null) as ComponentType<ArPaintViewProps & { ref?: Ref<ArPaintViewRef> }>;
 
 /** Android only: real volume-key press/release (the keys are swallowed while intercepted). */

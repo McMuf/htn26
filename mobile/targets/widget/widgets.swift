@@ -148,11 +148,10 @@ struct MapPlate: View {
           Rectangle().fill(T.bg.opacity(0.35))
           let sx = g.size.width / m.size.width, sy = g.size.height / m.size.height
           ForEach(m.pts, id: \.id) { p in
-            let d: CGFloat = 5 + 7 * CGFloat(p.w)
-            Notched(n: 1.5).fill(p.w >= 0.7 ? T.greenHi : T.green).frame(width: d, height: d)
-              .overlay(Notched(n: 1.5).stroke(T.ink, lineWidth: 1.5))
-              .shadow(color: T.green.opacity(0.9), radius: 3 + 4 * p.w)
-              .position(x: p.x * sx, y: p.y * sy)
+            let d: CGFloat = 11 + 7 * CGFloat(p.w)
+            PixelPin(color: p.w >= 0.7 ? T.greenHi : T.green, size: d)
+              .shadow(color: T.green.opacity(0.9), radius: 2 + 3 * p.w)
+              .position(x: p.x * sx, y: p.y * sy - d / 2) // tip on the spot
           }
           Rectangle().fill(T.ink).frame(width: 12, height: 12).position(x: g.size.width / 2, y: g.size.height / 2)
           Rectangle().fill(T.green).frame(width: 8, height: 8).shadow(color: T.green, radius: 4).position(x: g.size.width / 2, y: g.size.height / 2)
@@ -354,7 +353,8 @@ struct PaintCanView: View {
           Caps(text: "nearest pieces", size: 10)
           if top.isEmpty { Text("nothing painted near you yet — go first").font(PF.body(11)).foregroundStyle(T.dim) }
           ForEach(top) { sp in
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .center, spacing: 6) {
+              Image(systemName: "location.north.fill").font(.system(size: 10, weight: .bold)).rotationEffect(.degrees(Double(sp.b))).foregroundStyle(T.green)
               Text(sp.n).font(PF.display(13)).foregroundStyle(.white).lineLimit(1)
               Spacer(minLength: 4)
               Text("\(sp.d) M \(compass(sp.b))").font(PF.display(11)).foregroundStyle(T.dim)

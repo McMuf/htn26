@@ -35,7 +35,7 @@ export const PAINT_LOW_THRESHOLD = 18; // "hollow rattle" territory
 // ---- Shake-the-can ---------------------------------------------------------
 export const SHAKE_DECAY_SECONDS = 60; // full → empty in a minute of use
 export const SHAKE_MIN_TO_SPRAY = 0.12;
-export const SHAKE_ACCEL_THRESHOLD = 2.4; // g, user acceleration magnitude
+export const SHAKE_ACCEL_THRESHOLD = 1.7; // g, user acceleration magnitude — a normal shake, not a whip
 export const SHAKE_GAIN_PER_EVENT = 0.18;
 
 // ---- Volume trigger --------------------------------------------------------

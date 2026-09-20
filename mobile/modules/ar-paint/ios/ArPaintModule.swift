@@ -9,7 +9,9 @@ public class ArPaintModule: Module {
       "isSupported": ARWorldTrackingConfiguration.isSupported,
       "hasLidar": ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh),
       "hasSnapshot": true,
-      "hasUndo": true
+      "hasUndo": true,
+      // expo-live-activity reads images by file name from this App Group container; JS writes the locator bar there
+      "liveActivityGroupPath": FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.expoLiveActivity.sharedData")?.path as Any
     ])
 
     View(ArPaintView.self) {
