@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { hasBackend, supabase } from '../lib/supabase';
-import { NEARBY_FETCH_RADIUS_M } from '../config';
+import { NEARBY_FETCH_RADIUS_M, SUPABASE_URL } from '../config';
 import { useStore } from '../store';
 import { getWall } from '../paint/Wall';
 import { File, Paths } from 'expo-file-system';
@@ -13,9 +13,15 @@ import type { Canvas, Painter, Stroke } from '../types';
  * fail to upload are queued and retried, so a flaky hackathon network never blocks painting.
  */
 
-const CACHE_CANVASES = 'tagged:cache:canvases';
-const CACHE_STROKES = 'tagged:cache:strokes:';
-const PENDING = 'tagged:pending';
+/**
+ * The cache is per project. Switching Supabase projects used to drag the previous backend's
+ * canvases into the store, and painting would join one of those walls — whose id the new database
+ * has never seen — so every stroke came back "violates foreign key constraint".
+ */
+const REF = SUPABASE_URL.match(/\/\/([^.]+)/)?.[1] ?? 'local';
+const CACHE_CANVASES = `tagged:cache:${REF}:canvases`;
+const CACHE_STROKES = `tagged:cache:${REF}:strokes:`;
+const PENDING = `tagged:pending:${REF}`;
 /** Strokes carry every dab, so a queue that never drains is measured in megabytes. Keep the newest. */
 const PENDING_MAX = 120;
 /** Rows the server will never take as they are (missing column = migration_ar.sql hasn't been run). */
@@ -54,6 +60,7 @@ export async function fetchPainter(userId: string): Promise<Painter | null> {
 
 export async function loadCached() {
   try {
+    await dropLegacyCache();
     const raw = await AsyncStorage.getItem(CACHE_CANVASES);
     if (!raw) return;
     const canvases: Canvas[] = JSON.parse(raw);
@@ -62,6 +69,16 @@ export async function loadCached() {
       const sraw = await AsyncStorage.getItem(CACHE_STROKES + c.id);
       if (sraw) for (const s of JSON.parse(sraw) as Stroke[]) applyStroke(s);
     }
+  } catch {}
+}
+
+/** The cache from before it was keyed by project: it belongs to whichever backend was configured
+ *  then, so its canvases are walls this one has never heard of. */
+async function dropLegacyCache() {
+  try {
+    const stale = (await AsyncStorage.getAllKeys()).filter(
+      (k) => k === 'tagged:cache:canvases' || k === 'tagged:pending' || k.startsWith('tagged:cache:strokes:'));
+    if (stale.length) await AsyncStorage.multiRemove(stale);
   } catch {}
 }
 
@@ -109,7 +126,24 @@ export async function createCanvas(c: Canvas) {
   } catch (e) { console.warn('createCanvas failed', e); }
 }
 
-export async function uploadStroke(s: Stroke) {
+/**
+ * The wall a stroke belongs to, as a row in this database. A canvas can be missing here when it was
+ * cached from another backend or its insert failed while offline; RLS only lets you insert a canvas
+ * you author, so one this database has never seen is created under your name. It's a place, not a
+ * piece — nobody else here has a row for it.
+ */
+async function ensureCanvasRow(c: Canvas): Promise<boolean> {
+  const p = useStore.getState().painter;
+  if (!p || isLocalId(p.id)) return false;
+  const { error } = await supabase.from('canvases').upsert({
+    id: c.id, lat: c.lat, lng: c.lng, heading: c.heading, title: c.title,
+    author_id: p.id, author_name: c.author_id === p.id ? c.author_name : p.name,
+  }, { onConflict: 'id', ignoreDuplicates: true });
+  if (error) { console.warn('could not create the wall this stroke belongs to', error); return false; }
+  return true;
+}
+
+export async function uploadStroke(s: Stroke, retry = true): Promise<void> {
   const c = useStore.getState().canvases[s.canvas_id];
   if (c) cacheCanvas(c);
   if (!hasBackend) return;
@@ -119,14 +153,12 @@ export async function uploadStroke(s: Stroke) {
     anchor_id: s.anchor_id ?? null, transform: s.transform ?? null, viewer: s.viewer ?? null,
   };
   try {
-    // make sure our own canvas row exists first (its insert may have failed earlier)
-    if (c && c.author_id && c.author_id === useStore.getState().painter?.id) {
-      await supabase.from('canvases').upsert({ id: c.id, lat: c.lat, lng: c.lng, heading: c.heading, title: c.title, author_id: c.author_id, author_name: c.author_name }, { onConflict: 'id', ignoreDuplicates: true });
-    }
     const { error } = await supabase.from('strokes').insert(row);
     if (error) throw error;
     useStore.getState().setOnline(true);
-  } catch (e) {
+  } catch (e: any) {
+    // 23503 = no such canvas. Make the wall, then give the stroke one more go.
+    if (retry && e?.code === '23503' && c && (await ensureCanvasRow(c))) return uploadStroke(s, false);
     console.warn('uploadStroke failed, queued', e);
     useStore.getState().setOnline(false);
     try {
@@ -173,7 +205,12 @@ export async function flushPending() {
     const head = q.slice(0, ROW_RETRIES);
     const keep: any[] = [];
     for (const row of head) {
-      const { error: e } = await supabase.from('strokes').upsert(row, { onConflict: 'id' });
+      let e = (await supabase.from('strokes').upsert(row, { onConflict: 'id' })).error;
+      if (e?.code === '23503') {
+        // queued from a wall this database doesn't have: make it, then let the stroke land
+        const c = useStore.getState().canvases[row.canvas_id];
+        if (c && (await ensureCanvasRow(c))) e = (await supabase.from('strokes').upsert(row, { onConflict: 'id' })).error;
+      }
       if (e && SCHEMA_ERRORS.includes(e.code ?? '')) { schemaBlocked = true; keep.push(row); break; }
       if (e && !['23503', '42501', '23505'].includes(e.code ?? '')) keep.push(row);
     }
