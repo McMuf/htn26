@@ -9,7 +9,7 @@ package names still say `tagged`.
 
 - **iPhone app** (this repo root): ARKit surface painting, glass dock shell, widget.
 - **Android app** (same code): ARCore surface painting — see [Android](#android-galaxy-s25) and
-  `deploy.md`. No widget.
+  `goal2.md`. No widget.
 - **Companion site** (`web/`, live at **https://tagged-web.vercel.app**): judge-facing, read-only.
   `/` landing + globe, `/world` live map of Waterloo with every canvas's paint rendered as its
   marker (realtime), `/gallery` trending pieces + leaderboard. Same Supabase project.
@@ -42,10 +42,10 @@ Cut this pass: Market tab, social auth, 360° viewer, friends backend, a texture
 npm install
 # 1) backend: paste supabase/schema.sql, then supabase/migration_ar.sql (the AR columns,
 #    world-map bucket and undo policy), then supabase/seed.sql, into the Supabase SQL editor.
-#    Pointing the app at your own Supabase project: see deploy.md
+#    Pointing the app at your own Supabase project: see goal1.md
 # 2) native build onto your phone (once; later changes are JS-only):
 npx expo run:ios --device          # or: eas build --profile development --platform ios
-npx expo run:android --device      # Android: no paid account, no Mac — see deploy.md
+npx expo run:android --device      # Android: no paid account, no Mac — see goal2.md
 # 3) dev server (any port; the dev client asks for the URL / scans the QR):
 npx expo start --dev-client
 ```
@@ -86,7 +86,8 @@ so every screen, the spray model and the stroke format are shared. Per-platform 
 Each platform relocalises only against its own saved maps and places the other platform's strokes
 from the painter's viewpoint, so paint is shared between an iPhone and an S25 at metres-then-snap
 accuracy rather than exactly. Android quads are named `paint-a-…` so both clients can tell whose
-frame a stroke belongs to. Setup steps (phone, API key, EAS) are in `deploy.md`.
+frame a stroke belongs to. Setup steps (phone, API key, EAS) are in `goal2.md`; the shared
+backend the two platforms paint into is `goal1.md`.
 
 ## AR approach: real surfaces with ARKit (and a compass fallback)
 
