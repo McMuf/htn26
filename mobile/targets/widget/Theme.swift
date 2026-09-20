@@ -47,12 +47,22 @@ struct Notched: Shape {
   }
 }
 
+/// The app's faces (bundled with the extension, see Info.plist UIAppFonts).
+enum PF {
+  /// Pixelify Sans Bold: anything that carries weight.
+  static func display(_ size: CGFloat) -> Font { .custom("PixelifySans-Bold", size: size) }
+  /// Pixelify Sans Medium: the rest.
+  static func body(_ size: CGFloat) -> Font { .custom("PixelifySans-Medium", size: size) }
+  /// Press Start 2P: the COSPRAY wordmark only.
+  static func arcade(_ size: CGFloat) -> Font { .custom("PressStart2P-Regular", size: size) }
+}
+
 /// Small caps label in neon green, the widget's equivalent of `T v="label"` (named Caps to stay clear of SwiftUI.Label).
 struct Caps: View {
   let text: String
   var color: Color = T.green
   var size: CGFloat = 9
-  var body: some View { Text(text).font(.system(size: size, weight: .black)).tracking(1).foregroundStyle(color) }
+  var body: some View { Text(text.uppercased()).font(PF.display(max(size, 11))).tracking(0.8).foregroundStyle(color) }
 }
 
 /// Flat segmented meter (kit SegBar).

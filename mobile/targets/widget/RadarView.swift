@@ -86,7 +86,7 @@ struct RadarView: View {
           VStack {
             HStack { Caps(text: "N", color: .white.opacity(0.7), size: 8); Spacer(); if heat?.seeded == true { Caps(text: "SAMPLE", color: T.faint, size: 7) } }
             Spacer()
-            HStack { Spacer(); Text("\(Int(heat?.radiusM ?? 500)) m").font(.system(size: 8, weight: .bold)).foregroundStyle(T.dim) }
+            HStack { Spacer(); Text("\(Int(heat?.radiusM ?? 500)) M").font(PF.display(10)).foregroundStyle(T.dim) }
           }.padding(5)
         }
       }
@@ -96,28 +96,3 @@ struct RadarView: View {
   }
 }
 
-/// Nearest hotspot summary: name, bearing + distance, heat chip.
-struct NearestView: View {
-  let spot: HeatSpot?
-  var compact = false
-  var body: some View {
-    VStack(alignment: .leading, spacing: 3) {
-      if let n = spot {
-        Text(n.n).font(.system(size: compact ? 11 : 13, weight: .heavy)).foregroundStyle(.white).lineLimit(compact ? 1 : 2).minimumScaleFactor(0.8)
-        HStack(spacing: 5) {
-          Image(systemName: "location.north.fill").font(.system(size: 10, weight: .bold)).rotationEffect(.degrees(Double(n.b))).foregroundStyle(heatColor(n.w))
-          Text(n.d < 1000 ? "\(n.d) m" : String(format: "%.1f km", Double(n.d) / 1000)).font(.system(size: 11, weight: .bold)).foregroundStyle(.white).monospacedDigit()
-          Text(compass(n.b)).font(.system(size: 9, weight: .semibold)).foregroundStyle(T.dim)
-        }
-        HStack(spacing: 5) {
-          Text(heatLabel(n.w)).font(.system(size: 7, weight: .black)).tracking(0.8).padding(.horizontal, 5).padding(.vertical, 2)
-            .background(Notched(n: 2).fill(heatColor(n.w))).foregroundStyle(n.w < 0.7 ? .white : T.greenInk)
-          Text(n.found ? "found" : n.mine ? "yours" : n.sample ? "sample" : "undiscovered").font(.system(size: 8, weight: .semibold)).foregroundStyle(T.dim)
-        }
-      } else {
-        Text("No pieces nearby yet").font(.system(size: 11, weight: .semibold)).foregroundStyle(T.dim)
-        Text("open the app to scan").font(.system(size: 9)).foregroundStyle(T.faint)
-      }
-    }
-  }
-}

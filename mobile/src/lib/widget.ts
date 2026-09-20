@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import { ExtensionStorage } from '@bacons/apple-targets';
 import { useStore } from '../store';
 import { PAINT_MAX, PAINT_REGEN_PER_SEC } from '../config';
-import { colorName } from './economy';
+import { MISSIONS, colorName, dayKey, dayStats } from './economy';
 import { startHeatSync } from './widgetHeat';
 
 /** Mirrors paint levels into the App Group so the home-screen widget (targets/widget) can show the can. */
@@ -24,6 +24,8 @@ export function startWidgetSync() {
       refillAtA: Math.floor(Date.now() / 1000 + (PAINT_MAX - st.paint.A) / PAINT_REGEN_PER_SEC),
       refillAtB: Math.floor(Date.now() / 1000 + (PAINT_MAX - st.paint.B) / PAINT_REGEN_PER_SEC),
       streak: streakDays(st),
+      // today's numbers + daily quests, for the small widget (JSON string)
+      today: JSON.stringify(todayPayload(st)),
     };
     // reload only when something visible moved: paint in 5 % steps, refill times in 5 s buckets. WidgetKit
     // budgets reloads per day, and the heat radar (widgetHeat.ts) needs its share of them.
@@ -35,6 +37,7 @@ export function startWidgetSync() {
       storage!.set('colorA', snap.colorA); storage!.set('colorB', snap.colorB); storage!.set('tag', snap.tag);
       storage!.set('nameA', snap.nameA); storage!.set('nameB', snap.nameB); storage!.set('strokes', snap.strokes); storage!.set('paintUsed', snap.paintUsed);
       storage!.set('refillAtA', snap.refillAtA); storage!.set('refillAtB', snap.refillAtB); storage!.set('streak', snap.streak);
+      storage!.set('today', snap.today);
       storage!.set('updatedAt', Math.floor(Date.now() / 1000));
       ExtensionStorage.reloadWidget();
     } catch {}
@@ -54,4 +57,14 @@ export function streakDays(st: ReturnType<typeof useStore.getState>) {
   let n = 0; const d = new Date();
   while (days.has(d.toISOString().slice(0, 10))) { n++; d.setDate(d.getDate() - 1); }
   return n;
+}
+
+/** What the small widget shows: today's stats and each daily quest's progress. */
+function todayPayload(st: ReturnType<typeof useStore.getState>) {
+  const stats = dayStats(Object.values(st.strokes).flat(), st.painter?.id);
+  const day = dayKey();
+  return {
+    strokes: stats.strokes, pieces: stats.pieces, paint: Math.round(stats.paint), streak: stats.streak,
+    quests: MISSIONS.map((m) => ({ id: m.id, title: m.title.replace('{n}', m.hot), got: Math.min(m.goal, m.get(stats)), goal: m.goal, reward: m.reward, claimed: !!st.settings.claimed[`${day}:${m.id}`] })),
+  };
 }
