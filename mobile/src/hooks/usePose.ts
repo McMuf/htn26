@@ -3,7 +3,6 @@ import { Platform } from 'react-native';
 import { DeviceMotion, Magnetometer } from 'expo-sensors';
 import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { wrap360, wrapDiff } from '../lib/geo';
-import { SHAKE_ACCEL_THRESHOLD } from '../config';
 
 /**
  * Camera pose from sensor fusion, no ARKit needed:
@@ -15,7 +14,7 @@ import { SHAKE_ACCEL_THRESHOLD } from '../config';
  */
 export type Pose = { yaw: number; pitch: number; roll: number; ready: boolean };
 
-export function usePose(onShake?: (magnitudeG: number) => void) {
+export function usePose(onShake?: (magnitudeG: number, dt: number) => void) {
   const yawSV = useSharedValue(0);
   const pitchSV = useSharedValue(0);
   const rollSV = useSharedValue(0);
@@ -30,7 +29,6 @@ export function usePose(onShake?: (magnitudeG: number) => void) {
     let magYaw: number | null = null;
     let yaw: number | null = null;
     let lastT = 0;
-    let lastShakeT = 0;
 
     const computeMagYaw = () => {
       if (!mag) return;
@@ -90,15 +88,13 @@ export function usePose(onShake?: (magnitudeG: number) => void) {
         else yaw = wrap360(yaw + 0.03 * wrapDiff(magYaw, yaw));
       }
 
-      // shake detection from user acceleration magnitude
-      const ua = d.acceleration;
-      if (ua && shakeCb.current) {
-        const mg = Math.hypot(ua.x, ua.y, ua.z) / 9.80665;
-        if (mg > SHAKE_ACCEL_THRESHOLD && t - lastShakeT > 0.12) {
-          lastShakeT = t;
-          shakeCb.current(mg);
-        }
-      }
+      // Shake: report every sample with its dt and let the consumer integrate. Deciding here, by
+      // threshold crossing, is what made constant shaking register only intermittently — see
+      // SHAKE_GAIN_PER_G_SEC. Falls back to gravity-subtracted raw acceleration, because
+      // DeviceMotion.acceleration is not always populated on Android, and when it is missing the
+      // can simply never charged.
+      const ua = d.acceleration ?? { x: a.x - g[0], y: a.y - g[1], z: a.z - g[2] };
+      if (shakeCb.current && dt > 0) shakeCb.current(Math.hypot(ua.x, ua.y, ua.z) / 9.80665, dt);
 
       const y = yaw ?? 0;
       pose.current = { yaw: y, pitch, roll, ready: yaw != null };

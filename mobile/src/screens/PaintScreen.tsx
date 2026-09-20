@@ -38,7 +38,7 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
   const debug = useStore((s) => s.debug);
   const setDebug = useStore((s) => s.setDebug);
   const engineRef = useRef<ReturnType<typeof useSprayEngine> | null>(null);
-  const { yawSV, pitchSV, rollSV, pose } = usePose((m) => engineRef.current?.onShake(m));
+  const { yawSV, pitchSV, rollSV, pose } = usePose((m, dt) => engineRef.current?.onShake(m, dt));
   laPose.current = pose;
   const engine = useSprayEngine(pose);
   engineRef.current = engine;

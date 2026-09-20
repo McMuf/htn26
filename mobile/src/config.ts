@@ -35,8 +35,18 @@ export const PAINT_LOW_THRESHOLD = 18; // "hollow rattle" territory
 // ---- Shake-the-can ---------------------------------------------------------
 export const SHAKE_DECAY_SECONDS = 60; // full → empty in a minute of use
 export const SHAKE_MIN_TO_SPRAY = 0.12;
-export const SHAKE_ACCEL_THRESHOLD = 1.7; // g, user acceleration magnitude — a normal shake, not a whip
-export const SHAKE_GAIN_PER_EVENT = 0.18;
+/**
+ * Charging integrates motion rather than counting peaks. A shake is a sinusoid: the part above any
+ * threshold lasts a few tens of milliseconds, and whether a sensor sample lands on one is luck once
+ * Android throttles the rate below the 60 Hz we ask for. Counting peaks therefore registered
+ * "here and there" under perfectly steady shaking. Integrating cannot miss.
+ */
+/** Below this the phone is being carried, not shaken — handling noise rather than intent. */
+export const SHAKE_FLOOR_G = 0.28;
+/** Charge per g-second of motion above the floor; a brisk shake fills an empty can in ~2 s. */
+export const SHAKE_GAIN_PER_G_SEC = 1.2;
+/** Peak that fires the rattle and the haptic. Only the feedback is an event now, not the charging. */
+export const SHAKE_ACCEL_THRESHOLD = 1.2; // g, user acceleration magnitude
 
 // ---- Volume trigger --------------------------------------------------------
 // The rocker is pinned here so a press reads as a delta either way — which also fixes the phone's

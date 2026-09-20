@@ -61,7 +61,7 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
 
   const viewRef = useRef<ArPaintViewRef | null>(null);
   const engineRef = useRef<ReturnType<typeof useArSpray> | null>(null);
-  const { pose, yawSV, pitchSV, rollSV } = usePose((m) => engineRef.current?.onShake(m));
+  const { pose, yawSV, pitchSV, rollSV } = usePose((m, dt) => engineRef.current?.onShake(m, dt));
   laPose.current = pose;
   const mapCanvas = useRef<Canvas | null>(null); // canvas whose world map is loaded in the session
   const paintedThisSession = useRef(false);
