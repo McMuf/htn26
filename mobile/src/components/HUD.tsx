@@ -4,11 +4,10 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSeq
 import { PAINT_EMPTY_THRESHOLD, PAINT_MAX, PAINT_REGEN_PER_SEC, PALETTE, SHAKE_MIN_TO_SPRAY } from '../config';
 import { useStore, type Side } from '../store';
 import type { Blocker } from '../hooks/useSprayEngine';
-import type { Discovery } from '../hooks/useDiscovery';
 import { PixelBox } from '../ui/PixelBox';
 import { PixelIcon, type IconName } from '../ui/PixelIcon';
 import { haptic } from '../ui/haptics';
-import { C, F, HOLD_BOTTOM, HOLD_H, HOLD_TOP, PLATE, PLATE_HI, TONES, ui, uiLabel } from '../ui/theme';
+import { C, F, HOLD_BOTTOM, HOLD_H, PLATE, PLATE_HI, TONES, outline, ui, uiLabel } from '../ui/theme';
 import { isLight } from '../ui/color';
 import { OPACITY, THICKNESS, colorName, ownedPaints } from '../lib/economy';
 import { FoundCard, type FoundPiece } from './DiscoveryOverlay';
@@ -20,10 +19,9 @@ import { PieceImage } from '../ui/StrokeThumb';
  * reporting live in the piece detail (Explore / Vault), reached from the found card.
  *
  * Layout never overlaps by construction:
- *  - left rail: can charge
- *  - right rail: undo your last stroke, and the piece you're painting so far
+ *  - top right: the piece you're painting so far
  *  - top centre column: at most one status line (surface / distance), the found card, one notice
- *  - bottom: the two colours + the tools toggle; the tools tray opens directly above them
+ *  - bottom deck: can charge + tools toggle on one strip, the two colours below; the tray opens above
  */
 export type HudLine = { title: string; sub?: string; icon?: IconName; onPress?: () => void };
 
@@ -34,24 +32,14 @@ export const BLOCKER_LINE: Record<NonNullable<Blocker>, HudLine> = {
   empty: { title: 'OUT OF PAINT', sub: 'THIS COLOUR IS REFILLING', icon: 'drop' },
 };
 
-/** The words that go with the discovery shimmer. */
-export function pullLine(pull: NonNullable<Discovery['pull']>): HudLine {
-  return pull.resolve >= 1 ? { title: 'LOOK AT THE WALL', icon: 'star' }
-    : { title: 'A PIECE IS NEARBY', sub: `${Math.round(pull.distance)} M · FOLLOW THE SPARKLE`, icon: 'star' };
-}
-
-export function CreateHud({ status, found, onOpenFound, notice, debug, onStart, onEnd, onUndo, pieceId, onOpenPiece }: {
+export function CreateHud({ status, found, onOpenFound, notice, debug, onStart, onEnd, pieceId, onOpenPiece }: {
   status?: HudLine | null; found?: FoundPiece | null; onOpenFound?: () => void; notice?: HudLine | null; debug?: string | null;
-  onStart: (s: Side) => void; onEnd: (s: Side) => void;
-  /** Take back your last stroke (hidden when the build doesn't support it). */
-  onUndo?: (() => void) | null; pieceId?: string | null; onOpenPiece?: () => void;
+  onStart: (s: Side) => void; onEnd: (s: Side) => void; pieceId?: string | null; onOpenPiece?: () => void;
 }) {
   const [tools, setTools] = useState(false);
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <ChargeMeter />
       <View style={styles.rightRail} pointerEvents="box-none">
-        {onUndo ? <RailButton icon="undo" onPress={onUndo} /> : null}
         {pieceId ? (
           <Pressable onPress={() => { haptic.tap(); onOpenPiece?.(); }} hitSlop={4}>
             <PixelBox fill={PLATE} hi={PLATE_HI} depth={4} contentStyle={styles.railThumb}>
@@ -67,10 +55,17 @@ export function CreateHud({ status, found, onOpenFound, notice, debug, onStart, 
         {debug ? <Text style={styles.debug}>{debug}</Text> : null}
       </View>
       {tools && <ToolsTray />}
-      <View style={styles.holdRow}>
-        <HoldButton side="A" onStart={onStart} onEnd={onEnd} />
-        <HoldButton side="B" onStart={onStart} onEnd={onEnd} />
-        <ToolsButton on={tools} onPress={() => setTools((v) => !v)} />
+      <View style={styles.deck}>
+        <PixelBox fill={PLATE} hi={PLATE_HI} n={6} depth={5} contentStyle={styles.deckIn}>
+          <View style={styles.chargeRow}>
+            <ChargeMeter />
+            <ToolsButton on={tools} onPress={() => setTools((v) => !v)} />
+          </View>
+          <View style={styles.holdRow}>
+            <HoldButton side="A" onStart={onStart} onEnd={onEnd} />
+            <HoldButton side="B" onStart={onStart} onEnd={onEnd} />
+          </View>
+        </PixelBox>
       </View>
     </View>
   );
@@ -104,17 +99,6 @@ export function Reticle({ spraying }: { spraying: boolean }) {
   );
 }
 
-function RailButton({ icon, onPress }: { icon: IconName; onPress: () => void }) {
-  const [down, setDown] = useState(false);
-  return (
-    <Pressable onPress={() => { haptic.tap(); onPress(); }} onPressIn={() => setDown(true)} onPressOut={() => setDown(false)} hitSlop={6}>
-      <PixelBox fill={PLATE} hi={PLATE_HI} depth={down ? 1 : 4} style={{ marginTop: down ? 3 : 0 }} contentStyle={styles.railBtn}>
-        <PixelIcon name={icon} size={24} color={C.white} />
-      </PixelBox>
-    </Pressable>
-  );
-}
-
 function Line({ line }: { line: HudLine }) {
   const body = (
     <PixelBox fill={PLATE} hi={PLATE_HI} depth={4} contentStyle={styles.lineIn}>
@@ -130,7 +114,7 @@ function Line({ line }: { line: HudLine }) {
   return <Pressable onPress={() => { haptic.tap(); line.onPress?.(); }} hitSlop={6}>{body}</Pressable>;
 }
 
-/** Can charge as a slim rail down the left edge. Runs down over a minute; shake to refill. */
+/** Can charge as a strip across the deck. Runs down over a minute; shake to refill. */
 export function ChargeMeter() {
   const shake = useStore((s) => s.shake);
   const low = shake < SHAKE_MIN_TO_SPRAY;
@@ -141,18 +125,16 @@ export function ChargeMeter() {
       : withTiming(0, { duration: 120 });
   }, [low]);
   const wobble = useAnimatedStyle(() => ({ transform: [{ rotate: `${rot.value}deg` }] }));
-  const segs = 8, lit = Math.round(Math.max(0, Math.min(1, shake)) * segs);
+  const segs = 12, lit = Math.round(Math.max(0, Math.min(1, shake)) * segs);
   return (
     <View style={styles.charge} pointerEvents="none">
-      <PixelBox fill={PLATE} hi={PLATE_HI} depth={4} contentStyle={styles.chargeIn}>
-        <Animated.View style={wobble}><PixelIcon name="can" size={24} color={C.white} /></Animated.View>
-        <View style={styles.vbar}>
-          {Array.from({ length: segs }, (_, i) => (
-            <View key={i} style={{ height: 8, backgroundColor: segs - 1 - i < lit ? C.white : C.line }} />
-          ))}
-        </View>
-        <Text style={styles.chargeText}>{low ? 'SHAKE' : `${Math.round(shake * 100)}%`}</Text>
-      </PixelBox>
+      <Animated.View style={wobble}><PixelIcon name="can" size={24} color={low ? C.red : C.white} /></Animated.View>
+      <View style={styles.hbar}>
+        {Array.from({ length: segs }, (_, i) => (
+          <View key={i} style={{ flex: 1, height: 10, backgroundColor: i < lit ? (low ? C.red : C.green) : C.line }} />
+        ))}
+      </View>
+      <Text style={[styles.chargeText, low && { color: C.red }]}>{low ? 'SHAKE' : `${Math.round(shake * 100)}%`}</Text>
     </View>
   );
 }
@@ -170,9 +152,9 @@ function HoldButton({ side, onStart, onEnd }: { side: Side; onStart: (s: Side) =
   return (
     <Pressable style={{ flex: 1 }} onPressIn={() => onStart(side)} onPressOut={() => onEnd(side)}>
       {({ pressed }) => (
-        <PixelBox fill={pressed ? TONES.dark.hi : PLATE} hi={pressed ? C.panelHi : PLATE_HI} depth={pressed ? 1 : 5} style={{ marginTop: pressed ? 4 : 0 }} n={3}
+        <PixelBox fill={C.key} hi={pressed ? color : PLATE_HI} lo={pressed ? color : null} border={pressed ? color : C.ink} depth={pressed ? 1 : 5} style={{ marginTop: pressed ? 4 : 0 }} n={3}
           contentStyle={styles.holdIn}>
-          <View style={styles.holdFill} pointerEvents="none"><View style={{ width: `${pct}%`, height: '100%', backgroundColor: color, opacity: 0.35 }} /></View>
+          <View style={styles.holdFill} pointerEvents="none"><View style={{ width: `${pct}%`, height: '100%', backgroundColor: color, opacity: pressed ? 0.55 : 0.3 }} /></View>
           <View style={[styles.swatch, { backgroundColor: color }]} />
           <View style={{ flex: 1 }}>
             <Text style={styles.holdText} numberOfLines={1} adjustsFontSizeToFit>{colorName(color).toUpperCase()}</Text>
@@ -187,9 +169,9 @@ function HoldButton({ side, onStart, onEnd }: { side: Side; onStart: (s: Side) =
 function ToolsButton({ on, onPress }: { on: boolean; onPress: () => void }) {
   const [down, setDown] = useState(false);
   return (
-    <Pressable onPress={() => { haptic.tap(); onPress(); }} onPressIn={() => setDown(true)} onPressOut={() => setDown(false)} hitSlop={4} style={{ width: 56 }}>
-      <PixelBox fill={on ? C.white : PLATE} hi={on ? C.white : PLATE_HI} lo={on ? TONES.white.lo : null} depth={down ? 1 : 5} style={{ marginTop: down ? 4 : 0 }} n={3}
-        contentStyle={[styles.holdIn, { justifyContent: 'center', paddingHorizontal: 0 }]}>
+    <Pressable onPress={() => { haptic.tap(); onPress(); }} onPressIn={() => setDown(true)} onPressOut={() => setDown(false)} hitSlop={4} style={{ width: 44 }}>
+      <PixelBox fill={on ? C.white : C.key} hi={on ? C.white : PLATE_HI} lo={on ? TONES.white.lo : null} depth={down ? 1 : 4} style={{ marginTop: down ? 3 : 0 }} n={3}
+        contentStyle={styles.toolsIn}>
         <PixelIcon name={on ? 'x' : 'sliders'} size={24} color={on ? C.ink : C.white} />
       </PixelBox>
     </Pressable>
@@ -252,6 +234,8 @@ function ToolsTray() {
 }
 
 const RAIL_W = 46;
+/** Deck height: padding + charge strip + gap + hold buttons + padding + slab depth. */
+const DECK_H = 10 + 40 + 8 + HOLD_H + 10 + 5;
 const styles = StyleSheet.create({
   reticleWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   reticle: { width: 41, height: 41, alignItems: 'center', justifyContent: 'center' },
@@ -259,13 +243,8 @@ const styles = StyleSheet.create({
   tick: { position: 'absolute' },
   reticleDot: { width: 5, height: 5 },
 
-  charge: { position: 'absolute', top: 58, left: 12, width: RAIL_W },
   rightRail: { position: 'absolute', top: 58, right: 12, width: RAIL_W, gap: 8 },
-  railBtn: { height: 42, alignItems: 'center', justifyContent: 'center' },
   railThumb: { height: 42, alignItems: 'center', justifyContent: 'center' },
-  chargeIn: { paddingVertical: 8, alignItems: 'center', gap: 6 },
-  vbar: { backgroundColor: C.ink, padding: 2, gap: 2, width: 20 },
-  chargeText: { ...uiLabel(10, 0.4), color: C.white },
 
   column: { position: 'absolute', top: 58, left: 12 + RAIL_W + 8, right: 12 + RAIL_W + 8, alignItems: 'center', gap: 8 },
   lineIn: { minHeight: 36, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -273,14 +252,21 @@ const styles = StyleSheet.create({
   lineSub: { ...ui(11.5, '600'), color: C.dim, marginTop: 2 },
   debug: { ...ui(11, '600'), color: C.dim, textAlign: 'center', backgroundColor: C.ink + 'aa', paddingHorizontal: 4 },
 
-  holdRow: { position: 'absolute', bottom: HOLD_BOTTOM, left: 12, right: 12, flexDirection: 'row', gap: 10 },
-  holdIn: { height: HOLD_H, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12 },
+  deck: { position: 'absolute', bottom: HOLD_BOTTOM, left: 12, right: 12 },
+  deckIn: { padding: 10, gap: 8 },
+  chargeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  charge: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  hbar: { flex: 1, flexDirection: 'row', gap: 2, backgroundColor: C.ink, padding: 2 },
+  chargeText: { ...uiLabel(10.5, 0.6), color: C.white, width: 44, textAlign: 'right' },
+  toolsIn: { height: 36, alignItems: 'center', justifyContent: 'center' },
+  holdRow: { flexDirection: 'row', gap: 8 },
+  holdIn: { height: HOLD_H, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10 },
   holdFill: { position: 'absolute', left: 3, top: 3, bottom: 3, right: 3 },
-  swatch: { width: 22, height: 22, borderWidth: 2, borderColor: C.white + 'b0' },
-  holdText: { fontFamily: F.display, fontSize: 17, color: C.white },
+  swatch: { width: 30, height: 30, borderWidth: 3, borderColor: C.ink },
+  holdText: { fontFamily: F.display, fontSize: 17, color: C.white, ...outline() },
   holdSub: { ...uiLabel(10.5, 0.4), color: C.dim, marginTop: 2 },
 
-  tray: { position: 'absolute', left: 12, right: 12, bottom: HOLD_TOP + 6 },
+  tray: { position: 'absolute', left: 12, right: 12, bottom: HOLD_BOTTOM + DECK_H + 6 },
   trayRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   trayLabel: { width: 62, ...uiLabel(11, 0.6), color: C.white },
   swatchBtn: { height: 32, alignItems: 'center', justifyContent: 'center' },

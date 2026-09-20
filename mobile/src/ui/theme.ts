@@ -89,8 +89,7 @@ export const DOCK_TOTAL = DOCK_H + DOCK_PAD;
 export const DOCK_INSET = DOCK_TOTAL + 20;
 /** Create-tab layout: the hold buttons sit just above the dock; the tools tray opens above them. */
 export const HOLD_BOTTOM = DOCK_TOTAL + 10;
-export const HOLD_H = 60;
-export const HOLD_TOP = HOLD_BOTTOM + HOLD_H + 5; // top edge of the buttons, measured from the bottom of the screen
+export const HOLD_H = 64;
 /** Camera overlay plates: deliberately colourless (dark plate, white text), so the only colour over the camera is paint. */
 export const PLATE = '#120a2e';
 export const PLATE_HI = '#2a1c5c';

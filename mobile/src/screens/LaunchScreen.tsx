@@ -21,15 +21,6 @@ const CITIES = [WATERLOO, { lat: 40.7, lng: -74 }, { lat: 37.8, lng: -122.4 }, {
   { lat: -33.9, lng: 151.2 }, { lat: 19.4, lng: -99.1 }, { lat: -23.5, lng: -46.6 }, { lat: 28.6, lng: 77.2 }, { lat: 1.3, lng: 103.8 }, { lat: 30, lng: 31.2 }, { lat: 55.8, lng: 37.6 }, { lat: -1.3, lng: 36.8 }];
 const d2r = Math.PI / 180;
 
-/** Sphere point -> screen, sharing the maths with the shader. Worklet so the UI thread can place the chip and the can. */
-function project(latDeg: number, lngDeg: number, spin: number, cx: number, cy: number, r: number) {
-  'worklet';
-  const lat = latDeg * d2r, lng = lngDeg * d2r + spin;
-  const x = Math.cos(lat) * Math.sin(lng), y0 = Math.sin(lat), z0 = Math.cos(lat) * Math.cos(lng);
-  const y = y0 * Math.cos(TILT) - z0 * Math.sin(TILT), z = y0 * Math.sin(TILT) + z0 * Math.cos(TILT);
-  return { sx: cx + r * x, sy: cy - r * y, z };
-}
-
 const f = (hex: string) => { const [r, g, b] = rgb(hex); return `half4(${(r / 255).toFixed(3)}, ${(g / 255).toFixed(3)}, ${(b / 255).toFixed(3)}, 1.0)`; };
 
 /**
@@ -108,17 +99,14 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
   const fade = useSharedValue(1);
   const burst = useSharedValue(0);
   const target = useSharedValue({ x: CX, y: CY });
-  const spin = useDerivedValue(() => {
-    const s = clock.value / 1000;
-    return s * SPIN_RATE * (1 - 0.85 * enteringSV.value);
-  });
+  // on enter the globe whirls: a burst of extra spin layered on the idle rotation
+  const whirl = useSharedValue(0);
+  const spin = useDerivedValue(() => clock.value / 1000 * SPIN_RATE + whirl.value);
   const uniforms = useDerivedValue(() => ({
     c: [CX, CY], R, cell: CELL, spin: spin.value, t: clock.value / 1000,
     cities: CITIES.map((c) => [c.lat * d2r, c.lng * d2r]),
   }));
 
-  // the zoom still lands on Waterloo, but nothing marks it on the sphere
-  const wl = useDerivedValue(() => project(WATERLOO.lat, WATERLOO.lng, spin.value, CX, CY, R));
   // The logo can orbits on an inclined ring, leaning into the turn. Two copies: one drawn under the
   // globe (shown on the far half, so the Earth really occludes it) and one over it, never both.
   const CAN_CELL = 2, CAN_W = LOGO_CAN_W * CAN_CELL, CAN_H = LOGO_CAN_H * CAN_CELL;
@@ -141,14 +129,14 @@ export function LaunchScreen({ onEnter, onDone }: { onEnter: () => void; onDone:
     setEntering(true);
     enteringSV.value = withTiming(1, { duration: 300 });
     haptic.heavy();
-    const p = wl.value;
-    target.value = { x: p.z > 0 ? p.sx : CX, y: p.z > 0 ? p.sy : CY };
+    target.value = { x: CX, y: CY };
     burst.value = 0;
     burst.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) });
-    zoom.value = withDelay(120, withTiming(7, { duration: 1000, easing: Easing.in(Easing.cubic) }));
-    // hand over while still zooming so the app fades in underneath
-    fade.value = withDelay(120, withTiming(0, { duration: 1000, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(onDone)(); }));
-    setTimeout(onEnter, 650);
+    // spin it up hard, then dive straight into the centre while the app fades in underneath
+    whirl.value = withTiming(Math.PI * 2.5, { duration: 1150, easing: Easing.in(Easing.quad) });
+    zoom.value = withDelay(150, withTiming(7, { duration: 1000, easing: Easing.in(Easing.cubic) }));
+    fade.value = withDelay(150, withTiming(0, { duration: 1000, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(onDone)(); }));
+    setTimeout(onEnter, 700);
   };
   const globeStyle = useAnimatedStyle(() => ({
     opacity: fade.value,

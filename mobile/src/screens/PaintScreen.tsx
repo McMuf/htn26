@@ -8,7 +8,7 @@ import { usePose } from '../hooks/usePose';
 import { useSprayEngine, type Blocker } from '../hooks/useSprayEngine';
 import { useVolumeTrigger } from '../hooks/useVolumeTrigger';
 import { useDiscovery } from '../hooks/useDiscovery';
-import { BLOCKER_LINE, CreateHud, pullLine, Reticle, type HudLine } from '../components/HUD';
+import { BLOCKER_LINE, CreateHud, Reticle, type HudLine } from '../components/HUD';
 import { GUTTER } from '../ui/theme';
 import { DiscoveryCues } from '../components/DiscoveryOverlay';
 import { PieceDetail } from '../components/SpatialViewer';
@@ -84,7 +84,6 @@ export function PaintScreen({ active = true }: { active?: boolean }) {
   const found = discovery.justFound;
   const notice: HudLine | null = ui.blocker ? BLOCKER_LINE[ui.blocker]
     : found ? null
-    : discovery.pull ? pullLine(discovery.pull)
     : discovery.focused ? { title: `${discovery.focused.author_name}'s piece`.toUpperCase(), sub: 'TAP TO VIEW', icon: 'eye', onPress: () => setDetail(discovery.focused) }
     : hinted && (painter?.strokes ?? 0) < 5 ? { title: 'SHAKE TO CHARGE', sub: settings.volumeButtons ? 'THEN HOLD A COLOUR OR VOL+ / VOL−' : 'THEN HOLD A COLOUR TO SPRAY' }
     : null;
