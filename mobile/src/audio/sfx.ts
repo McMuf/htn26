@@ -13,6 +13,7 @@ class Sfx {
   private ready = false;
   enabled = true;
   private hissing = false;
+  private fade?: ReturnType<typeof setTimeout>;
 
   async init() {
     if (this.ready) return;
@@ -38,22 +39,28 @@ class Sfx {
     } catch {}
   }
 
-  click() { this.oneShot(this.clickP, 0.6, 0.9 + Math.random() * 0.2); }
-  rattle(strength = 1) { this.oneShot(this.rattleP, 0.5 + 0.5 * strength, 0.9 + 0.3 * Math.random()); }
-  emptyRattle() { this.oneShot(this.emptyP, 0.9, 1); }
+  click() { this.oneShot(this.clickP, 0.45, 0.94 + Math.random() * 0.12); }
+  rattle(strength = 1) { this.oneShot(this.rattleP, 0.34 + 0.3 * strength, 0.94 + Math.random() * 0.12); }
+  emptyRattle() { this.oneShot(this.emptyP, 0.6, 1); }
 
   /** strength 0..1 (can charge × paint), near 0..1 (aim pitch proxy for distance to surface). */
   setHiss(on: boolean, strength: number, near: number) {
     const p = this.hiss;
     if (!p) return;
+    if (this.fade) { clearTimeout(this.fade); this.fade = undefined; }
     if (!on || !this.enabled) {
-      if (this.hissing) { p.volume = 0; p.pause(); this.hissing = false; }
+      // let the nozzle breathe out instead of cutting it dead on release
+      if (this.hissing) {
+        this.hissing = false;
+        try { p.volume = p.volume * 0.45; } catch {}
+        this.fade = setTimeout(() => { try { p.volume = 0; p.pause(); } catch {} }, 90);
+      }
       return;
     }
     try {
       if (!this.hissing) { p.play(); this.hissing = true; }
-      p.volume = Math.min(1, 0.25 + 0.65 * strength);
-      p.setPlaybackRate(0.85 + 0.3 * strength + 0.2 * near, 'low');
+      p.volume = Math.min(0.8, 0.14 + 0.4 * strength);
+      p.setPlaybackRate(0.92 + 0.16 * strength + 0.1 * near, 'low');
     } catch {}
   }
 }
