@@ -17,7 +17,7 @@ build onto the phone and see whether the AR holds up.
 | `android/` project + Gradle cache | generated, warm |
 | Debug APK | built and current: `android\app\build\outputs\apk\debug\app-debug.apk` (101 MB, arm64) |
 | Keystore SHA-1 | read out for the API-key step below |
-| Branch | pushed to `origin/samsung-adarsh` |
+| Branch | merged into `main`; the Expo app is `mobile/` |
 | Emulator smoke test | boots, bundles, renders the UI, no crashes |
 | **Never run on real hardware** | every AR behaviour below is unverified |
 
@@ -35,7 +35,7 @@ setx JAVA_HOME "C:\Program Files\Eclipse Adoptium\jdk-17.0.15.6-hotspot"
 
 `setx` only affects new terminals, so reopen yours. Gradle pulled the SDK pieces it needed while
 building (Android platform 36, build-tools 36, NDK 27, CMake) into `%LOCALAPPDATA%\Android\Sdk`;
-nothing else to install. `android/` and its debug keystore are generated — re-run
+nothing else to install. All `npx expo` commands below run from `mobile/`. `android/` and its debug keystore are generated — re-run
 `npx expo prebuild -p android --no-install` only after changing `app.json`, native dependencies or
 anything under `modules/`.
 
@@ -85,11 +85,11 @@ Platform terms, and accepting an agreement on your behalf isn't something I'll d
      keytool -list -v -keystore android\app\debug.keystore -alias androiddebugkey -storepass android -keypass android | findstr SHA1
      ```
    Under **API restrictions**, limit it to the ARCore API.
-5. Put it in `.env.local` at the repo root (gitignored, unlike `.env`):
+5. Put it in `mobile/.env.local` (gitignored, unlike `mobile/.env`):
    ```
    ARCORE_API_KEY=AIza...
    ```
-6. Fold it into the manifest and rebuild:
+6. Fold it into the manifest and rebuild (from `mobile/`):
    ```powershell
    npx expo prebuild -p android --no-install
    npx expo run:android --device
@@ -102,7 +102,7 @@ should outlive the demo:
 
 ## 3. Install and run
 
-The APK is already built, so with the phone plugged in:
+The APK is already built, so with the phone plugged in, from `mobile/`:
 
 ```powershell
 adb install -r android\app\build\outputs\apk\debug\app-debug.apk
@@ -190,9 +190,8 @@ Android builds need **no** paid developer account and no Mac, unlike iOS.
 
 ## Notes
 
-- The branch is at <https://github.com/McMuf/htn26/tree/samsung-adarsh>; later commits go up with
-  a plain `git push`. It is `main` (the web app) plus the ARCore module and the Android fixes, so
-  merging it into `main` would also publish the native work — merge deliberately, not by habit.
+- The Android work (ARCore module and the Android fixes) is merged into `main` and lives in
+  `mobile/`; later commits go up with a plain `git push` to `main`.
 - The App Group behind the widget (`group.com.hamzakhan.tagged` in `src/lib/widget.ts`) is an Apple
   thing — Android ignores it. On iOS, building with `FRESCO_NO_WIDGET=1` (see `app.config.js`)
   drops the widget target and that entitlement, which is what a free Apple "Personal Team" account

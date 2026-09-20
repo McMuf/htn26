@@ -11,8 +11,7 @@ Companion docs: `deploy.md` (your own hosted Supabase), `README.md` (how the AR 
 
 ```sh
 git clone https://github.com/McMuf/htn26.git   # or: git pull
-cd htn26
-git checkout ui/pixel-arcade
+cd htn26/mobile          # everything is on main now; the Expo app lives in mobile/
 npm install
 ```
 

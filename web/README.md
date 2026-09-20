@@ -1,24 +1,22 @@
-> **`main` is the web app, and what Vercel builds.** The QR entry flow, anonymous sign-in and the
-> keys for the live Supabase project live here. Native work happens on its own branches and is
-> merged in deliberately: `samsung-adarsh` (Android / ARCore) and `pixel-ui` (iPhone).
+> **This is the web app, and what Vercel builds from `main`.** The QR entry flow, anonymous sign-in
+> and the keys for the live Supabase project live here. The Expo app (iOS + Android) is in `../mobile`.
 >
-> A `vercel.json` at the repo root pins the build (`cd web-app && npm run build`, output `web/dist`,
+> A `vercel.json` at the repo root pins the build (`cd web && npm run build`, output `web/dist`,
 > framework detection off), so the site builds whether or not the Root Directory is set to `web`.
 > Without it, Vercel sees the Expo app at the root and publishes something that isn't a website —
 > the browser just downloads a file.
 >
-> Vercel settings: **Production Branch** `main`, **Root Directory** `web-app` (or leave it at the repo
+> Vercel settings: **Production Branch** `main`, **Root Directory** `web` (or leave it at the repo
 > root — the root `vercel.json` handles it). The Supabase keys
-> are committed in `web-app/.env.production`, so no dashboard environment variables are needed — and
+> are committed in `web/.env.production`, so no dashboard environment variables are needed — and
 > if any `VITE_SUPABASE_*` variables *are* set there they win over the committed file, so they
 > must hold the same values or be deleted.
 >
-> To pull web changes made on another branch: `git checkout main && git checkout <branch> -- web/`.
 
 # Tagged — mobile web
 
 Phone-browser version of Tagged (Vite + React 19 + TypeScript). Same Supabase project, tables,
-auth and canvas model as the iPhone app in the repo root, so both clients paint the same walls.
+auth and canvas model as the Expo app in `../mobile`, so both clients paint the same walls.
 
 ```sh
 cd web

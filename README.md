@@ -5,23 +5,26 @@ your paint stays on that spot for everyone who walks up to it later. Built for H
 (36h MVP), Expo SDK 57, iOS dev build, with an Android build on the same codebase. Bundle id /
 package names still say `tagged`.
 
-## Branches
+## Layout
 
-| Branch | What it's for |
+Everything lives on `main` (the old `ui/pixel-arcade` iPhone and `samsung-adarsh` Android branches
+are merged in):
+
+| Folder | What it is |
 |---|---|
-| `main` | **The web app** — the QR painter in `web-app/`, and what Vercel deploys. The base every other branch starts from. |
-| `samsung-adarsh` | **Android** — the ARCore module in `modules/ar-paint/android` and the Android-side fixes. See `goal2.md`. |
-| `pixel-ui` | **iPhone** — the pixel-arcade UI on top of `main`. |
+| `mobile/` | **The Expo app** — iOS (ARKit) and Android (ARCore), one codebase. Run every `npx expo` / `eas` command from here. |
+| `web/` | **The web app** — Vite site Vercel deploys (root `vercel.json` points at it). |
+| `supabase/` | Shared schema, migrations and seed — both apps use the same project. |
+| `scripts/` | Tooling: `use_supabase.mjs` repoints both apps at a Supabase project; seed/SQL generators. |
 
-Native branches merge `main` in; merging them *back* into `main` publishes native work to the
-deployed site's branch, so do it deliberately. Goals: `goal1.md` (web), `goal2.md` (Android).
+Goals: `goal1.md` (web), `goal2.md` (Android). `deploy.md` sets up the backend.
 
 ## Three surfaces, one wall
 
-- **iPhone app** (this repo root): ARKit surface painting, glass dock shell, widget.
+- **iPhone app** (`mobile/`): ARKit surface painting, glass dock shell, widget.
 - **Android app** (same code): ARCore surface painting — see [Android](#android-galaxy-s25) and
   `goal2.md`. No widget.
-- **Companion site** (`web-app/`, live at **https://tagged-web.vercel.app**): judge-facing, read-only.
+- **Companion site** (`web/`, live at **https://tagged-web.vercel.app**): judge-facing, read-only.
   `/` landing + globe, `/world` live map of Waterloo with every canvas's paint rendered as its
   marker (realtime), `/gallery` trending pieces + leaderboard. Same Supabase project.
 - **Mobile web painter** (`/paint` on the same site): compass-anchored painting from any phone browser.
@@ -50,7 +53,7 @@ Cut this pass: Market tab, social auth, 360° viewer, friends backend, a texture
 ## Run it
 
 ```sh
-npm install
+cd mobile && npm install
 # 1) backend: paste supabase/schema.sql, then supabase/migration_ar.sql (the AR columns,
 #    world-map bucket and undo policy), then supabase/seed.sql, into the Supabase SQL editor.
 #    Pointing the app at your own Supabase project: see goal1.md
@@ -68,8 +71,10 @@ instead (no trust prompt, ~15 min in the cloud, Apple login on first run):
 
 ```sh
 eas build --profile development --platform ios   # then install from the link/QR it prints
-``` Env: `.env` holds `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_KEY`
-(also baked into `eas.json` for cloud builds).
+```
+
+Env: `mobile/.env` holds `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_KEY`
+(also baked into `mobile/eas.json` for cloud builds). Web: `cd web && npm install && npm run dev`.
 
 ## Demo path
 

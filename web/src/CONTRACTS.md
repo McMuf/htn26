@@ -1,16 +1,16 @@
 # Tagged web — module contracts
 
-Mobile-web port of the native app in `../src` (React Native). Same Supabase project, same tables,
+Mobile-web port of the native app in `../mobile/src` (React Native). Same Supabase project, same tables,
 same canvas model. Read the native file named for each module before writing the web one — most
 are direct ports. Platform differences: no volume buttons (two on-screen HOLD buttons), no ARKit
-(compass-anchored walls, like the native fallback `../src/screens/PaintScreen.tsx`), Web APIs
+(compass-anchored walls, like the native fallback `../mobile/src/screens/PaintScreen.tsx`), Web APIs
 instead of Expo modules. Files below are the ONLY files each module owns; import the others by
 these signatures.
 
 Shared, already written: `config.ts`, `types.ts`, `store.ts`, `lib/geo.ts`, `lib/ids.ts`,
 `lib/supabase.ts`.
 
-## hooks/usePose.ts  (native ref: ../src/hooks/usePose.ts)
+## hooks/usePose.ts  (native ref: ../mobile/src/hooks/usePose.ts)
 ```ts
 export type PoseListener = (p: Pose) => void;
 export function startPose(opts: { onShake?: (magG: number) => void }): Promise<'granted' | 'denied' | 'unsupported'>;
@@ -26,7 +26,7 @@ alpha is relative: replace alpha with `360 - webkitCompassHeading` when present.
 `deviceorientationabsolute`. Shake = `devicemotion.acceleration` magnitude > SHAKE_ACCEL_THRESHOLD g,
 debounced 120 ms.
 
-## paint/Wall.ts + paint/PaintLayer.tsx  (native refs: ../src/paint/Wall.ts, ../src/paint/PaintLayer.tsx)
+## paint/Wall.ts + paint/PaintLayer.tsx  (native refs: ../mobile/src/paint/Wall.ts, ../mobile/src/paint/PaintLayer.tsx)
 ```ts
 export class Wall { constructor(id: string); applyPoint(p: StrokePoint, color: string, rng: () => number): void; replay(stroke: Stroke): void; readonly canvas: HTMLCanvasElement /* WALL_W×WALL_H */; }
 export function getWall(id: string): Wall; export function hasWall(id: string): boolean;
@@ -40,7 +40,7 @@ export function PaintLayer(props: { walls: WallView[] }): JSX.Element;
 Wall.applyPoint must reproduce the native spray look (halo / 5 scattered soft body dabs / dense core /
 3 speckles; drips for kind 1) using radial gradients on a 2D context.
 
-## hooks/useSprayEngine.ts  (native ref: ../src/hooks/useSprayEngine.ts)
+## hooks/useSprayEngine.ts  (native ref: ../mobile/src/hooks/useSprayEngine.ts)
 ```ts
 export function useSprayEngine(): { start: (side: Side) => void; end: (side: Side) => void; onShake: (magG: number) => void;
   blocker: React.MutableRefObject<Blocker>; held: React.MutableRefObject<Side | null>; sprayingNow: React.MutableRefObject<boolean> };
@@ -49,13 +49,13 @@ Identical rules: geofence, shake charge, paint economy, dwell → drip, 30 Hz rA
 uploaded via `data/sync.uploadStroke` on release, `createCanvas` for a fresh spot. Haptics via
 `navigator.vibrate` when available. Sound via `audio/sfx`.
 
-## audio/sfx.ts  (native ref: ../src/audio/sfx.ts)
+## audio/sfx.ts  (native ref: ../mobile/src/audio/sfx.ts)
 ```ts
 export const sfx: { init(): Promise<void> /* user gesture */; enabled: boolean; click(): void; rattle(strength?: number): void; emptyRattle(): void; pool(): void; setHiss(on: boolean, strength: number, near: number): void };
 ```
 Web Audio; files at `/sfx/{hiss,rattle,empty_rattle,pool,click}.wav`; hiss loops with gain/playbackRate.
 
-## data/sync.ts  (native ref: ../src/data/sync.ts)
+## data/sync.ts  (native ref: ../mobile/src/data/sync.ts)
 Same exports: `applyStroke, ensurePainter(userId, name), fetchPainter(userId), loadCached, loadNearby(lat,lng),
 createCanvas, uploadStroke, flushPending, subscribeRealtime, incrementViews, reportCanvas, fetchLeaderboard, fetchAllCanvases`.
 localStorage instead of AsyncStorage. PLUS: AR strokes (anchor_id set) must be projected into compass
@@ -63,10 +63,10 @@ points before `applyStroke`: for each [u,v,r,a,kind] compute world p = T·(u,0,�
 yaw = wrap360(atan2(p.x, −p.z)·180/π) relative to canvas.heading via wrapDiff, pitch = atan2(p.y, hypot(p.x,p.z)),
 size = r / max(dist, AR_MIN_DISTANCE_M) · 180/π, drips: length likewise. Export `projectArStroke(s: Stroke, c: Canvas): Stroke`.
 
-## hooks/useDiscovery.ts  (native ref: ../src/hooks/useDiscovery.ts) — same shape, uses getPose().
+## hooks/useDiscovery.ts  (native ref: ../mobile/src/hooks/useDiscovery.ts) — same shape, uses getPose().
 ## hooks/useLocation.ts — `navigator.geolocation.watchPosition` → store.setLocation; returns 'pending'|'granted'|'denied'.
 
-## screens/*.tsx + components/*.tsx + App.tsx (native refs: ../src/screens/*, ../src/components/*, ../App.tsx)
+## screens/*.tsx + components/*.tsx + App.tsx (native refs: ../mobile/src/screens/*, ../mobile/src/components/*, ../mobile/App.tsx)
 `AuthScreen`, `NameScreen({userId})`, `PaintScreen`, `MapScreen` (Leaflet + OSM tiles), `LeaderboardScreen`,
 `SettingsScreen` (modal), `components/HUD.tsx` (Reticle, PaintMeters, CanMeter, BlockerBanner, HoldButtons),
 `components/DiscoveryOverlay.tsx`. Plain CSS (`src/styles.css`), dark theme #0b0b0f, accent #ff2d95, mobile-first,

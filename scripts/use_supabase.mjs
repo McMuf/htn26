@@ -5,7 +5,7 @@
 //   node scripts/use_supabase.mjs --check --anon                    also test anonymous sign-in
 //                                                                   (creates one throwaway auth user)
 //
-// Writes .env (the app), web-app/.env + web-app/.env.production (the site) and eas.json's development env
+// Writes mobile/.env (the app), web/.env + web/.env.production (the site) and mobile/eas.json's development env
 // (cloud builds), which is every place the keys live.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -100,7 +100,7 @@ async function check(url, key) {
 let url;
 let key;
 if (checkOnly) {
-  const env = readEnv('.env');
+  const env = readEnv('mobile/.env');
   url = env.EXPO_PUBLIC_SUPABASE_URL;
   key = env.EXPO_PUBLIC_SUPABASE_KEY;
   if (!url || !key) {
@@ -122,12 +122,12 @@ if (checkOnly) {
     process.exit(1);
   }
   console.log(`Pointing the app at ${url}`);
-  setEnv('.env', { EXPO_PUBLIC_SUPABASE_URL: url, EXPO_PUBLIC_SUPABASE_KEY: key });
-  setEnv('web-app/.env', { VITE_SUPABASE_URL: url, VITE_SUPABASE_KEY: key });
-  setEnv('web-app/.env.production', { VITE_SUPABASE_URL: url, VITE_SUPABASE_KEY: key });
+  setEnv('mobile/.env', { EXPO_PUBLIC_SUPABASE_URL: url, EXPO_PUBLIC_SUPABASE_KEY: key });
+  setEnv('web/.env', { VITE_SUPABASE_URL: url, VITE_SUPABASE_KEY: key });
+  setEnv('web/.env.production', { VITE_SUPABASE_URL: url, VITE_SUPABASE_KEY: key });
 
   // Patch the values where they sit: re-serialising the JSON would reflow the whole file.
-  const easPath = join(root, 'eas.json');
+  const easPath = join(root, 'mobile/eas.json');
   const before = readFileSync(easPath, 'utf8');
   let eas = before;
   for (const [name, value] of [['EXPO_PUBLIC_SUPABASE_URL', url], ['EXPO_PUBLIC_SUPABASE_KEY', key]]) {

@@ -1,5 +1,5 @@
 /**
- * Spray-can sound effects on Web Audio (port of ../../../src/audio/sfx.ts).
+ * Spray-can sound effects on Web Audio (port of ../../../mobile/src/audio/sfx.ts).
  * All SFX are procedurally generated WAVs (native repo: scripts/gen_sfx.py), copied to /public/sfx.
  *  hiss: seamless loop, volume + playbackRate driven by spray strength ("distance" proxy)
  *  rattle / emptyRattle: one-shots; pool: one-shot; click: nozzle press.
