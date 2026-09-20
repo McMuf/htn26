@@ -1,6 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import React, { useEffect, useState } from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { PixelifySans_500Medium, PixelifySans_700Bold } from '@expo-google-fonts/pixelify-sans';
@@ -28,7 +29,8 @@ import { C } from './src/ui/theme';
 
 export default function App() {
   const [ready, setReady] = useState(false);
-  const [launched, setLaunched] = useState(false);
+  const [launched, setLaunched] = useState(false); // the app is mounted underneath…
+  const [launchGone, setLaunchGone] = useState(false); // …and the launch page unmounts once its zoom has faded
   const [fontsLoaded, fontError] = useFonts({ PixelifySans_500Medium, PixelifySans_700Bold, VT323_400Regular });
   useEffect(() => {
     (async () => {
@@ -39,8 +41,17 @@ export default function App() {
     })();
   }, []);
   if (!ready || !(fontsLoaded || fontError)) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
-  if (!launched) return <><LaunchScreen onEnter={() => setLaunched(true)} /><StatusBar style="light" /></>;
-  return <Root />;
+  return (
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      {launched && <Root />}
+      {!launchGone && (
+        <View style={StyleSheet.absoluteFill} pointerEvents={launched ? 'none' : 'auto'}>
+          <LaunchScreen onEnter={() => setLaunched(true)} onDone={() => setLaunchGone(true)} />
+        </View>
+      )}
+      <StatusBar style="light" />
+    </View>
+  );
 }
 
 function Root() {
@@ -97,16 +108,16 @@ function Root() {
 
   return (
     <View style={styles.root}>
-      {tab === 'profile' && <ProfileScreen />}
-      {tab === 'vault' && <VaultScreen />}
+      {tab === 'profile' && <Animated.View style={styles.tab} entering={FadeIn.duration(140)}><ProfileScreen /></Animated.View>}
+      {tab === 'vault' && <Animated.View style={styles.tab} entering={FadeIn.duration(140)}><VaultScreen /></Animated.View>}
       {/* the AR view stays mounted once opened: hiding pauses the session and showing resumes it, so paint keeps its anchors across tabs */}
       {isArSupported ? (visitedCreate && (
         <View style={[StyleSheet.absoluteFill, tab !== 'create' && styles.hidden]} pointerEvents={tab === 'create' ? 'auto' : 'none'}>
           <ArPaintScreen active={tab === 'create' && !sheet} />
         </View>
       )) : tab === 'create' && <PaintScreen active={!sheet} />}
-      {tab === 'explore' && <ExploreScreen />}
-      {tab === 'social' && <SocialScreen />}
+      {tab === 'explore' && <Animated.View style={styles.tab} entering={FadeIn.duration(140)}><ExploreScreen /></Animated.View>}
+      {tab === 'social' && <Animated.View style={styles.tab} entering={FadeIn.duration(140)}><SocialScreen /></Animated.View>}
       <Dock />
       {/* Market and Settings slide up over whatever you were doing (swipe down or X to close) */}
       <Modal visible={!!sheet} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSheet(null)}>
@@ -120,5 +131,6 @@ function Root() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
+  tab: { flex: 1 },
   hidden: { display: 'none' },
 });
