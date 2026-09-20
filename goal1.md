@@ -45,13 +45,35 @@ actually spraying — camera, compass and GPS need the real thing.
 
 ## What's left for you
 
-1. **Deploy `web/`** (Vercel, root directory `web/`). iOS Safari only grants camera and motion
-   over HTTPS, so a phone can't use `localhost` — it has to be the deployed URL or a tunnel.
-2. **Point the deployment at the new Supabase project.** The repo's `web/.env` is already updated,
-   but Vercel bakes its own environment variables in at build time: set `VITE_SUPABASE_URL` and
-   `VITE_SUPABASE_KEY` to the values in `web/.env`, then redeploy. Until then the deployed site
-   still reads the old project and will look empty next to your phone.
-3. **Show the QR** — it's on the landing page of the deployed site.
+The site now has its own branch: **`web-deploy`** — `main` plus the `web/` directory and nothing
+else, so native work can never break the deployed site and merging it never drags the ARCore
+module along. It's pushed:
+<https://github.com/McMuf/htn26/tree/web-deploy>.
+
+In the Vercel project (whoever's account it's on):
+
+1. **Production Branch → `web-deploy`**, **Root Directory → `web`**. This is the step that matters:
+   Vercel defaults to `main`, which has neither the QR flow nor the new backend keys, so a deploy
+   from it serves the old login-required client wired to the project that refuses AR strokes.
+2. **Environment variables:** none needed — the publishable key is committed in
+   `web/.env.production` on that branch. But if `VITE_SUPABASE_*` *are* set in the dashboard, Vite
+   prioritises them over the committed file, so they must hold the new project's values or be
+   deleted.
+3. **Redeploy**, then open the site on a laptop — the landing page carries the QR.
+
+iOS Safari only grants camera and motion over HTTPS, so phones need the deployed URL; `localhost`
+won't do.
+
+**Later web changes** go out with:
+
+```powershell
+git checkout web-deploy
+git checkout adarsh-samsung -- web/    # or whichever branch has the change
+git commit -am "web: ..." && git push
+```
+
+Send me the deployed URL and I'll check what's actually live — which Supabase project the bundle
+points at, and whether the no-login flow made it in.
 
 ## Then: the test that says it's done
 

@@ -9,3 +9,6 @@ Split into two, so they can be finished one at a time:
   optional Cloud Anchors key, installing, and what to test on a real wall.
 
 They're independent; both paint into the same Supabase project.
+
+The deployed website builds from a third branch, **`web-deploy`** (`main` + `web/` only) — see
+goal1.md.
