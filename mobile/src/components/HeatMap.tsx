@@ -23,7 +23,7 @@ export function HeatMap({ canvases, height = 190, interactive = false }: { canva
     return { latitude: loc?.lat ?? c?.lat ?? GEOFENCE.lat, longitude: loc?.lng ?? c?.lng ?? GEOFENCE.lng, latitudeDelta: 0.014, longitudeDelta: 0.014 };
   }, [loc?.lat, loc?.lng, canvases.length]);
   return (
-    <View style={[{ height }, interactive && StyleSheet.absoluteFill]}>
+    <View style={interactive ? styles.fill : { height }}>
       <MapView style={StyleSheet.absoluteFill} userInterfaceStyle="dark" showsUserLocation initialRegion={region}
         scrollEnabled={interactive} zoomEnabled={interactive} rotateEnabled={false} pitchEnabled={false} toolbarEnabled={false}>
         {canvases.map((c) => {
@@ -43,3 +43,6 @@ export function HeatMap({ canvases, height = 190, interactive = false }: { canva
     </View>
   );
 }
+
+/** Interactive = fill whatever it's given; an explicit height would beat absoluteFill's bottom. */
+const styles = StyleSheet.create({ fill: { flex: 1 } });
