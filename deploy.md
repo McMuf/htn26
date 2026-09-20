@@ -182,6 +182,11 @@ from memory · walk to where it was painted", which then snaps onto the wall whe
 plane. That's the same fallback the iPhone uses when relocalisation fails. You can add the key
 later; it costs you one more build.
 
+I tried to do this for you and got one step in: your Google account hasn't accepted the Google
+Cloud Platform terms yet, and accepting an agreement on your behalf isn't something I'll do. Open
+<https://console.cloud.google.com/> once, tick the terms, and either come back to me or follow the
+steps below.
+
 To turn it on:
 
 1. Go to <https://console.cloud.google.com/>, create a project (any name).
