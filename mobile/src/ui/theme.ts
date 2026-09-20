@@ -34,7 +34,6 @@ export const HEAT = [C.bg2, C.purple, C.green, C.greenHi] as const;
 export const F = {
   display: 'PixelifySans_700Bold',
   body: 'PixelifySans_500Medium',
-  mono: 'VT323_400Regular',
   /** Wordmark only: the classic arcade face, whose C can't be mistaken for an O. */
   arcade: 'PressStart2P_400Regular',
 };
@@ -59,13 +58,23 @@ export const BACKDROPS = {
 export type BackdropName = keyof typeof BACKDROPS;
 
 /**
- * Legibility: the pixel faces (Pixelify Sans, VT323) only read well big. Anything under ~16px —
- * labels, captions, meta, HUD subtitles — uses the system face instead, so the arcade look comes
- * from the boxes, colours and headings rather than from text nobody can read.
+ * One face everywhere: Pixelify Sans, bold for anything that carries weight, medium for the rest.
+ * The small sizes get a floor and a little tracking, because that — not the face — is what made
+ * pixel text unreadable before. `weight` picks the cut; never set fontWeight alongside a custom
+ * family or the renderer synthesises its own and the pixel grid goes soft.
  */
-export const ui = (size: number, weight: TextStyle['fontWeight'] = '600', letterSpacing = 0): TextStyle => ({ fontSize: size, fontWeight: weight, letterSpacing });
+export const ui = (size: number, weight: TextStyle['fontWeight'] = '600', letterSpacing = 0): TextStyle => ({
+  fontFamily: Number(weight) >= 700 ? F.display : F.body,
+  fontSize: Math.max(size, 13),
+  letterSpacing: letterSpacing + 0.2,
+});
 /** All-caps section label / chip text. */
-export const uiLabel = (size = 11.5, letterSpacing = 0.9): TextStyle => ({ fontSize: size, fontWeight: '800', letterSpacing, textTransform: 'uppercase' });
+export const uiLabel = (size = 11.5, letterSpacing = 0.9): TextStyle => ({
+  fontFamily: F.display,
+  fontSize: Math.max(size, 12),
+  letterSpacing: letterSpacing + 0.3,
+  textTransform: 'uppercase',
+});
 
 /** Spacing scale. */
 export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20 } as const;
