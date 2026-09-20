@@ -85,7 +85,7 @@ export function useSprayEngine(pose: React.MutableRefObject<Pose>) {
     const p = st.painter;
     const c: Canvas = {
       id: uuid(), lat: loc.lat, lng: loc.lng, heading: wrap360(pose.current.yaw), title: null,
-      author_id: p?.id ?? null, author_name: p?.name ?? 'anon', views: 0, stroke_count: 0, flags: 0, flagged: false,
+      author_id: p?.id ?? null, author_name: p?.name ?? 'anon', views: 0, upvotes: 0, stroke_count: 0, flags: 0, flagged: false,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
     createCanvas(c);

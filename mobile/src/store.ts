@@ -46,6 +46,8 @@ type State = {
   previewStrokes: Record<string, Stroke[]>;
   setPreviewStrokes: (byCanvas: Record<string, Stroke[]>) => void;
   discovered: Record<string, true>;
+  /** canvases you have upvoted. Mirrors the upvotes table so the button can be optimistic. */
+  upvoted: Record<string, true>;
   /** canvas id → local file uri of a photo of that wall (camera + paint), taken in Create. */
   photos: Record<string, string>;
   setPhoto: (canvasId: string, uri: string) => void;
@@ -69,6 +71,8 @@ type State = {
   setStrokes: (canvasId: string, ss: Stroke[]) => void;
   addStroke: (s: Stroke) => boolean;
   markDiscovered: (id: string) => void;
+  setUpvoted: (id: string, on: boolean) => void;
+  setUpvotedMany: (ids: string[]) => void;
   bumpWalls: () => void;
   setOnline: (b: boolean) => void;
   setTab: (t: State['tab']) => void;
@@ -112,6 +116,7 @@ export const useStore = create<State>((set, get) => ({
     return { previewStrokes: { ...st.previewStrokes, ...clean } };
   }),
   discovered: {},
+  upvoted: {},
   photos: {},
   setPhoto: (canvasId, uri) => { const photos = { ...get().photos, [canvasId]: uri }; set({ photos }); persist('photos', photos); },
   deleted: {},
@@ -147,6 +152,16 @@ export const useStore = create<State>((set, get) => ({
     return true;
   },
   markDiscovered: (id) => { const discovered = { ...get().discovered, [id]: true as const }; set({ discovered }); persist('discovered', discovered); },
+  setUpvoted: (id, on) => {
+    const upvoted = { ...get().upvoted };
+    if (on) upvoted[id] = true as const; else delete upvoted[id];
+    set({ upvoted }); persist('upvoted', upvoted);
+  },
+  setUpvotedMany: (ids) => {
+    const upvoted = { ...get().upvoted };
+    for (const id of ids) upvoted[id] = true as const;
+    set({ upvoted }); persist('upvoted', upvoted);
+  },
   bumpWalls: () => set((st) => ({ wallVersion: st.wallVersion + 1 })),
   setOnline: (online) => set({ online }),
   setTab: (tab) => set({ tab }),
@@ -166,11 +181,12 @@ function migrateSettings(s: Settings): Settings {
 
 export async function hydrateStore() {
   try {
-    const [p, s, d, ph, del] = await Promise.all(['painter', 'settings', 'discovered', 'photos', 'deleted'].map((k) => AsyncStorage.getItem(`tagged:${k}`)));
+    const [p, s, d, ph, del, uv] = await Promise.all(['painter', 'settings', 'discovered', 'photos', 'deleted', 'upvoted'].map((k) => AsyncStorage.getItem(`tagged:${k}`)));
     useStore.setState({
       painter: p ? JSON.parse(p) : null,
       settings: migrateSettings({ ...DEFAULT_SETTINGS, ...(s ? JSON.parse(s) : {}) }),
       discovered: d ? JSON.parse(d) : {},
+      upvoted: uv ? JSON.parse(uv) : {},
       photos: ph ? JSON.parse(ph) : {},
       deleted: del ? JSON.parse(del) : {},
     });

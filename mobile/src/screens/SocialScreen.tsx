@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, Platform, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Dimensions, Platform, Share, StyleSheet, Text, View } from 'react-native';
 import { makeImageFromView } from '@shopify/react-native-skia';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -11,7 +11,7 @@ import { PieceImage } from '../ui/StrokeThumb';
 import { haptic } from '../ui/haptics';
 import { C, F, GUTTER, TONES, outline, ui } from '../ui/theme';
 import { useStore } from '../store';
-import { fetchLeaderboard } from '../data/sync';
+import { fetchTopPieces, toggleUpvote, upvoteErrorMessage, type TopPiece } from '../data/sync';
 import { CREWS, colorName, dayStats } from '../lib/economy';
 import { PALETTE } from '../config';
 import type { Painter } from '../types';
@@ -30,9 +30,9 @@ export function SocialScreen() {
   const discovered = useStore((s) => s.discovered);
   const cardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
-  const [board, setBoard] = useState<Painter[]>([]);
+  const [board, setBoard] = useState<TopPiece[]>([]);
   const [loading, setLoading] = useState(false);
-  const loadBoard = useCallback(async () => { setLoading(true); try { setBoard(await fetchLeaderboard()); } catch {} setLoading(false); }, []);
+  const loadBoard = useCallback(async () => { setLoading(true); try { setBoard(await fetchTopPieces(20)); } catch {} setLoading(false); }, []);
   useEffect(() => { loadBoard(); }, [loadBoard]);
 
   const mine = useMemo(() => Object.values(strokes).flat().filter((s) => s.author_id === painter?.id), [strokes, painter?.id]);
@@ -123,7 +123,7 @@ export function SocialScreen() {
       </View>
       <Btn label={sharing ? '…' : 'SHARE TO STORY'} icon="share" tone="green" size="lg" disabled={sharing} onPress={share} />
 
-      <Podium rows={board} me={painter?.id} />
+      <Podium rows={board} me={painter?.id} onVoted={loadBoard} />
 
       <Panel title="YOUR CREW">
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -143,9 +143,18 @@ export function SocialScreen() {
 }
 
 /** Kahoot-style podium: 1st in the middle on the tallest block, then a ranked list. Live from Supabase. */
-function Podium({ rows, me }: { rows: Painter[]; me?: string }) {
+/**
+ * The board: the twenty most-upvoted pieces. Replaces the old painters-by-paint ranking —
+ * the thing being ranked is now the art, not the artist.
+ *
+ * Votes are optimistic here too: the row's count moves on tap, and the whole board is
+ * refetched afterwards so the ordering settles to whatever the server says.
+ */
+function Podium({ rows, me, onVoted }: { rows: TopPiece[]; me?: string; onVoted?: () => void }) {
   const [first, second, third] = rows;
-  const col = (p: Painter | undefined, place: 1 | 2 | 3) => {
+  const pieceName = (p: TopPiece) => p.title?.trim() || `${p.author_name}'s piece`;
+
+  const col = (p: TopPiece | undefined, place: 1 | 2 | 3) => {
     const h = place === 1 ? 96 : place === 2 ? 68 : 52;
     const t = TONES[place === 1 ? 'green' : place === 2 ? 'white' : 'red'];
     return (
@@ -153,9 +162,9 @@ function Podium({ rows, me }: { rows: Painter[]; me?: string }) {
         {p ? (
           <>
             {place === 1 && <PixelIcon name="crown" size={24} color={C.green} alt={C.greenLo} />}
-            <Avatar name={p.name} color={hueOf(p.name)} size={place === 1 ? 52 : 44} />
-            <Text style={styles.pName} numberOfLines={1}>{p.name}</Text>
-            <T v="mono">{Math.round(p.paint_used)}</T>
+            <Avatar name={p.author_name} color={hueOf(p.author_name)} size={place === 1 ? 52 : 44} />
+            <Text style={styles.pName} numberOfLines={1}>{pieceName(p)}</Text>
+            <T v="mono">{p.upvotes}</T>
           </>
         ) : <T v="mono">—</T>}
         <PixelBox fill={t.fill} hi={t.hi} lo={t.lo} depth={4} style={{ width: '100%' }} contentStyle={{ height: h, alignItems: 'center', paddingTop: 8 }}>
@@ -164,21 +173,60 @@ function Podium({ rows, me }: { rows: Painter[]; me?: string }) {
       </View>
     );
   };
+
   return (
-    <Panel title="TOP PAINTERS" right={<T v="eyebrow">LIVE</T>}>
-      {rows.length === 0 ? <T v="sub">No painters yet. Go tag something.</T> : (
+    <Panel title="TOP PIECES" right={<T v="eyebrow">LIVE</T>}>
+      {rows.length === 0 ? <T v="sub">Nothing on the wall yet. Go tag something.</T> : (
         <>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>{col(second, 2)}{col(first, 1)}{col(third, 3)}</View>
-          {rows.slice(3, 10).map((p, i) => (
-            <View key={p.id} style={[styles.line, p.id === me && { backgroundColor: C.line }]}>
+          {rows.slice(3, 20).map((p, i) => (
+            <View key={p.id} style={[styles.line, p.author_id === me && { backgroundColor: C.line }]}>
               <Rank n={i + 4} />
-              <T v="body" style={{ flex: 1, fontWeight: '700' }} numberOfLines={1}>{p.name}</T>
-              <T v="small">{Math.round(p.paint_used)} paint</T>
+              <View style={{ flex: 1 }}>
+                <T v="body" style={{ fontWeight: '700' }} numberOfLines={1}>{pieceName(p)}</T>
+                <T v="small" numberOfLines={1}>by {p.author_name}</T>
+              </View>
+              <VoteButton piece={p} onVoted={onVoted} />
             </View>
           ))}
         </>
       )}
     </Panel>
+  );
+}
+
+/** The vote control on a board row: optimistic, and reconciled from the server's count. */
+function VoteButton({ piece, onVoted }: { piece: TopPiece; onVoted?: () => void }) {
+  const voted = useStore((s) => !!s.upvoted[piece.id]);
+  const setUpvoted = useStore((s) => s.setUpvoted);
+  const [count, setCount] = useState(piece.upvotes);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setCount(piece.upvotes); }, [piece.id, piece.upvotes]);
+
+  const press = async () => {
+    if (busy) return;
+    setBusy(true);
+    const wasVoted = voted;
+    const wasCount = count;
+    setUpvoted(piece.id, !wasVoted);
+    setCount(Math.max(0, wasCount + (wasVoted ? -1 : 1)));
+    haptic.tap();
+    try {
+      const res = await toggleUpvote(piece.id);
+      setUpvoted(piece.id, res.voted);
+      setCount(res.count);
+      onVoted?.();
+    } catch (e) {
+      setUpvoted(piece.id, wasVoted);
+      setCount(wasCount);
+      Alert.alert('Could not vote', upvoteErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Btn label={String(count)} icon="flame" tone={voted ? 'green' : 'tile'} size="sm" onPress={press} />
   );
 }
 

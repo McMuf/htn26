@@ -11,7 +11,8 @@ import { BACKDROPS, C, GUTTER, uiLabel } from '../ui/theme';
 import { mix } from '../ui/color';
 import { seededRng } from '../lib/ids';
 import { useStore } from '../store';
-import { fetchPreviewStrokes, reportCanvas } from '../data/sync';
+import { fetchPreviewStrokes, reportCanvas, toggleUpvote, upvoteErrorMessage } from '../data/sync';
+import { haptic } from '../ui/haptics';
 import { isMock } from '../data/mock';
 import { timeAgo } from './DiscoveryOverlay';
 import type { Canvas as CanvasT, Stroke } from '../types';
@@ -36,6 +37,31 @@ export function PieceDetail({ canvas: c, onClose }: { canvas: CanvasT; onClose: 
   const discovered = useStore((s) => s.discovered[c.id]);
   const me = useStore((s) => s.painter);
   const photo = useStore((s) => s.photos[c.id]); // the painter's own shot of this wall, if they took one
+  const voted = useStore((s) => !!s.upvoted[c.id]);
+  const setUpvoted = useStore((s) => s.setUpvoted);
+  const [votes, setVotes] = useState(c.upvotes ?? 0);
+  const [voting, setVoting] = useState(false);
+  useEffect(() => { setVotes(c.upvotes ?? 0); }, [c.id, c.upvotes]);
+  // Optimistic, like the found card: the number moves on tap and rolls back if the server refuses.
+  const vote = async () => {
+    if (voting) return;
+    setVoting(true);
+    const wasVoted = voted, wasVotes = votes;
+    setUpvoted(c.id, !wasVoted);
+    setVotes(Math.max(0, wasVotes + (wasVoted ? -1 : 1)));
+    haptic.tap();
+    try {
+      const res = await toggleUpvote(c.id);
+      setUpvoted(c.id, res.voted);
+      setVotes(res.count);
+    } catch (e) {
+      setUpvoted(c.id, wasVoted);
+      setVotes(wasVotes);
+      Alert.alert('Could not vote', upvoteErrorMessage(e));
+    } finally {
+      setVoting(false);
+    }
+  };
   useEffect(() => { if (!isMock(c.id)) fetchPreviewStrokes([c.id]).catch(() => {}); }, [c.id]);
   const paint = strokes.reduce((a, s) => a + s.paint_used, 0);
   const colors = [...new Set(strokes.map((s) => s.color))].slice(0, 8);
@@ -61,8 +87,14 @@ export function PieceDetail({ canvas: c, onClose }: { canvas: CanvasT; onClose: 
             </View>
           ) : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Tile n={c.views} label="views" /><Tile n={c.stroke_count} label="strokes" /><Tile n={Math.round(paint)} label="paint" /><Tile n={colors.length} label="colours" />
+            <Tile n={votes} label="upvotes" /><Tile n={c.views} label="views" /><Tile n={c.stroke_count} label="strokes" /><Tile n={Math.round(paint)} label="paint" />
           </View>
+          <Btn
+            label={voted ? `UPVOTED · ${votes}` : `UPVOTE · ${votes}`}
+            icon="flame"
+            tone={voted ? 'green' : 'purple'}
+            onPress={vote}
+          />
           <Panel title="LOCATION">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <PixelIcon name="pin" size={24} color={C.white} />

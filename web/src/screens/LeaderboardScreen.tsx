@@ -1,26 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchLeaderboard } from '../data/sync';
+import { fetchTopPieces, toggleUpvote, type TopPiece } from '../data/sync';
 import { useStore } from '../store';
-import type { Painter } from '../types';
+
 
 /**
- * Port of the native LeaderboardScreen. Top painters by paint used, refreshed every 8 s. When the
- * board can't be reached we fall back to showing just the signed-in painter (same as native); the
- * pull-to-refresh control becomes a refresh button on the web.
+ * Port of the native board. The twenty most-upvoted pieces, refreshed every 8 s — the thing being
+ * ranked is the art, not the artist. Voting is optimistic and reconciled from the server's count,
+ * and the pull-to-refresh control is a refresh button on the web.
  */
 
 const REFRESH_MS = 8_000;
 
 export function LeaderboardScreen() {
   const me = useStore((s) => s.painter);
-  const [rows, setRows] = useState<Painter[]>([]);
+  const [rows, setRows] = useState<TopPiece[]>([]);
   const [loading, setLoading] = useState(true); // first fetch starts on mount
   const [err, setErr] = useState<string | null>(null);
   const alive = useRef(true);
 
   const load = useCallback(async () => {
     try {
-      const next = await fetchLeaderboard();
+      const next = await fetchTopPieces(20);
       if (!alive.current) return;
       setRows(next);
       setErr(null);
@@ -40,14 +40,28 @@ export function LeaderboardScreen() {
     return () => { alive.current = false; window.clearInterval(id); };
   }, [load, refresh]);
 
-  const data = rows.length ? rows : me ? [me] : [];
-  const isMe = (p: Painter) => !!me && (p.id === me.id || p.name === me.name);
+  const data = rows;
+  const isMe = (p: TopPiece) => !!me && p.author_id === me.id;
+  const pieceName = (p: TopPiece) => p.title?.trim() || `${p.author_name}'s piece`;
+
+  // Optimistic: move the number now, reconcile with the server, roll back if it refuses.
+  const vote = async (p: TopPiece) => {
+    const before = rows;
+    setRows((rs) => rs.map((r) => (r.id === p.id ? { ...r, voted: !r.voted, upvotes: Math.max(0, r.upvotes + (r.voted ? -1 : 1)) } : r)));
+    try {
+      const res = await toggleUpvote(p.id);
+      setRows((rs) => rs.map((r) => (r.id === p.id ? { ...r, voted: res.voted, upvotes: res.count } : r)));
+      void load();
+    } catch {
+      setRows(before);
+    }
+  };
 
   return (
     <div className="tg-board-root">
       <style>{BOARD_CSS}</style>
       <div className="tg-board-head">
-        <h1 className="tg-board-h1">TOP PAINTERS</h1>
+        <h1 className="tg-board-h1">TOP PIECES</h1>
         <button
           type="button"
           className={`tg-board-refresh${loading ? ' is-loading' : ''}`}
@@ -57,17 +71,27 @@ export function LeaderboardScreen() {
           ↻
         </button>
       </div>
-      {err && <div className="tg-board-err">Leaderboard offline ({err}) — showing you only</div>}
+      {err && <div className="tg-board-err">Board offline ({err})</div>}
       {data.length === 0 ? (
-        <div className="tg-board-empty">No painters yet. Go tag something.</div>
+        <div className="tg-board-empty">Nothing on the wall yet. Go tag something.</div>
       ) : (
         <ol className="tg-board-list">
           {data.map((p, i) => (
             <li key={p.id} className={`tg-board-row${isMe(p) ? ' is-me' : ''}`}>
               <span className="tg-board-rank">{i + 1}</span>
-              <span className="tg-board-name">{p.name}</span>
-              <span className="tg-board-stat">{Math.round(p.paint_used)} paint</span>
-              <span className="tg-board-stat">{p.strokes} strokes</span>
+              <span className="tg-board-name">
+                {pieceName(p)}
+                <span className="tg-board-by"> by {p.author_name}</span>
+              </span>
+              <span className="tg-board-stat">{p.views} views</span>
+              <button
+                type="button"
+                className={`tg-board-vote${p.voted ? ' is-on' : ''}`}
+                onClick={() => void vote(p)}
+                aria-pressed={p.voted}
+                aria-label={`${p.voted ? 'Remove your upvote from' : 'Upvote'} ${pieceName(p)}`}>
+                ▲ {p.upvotes}
+              </button>
             </li>
           ))}
         </ol>
@@ -77,6 +101,10 @@ export function LeaderboardScreen() {
 }
 
 const BOARD_CSS = `
+.tg-board-by{opacity:.55;font-weight:400}
+.tg-board-vote{appearance:none;border:1px solid #ffffff22;background:#ffffff0d;color:#fff;font:inherit;font-weight:700;padding:6px 10px;border-radius:8px;cursor:pointer;min-width:58px}
+.tg-board-vote:hover{background:#ffffff1a}
+.tg-board-vote.is-on{background:#59d92d;border-color:#59d92d;color:#0b2a05}
 .tg-board-root{box-sizing:border-box;width:100%;height:100vh;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:#0b0b0f;color:#fff;padding:calc(env(safe-area-inset-top,0px) + 28px) 16px calc(env(safe-area-inset-bottom,0px) + 110px)}
 .tg-board-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .tg-board-h1{margin:0;color:#fff;font-weight:900;font-size:22px;letter-spacing:3px}
