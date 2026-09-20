@@ -47,7 +47,9 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "supabase:check": "node ../scripts/use_supabase.mjs --check",
-    "supabase:use": "node ../scripts/use_supabase.mjs"
+    "supabase:use": "node ../scripts/use_supabase.mjs",
+    "shake:off": "node ../scripts/dev_menu_shake.mjs off",
+    "shake:on": "node ../scripts/dev_menu_shake.mjs on"
   },
   "private": true
 }

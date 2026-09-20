@@ -92,6 +92,29 @@ adb shell am start -a android.intent.action.VIEW -d "tagged://expo-development-c
 dependencies, or adds the ARCore key.** After a `git pull`, the tell that you need one is the app
 crashing on launch with `Cannot find native module '<Something>'`.
 
+## 2a. The shake gesture, in a development build
+
+Shaking charges the can — and in a **dev** build expo-dev-menu listens for the same gesture and
+wins, so you shake the can and get the debug menu. Turn its gesture off once per install:
+
+```powershell
+cd mobile
+npm run shake:off       # npm run shake:on puts it back
+```
+
+You can still open the dev menu from the notification shade, or with
+`adb shell input keyevent 82`.
+
+This can't be fixed from app code: expo-dev-menu reads `motionGestureEnabled` from its own
+SharedPreferences with a hard-coded `true` default — there's no AndroidManifest meta-data key for
+it the way there is for `EXDevMenuShowFloatingActionButton`, and nothing is exposed to JavaScript.
+So `scripts/dev_menu_shake.mjs` writes the preference into the app's data directory over adb,
+which `run-as` allows because a debug build is debuggable.
+
+It survives `expo run:android` and `adb install -r`; a full **uninstall** wipes app data, so re-run
+it after one. **None of this applies to a release build** — the dev menu isn't in that binary and
+the shake is yours alone, which is the better answer for a demo.
+
 ## 3. The ARCore API key — so saved pieces come back exactly
 
 ARCore has no equivalent of ARKit's ARWorldMap, so on Android a piece is saved as **Cloud
@@ -217,6 +240,15 @@ and that is all anyone can say for it. So:
   laptop. It only matters for sharing paint between devices, not within your own session.
 - **Depth, not LiDAR.** The S25 estimates depth from motion, so blank white walls still need a
   slow sweep; textured walls lock in a second or two.
+- **Planes only, and only floors and walls.** ARCore will also hand back depth points and oriented
+  feature points, and the module used to accept them. Without a time-of-flight sensor that depth is
+  inferred from motion, so those hits land on people, glass and chair backs — and they counted as
+  "locked", which is how the reticle reported a surface half a metre away while aimed down a
+  corridor. They're now rejected: if ARCore hasn't resolved real geometry the reticle stays off and
+  the HUD says *aim at a wall or floor*. Ceilings are rejected too. The cost is that a featureless
+  wall needs a moment of sweeping before anything locks; the gain is that what locks is real. The
+  iPhone keeps its equivalent fallback, because on a LiDAR device the mesh is measured, not
+  guessed.
 - **Floor pieces painted in the first ~2 seconds**, before the compass locks, can rotate slightly
   when ARCore later refines the floor plane. Walls aren't affected.
 - **Cloud Anchors need line-of-sight scanning.** Hosting fails if the wall was barely looked at;
@@ -238,6 +270,8 @@ and that is all anyone can say for it. So:
 | Camera stays black on the Create tab | Camera permission denied — Settings → Apps → Fresco → Permissions |
 | `Cloud Anchors not configured` in the logs | No ARCore API key — §3, or live with placed-from-memory |
 | Volume keys change the volume instead of spraying | The interceptor isn't installed; toggle **Volume buttons also spray** off and on in Settings |
+| Shaking opens the dev menu instead of charging the can | expo-dev-menu owns that gesture in a dev build — `npm run shake:off` (§2a) |
+| Reticle won't lock on a wall you're facing | By design since the depth-point fallback was removed (§7): ARCore needs an actual plane. Sweep the wall slowly; a blank one takes a few seconds |
 | Paint is faint or hazy | Shouldn't happen — a Skia paint-alpha bug that did exactly this was fixed. If you see it, say so |
 | Strokes don't reach the iPhone | Backend, not Android — [goal1.md](goal1.md) |
 | Gradle can't find the SDK on a new PC | `ANDROID_HOME` / `JAVA_HOME` aren't set — §4 |

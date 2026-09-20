@@ -21,10 +21,8 @@ import com.google.ar.core.Anchor
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.Camera
 import com.google.ar.core.Config
-import com.google.ar.core.DepthPoint
 import com.google.ar.core.Frame
 import com.google.ar.core.Plane
-import com.google.ar.core.Point
 import com.google.ar.core.ResolveCloudAnchorFuture
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingFailureReason
@@ -56,9 +54,10 @@ import kotlin.math.min
  * ARCore twin of ArPaintView.swift — same props, events and functions, so the JS screen is shared.
  *
  * DETECTION: horizontal + vertical plane finding, plus ARCore's Depth API (depth-from-motion on
- * phones without a depth sensor, e.g. Galaxy S25) so blank walls are hit-testable before a plane is
- * found. The reticle hit-tests detected plane polygons first, then a plane's extension within
- * 0.9 m of what has been seen, then depth points / oriented feature points.
+ * phones without a depth sensor, e.g. Galaxy S25), which lets planes form on walls too blank to
+ * give up feature points. The reticle hit-tests detected plane polygons first, then a plane's
+ * extension within 0.9 m of what has been seen — and nothing else. Only floors and walls count;
+ * ceilings, and the depth/feature points ARCore also offers, are rejected. See [raycastCenter].
  *
  * ANCHORING: every quad rides an ARCore anchor (attached to its plane when it has one), is snapped
  * onto a real plane when one appears (< 15 cm, < 14°) and re-snapped as ARCore refines it.
@@ -551,6 +550,8 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       planeRenderer.begin()
       for ((p, seen) in planes) {
         if (p.trackingState != TrackingState.TRACKING || p.subsumedBy != null) continue
+        // don't draw a grid on something the reticle refuses to paint — a ceiling reads as a target
+        if (p.type == Plane.Type.HORIZONTAL_DOWNWARD_FACING) continue
         val fade = min(1f, (now - seen) / 350f)
         val opacity = (if (p == aimedPlane) 0.55f else 0.16f) * fade
         planeRenderer.draw(viewProj, M.fromPose(p.centerPose), p.polygon, p.type == Plane.Type.VERTICAL, opacity)
@@ -668,6 +669,8 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
   /** Quads without a real plane (estimated hits, or placed from memory) adopt a close, parallel plane. Loose quads accept a wider gap. */
   private fun tryAdopt(q: PaintQuad, plane: Plane, now: Long): Boolean {
     if (q.plane != null || !q.placed) return false
+    // a piece placed from memory must not get pulled onto a ceiling, the one plane we never paint
+    if (plane.type == Plane.Type.HORIZONTAL_DOWNWARD_FACING) return false
     val pn = planeNormal(plane)
     if ((pn dot q.normal) <= (if (q.loose) 0.94f else 0.97f)) return false // ~20° / ~14°
     val pc = planeCenter(plane)
@@ -691,12 +694,31 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
 
   // ---- hit testing -----------------------------------------------------------------------
 
-  /** Detected plane polygon first, then the extension of a known plane (so a whole wall is paintable once any patch is found), then depth / feature points. */
+  /**
+   * Real planes only, and only the two kinds you can paint: floors and walls. A detected polygon
+   * first, then the extension of a known plane, so a whole wall is paintable once any patch of it
+   * is found.
+   *
+   * There used to be a third pass taking ARCore's DepthPoint and feature-point hits. On a phone
+   * with no time-of-flight sensor the depth map is inferred from motion, so those hits land on
+   * people, glass, the back of a chair — anything with parallax — and `locked` counted them as a
+   * surface. That is how the reticle came to read "0.5 M FROM THE SURFACE" while aimed down a
+   * corridor, and why paint went onto things that are not walls. A point is not a plane: if ARCore
+   * hasn't resolved actual geometry we now report no hit, and the HUD says "aim at a wall or
+   * floor" instead of lying. The iPhone keeps its equivalent fallback because on a LiDAR device
+   * that mesh is measured rather than guessed.
+   *
+   * Depth stays enabled in the session config — ARCore uses it to find planes on surfaces too
+   * blank to yield feature points, which is exactly the wall this is meant to work on.
+   */
   private fun raycastCenter(frame: Frame): Hit? {
     if (viewportW == 0) return null
     val hits = try { frame.hitTest(viewportW / 2f, viewportH / 2f) } catch (e: Exception) { return null }
+    // A ceiling is a plane you can neither reach nor meant to paint; ARCore calls it downward-facing.
+    fun paintable(p: Plane) = p.type == Plane.Type.VERTICAL || p.type == Plane.Type.HORIZONTAL_UPWARD_FACING
     fun usable(p: Plane, hitPos: V3) =
-      p.trackingState == TrackingState.TRACKING && p.subsumedBy == null && ((cameraPos - hitPos) dot planeNormal(p)) > 0f
+      p.trackingState == TrackingState.TRACKING && p.subsumedBy == null && paintable(p) &&
+        ((cameraPos - hitPos) dot planeNormal(p)) > 0f
 
     for (h in hits) {
       val p = h.trackable as? Plane ?: continue
@@ -712,17 +734,6 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       val dx = max(0f, abs(l.x) - p.extentX / 2)
       val dz = max(0f, abs(l.z) - p.extentZ / 2)
       if (hypot(dx, dz) < 0.9f) return Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL)
-    }
-    for (h in hits) {
-      val tr = h.trackable
-      if (tr is DepthPoint) {
-        val t = M.fromPose(h.hitPose)
-        return Hit(t, null, HitKind.MESH, M.isVertical(t))
-      }
-      if (tr is Point && tr.orientationMode == Point.OrientationMode.ESTIMATED_SURFACE_NORMAL) {
-        val t = M.fromPose(h.hitPose)
-        return Hit(t, null, HitKind.ESTIMATED, M.isVertical(t))
-      }
     }
     return null
   }
