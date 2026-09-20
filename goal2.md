@@ -102,16 +102,23 @@ should outlive the demo:
 
 ## 3. Install and run
 
-The APK is already built, so with the phone plugged in, from `mobile/`:
+The Expo app lives in `mobile/` since the repo was split, so the dev server runs from there. The
+debug APK built before the split is still at the **repo root**, not under `mobile/` — and it is a
+*dev client*, so the ARCore module is compiled into it while the JavaScript comes from Metro at
+run time. That makes it current regardless of the move. Fastest path, phone plugged in:
 
 ```powershell
 adb install -r android\app\build\outputs\apk\debug\app-debug.apk
+cd mobile
 npx expo start --dev-client      # then open Fresco on the phone
 ```
 
-Or build and install in one go — also what you want after changing native code:
+Or build from scratch in the new location — also what you want after changing native code. This
+writes `mobile/android/`:
 
 ```powershell
+cd mobile
+npx expo prebuild -p android --no-install
 npx expo run:android --device
 ```
 
