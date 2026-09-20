@@ -47,6 +47,9 @@ import type { Canvas, Stroke } from '../types';
  * against its own maps and places the other platform's strokes from the painter's viewpoint.
  */
 const RELOC_TIMEOUT_MS = 15000;
+/** How much of a wall's history ARKit is asked to rebuild when you walk up to it (see arStrokes). */
+const MAX_REPLAY_QUADS = 6;
+const MAX_REPLAY_STROKES = 80;
 
 export function ArPaintScreen({ active = true }: { active?: boolean }) {
   useKeepAwake();
@@ -202,8 +205,27 @@ export function ArPaintScreen({ active = true }: { active?: boolean }) {
     viewRef.current?.addStrokes([stroke]).catch(() => {});
   }), [painter?.id]);
 
-  const arStrokes = (c: Canvas | null) => (c ? (useStore.getState().strokes[c.id] ?? []).filter((s) => s.anchor_id && s.transform) : [])
-    .map((s) => ({ id: s.id, anchorId: s.anchor_id!, transform: s.transform!, color: s.color, points: s.points as number[][], viewer: s.viewer ?? undefined }));
+  /**
+   * Strokes to hand back to ARKit for a canvas. Every distinct anchor becomes its own quad with its
+   * own texture, which is tens of megabytes each, so a wall with a day of painting on it can't be
+   * replayed whole — the app gets killed for memory before it draws a frame. Newest anchors win.
+   */
+  const arStrokes = (c: Canvas | null) => {
+    const all = (c ? useStore.getState().strokes[c.id] ?? [] : []).filter((s) => s.anchor_id && s.transform);
+    const keep: Stroke[] = [];
+    const anchors = new Set<string>();
+    for (let i = all.length - 1; i >= 0; i--) { // newest first
+      const s = all[i];
+      if (!anchors.has(s.anchor_id!)) {
+        if (anchors.size >= MAX_REPLAY_QUADS) continue;
+        anchors.add(s.anchor_id!);
+      }
+      keep.push(s);
+      if (keep.length >= MAX_REPLAY_STROKES) break;
+    }
+    return keep.reverse() // back to paint order, so later strokes sit on top
+      .map((s) => ({ id: s.id, anchorId: s.anchor_id!, transform: s.transform!, color: s.color, points: s.points as number[][], viewer: s.viewer ?? undefined }));
+  };
 
   /** No usable world map: fresh session, strokes placed from the painter's viewpoint relative to ours. */
   const placeApprox = useCallback(async (c: Canvas) => {
