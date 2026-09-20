@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import {
-  CANVAS_JOIN_RADIUS_M, DWELL_POOL_SECONDS, DWELL_RADIUS_DEG, GEOFENCE, PAINT_COST_PER_SEC, PAINT_EMPTY_THRESHOLD,
+  CANVAS_JOIN_RADIUS_M, CANVAS_JOIN_YAW_DEG, DWELL_POOL_SECONDS, DWELL_RADIUS_DEG, GEOFENCE, PAINT_COST_PER_SEC, PAINT_EMPTY_THRESHOLD,
   PAINT_LOW_THRESHOLD, PAINT_MAX, PAINT_REGEN_PER_SEC, SHAKE_ACCEL_THRESHOLD, SHAKE_DECAY_SECONDS, SHAKE_GAIN_PER_EVENT,
   SHAKE_MIN_TO_SPRAY,
 } from '../config';
@@ -98,14 +98,25 @@ export function useSprayEngine(): SprayEngine {
     return null;
   };
 
+  /**
+   * The wall this stroke belongs to: one near you that you are *facing*, or a new one.
+   *
+   * Nearness alone isn't enough now that a wall is a finite surface pointing one way. Join the
+   * canvas behind you and every dab lands off its edge, which reads as the app refusing to paint.
+   */
   const pickCanvas = (): Canvas | null => {
     const st = useStore.getState();
     const loc = st.location; if (!loc) return null;
-    let best: Canvas | null = null, bestD = Infinity;
+    const yaw = getPose().yaw;
+    let best: Canvas | null = null, bestScore = Infinity;
     for (const c of Object.values(st.canvases)) {
       if (c.flagged) continue;
       const d = haversineM(loc.lat, loc.lng, c.lat, c.lng);
-      if (d < CANVAS_JOIN_RADIUS_M && d < bestD) { best = c; bestD = d; }
+      if (d >= CANVAS_JOIN_RADIUS_M) continue;
+      const off = Math.abs(wrapDiff(c.heading, yaw));
+      if (off > CANVAS_JOIN_YAW_DEG) continue; // that one faces another way — it isn't this wall
+      const score = d + off * 0.1; // near and square-on beats near and oblique
+      if (score < bestScore) { best = c; bestScore = score; }
     }
     if (best) return best;
     const p = st.painter;

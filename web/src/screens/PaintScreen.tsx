@@ -274,7 +274,7 @@ export function PaintScreen({ active, locationStatus }: Props) {
           <DiscoveryOverlay d={discovery} onReport={onReport} />
           <div className="hud-stack">
             {ui.blocker ? <BlockerBanner blocker={ui.blocker} />
-              : ui.offWall ? <Line title="AIM AT THE WALL" sub="THE PIECE IS THE FLAT SURFACE IN FRONT OF YOU" />
+              : ui.offWall ? <Line title="THAT'S PAST THE EDGE OF THIS WALL" sub="TURN BACK — OR LET GO AND SPRAY AGAIN TO START A NEW ONE" />
               : <WallChip state={wallState} />}
           </div>
           {tools && <ToolsTray onClose={() => setTools(false)} />}

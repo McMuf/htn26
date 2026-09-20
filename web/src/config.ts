@@ -27,6 +27,12 @@ export const WALL_PITCH_RANGE = 40;
 
 // ---- canvases / geo --------------------------------------------------------
 export const CANVAS_JOIN_RADIUS_M = 15;
+/**
+ * You only join a wall you are actually looking at. A canvas is a finite surface facing one way,
+ * so the nearest one can easily be the wall behind you — join that and every dab lands off its
+ * edge. Past this, spraying starts a new wall facing where you stand.
+ */
+export const CANVAS_JOIN_YAW_DEG = 45;
 export const CANVAS_VISIBLE_RADIUS_M = 35;
 export const DISCOVERY_SHIMMER_RADIUS_M = 80;
 export const DISCOVERED_RADIUS_M = 14;
