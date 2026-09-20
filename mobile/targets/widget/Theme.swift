@@ -69,3 +69,24 @@ struct SegBar: View {
     .padding(2).background(T.ink).frame(height: height + 4)
   }
 }
+
+/// The app's CRT backdrop: a posterised purple gradient with ordered-dither seams, for widget backgrounds.
+struct Bands: View {
+  var bands = 7
+  var body: some View {
+    GeometryReader { g in
+      let h = g.size.height / CGFloat(bands)
+      Canvas { ctx, _ in
+        for i in 0..<bands {
+          let t = Double(i) / Double(bands - 1)
+          let c = Color(red: 0.227 + (0.071 - 0.227) * t, green: 0.102 + (0.031 - 0.102) * t, blue: 0.541 + (0.169 - 0.541) * t) // #3a1a8a -> #12082b
+          ctx.fill(Path(CGRect(x: 0, y: CGFloat(i) * h, width: g.size.width, height: h + 1)), with: .color(c))
+          if i > 0 { // dither seam: next band pokes into the previous one in a checker
+            var x: CGFloat = 0
+            while x < g.size.width { ctx.fill(Path(CGRect(x: x, y: CGFloat(i) * h - 3, width: 3, height: 3)), with: .color(c)); x += 6 }
+          }
+        }
+      }
+    }
+  }
+}

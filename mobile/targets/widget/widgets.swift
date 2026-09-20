@@ -95,6 +95,34 @@ struct Swatch: View {
   }
 }
 
+/// A row for one hotspot: heat chip, name, distance + bearing.
+struct SpotRow: View {
+  let s: HeatSpot
+  var body: some View {
+    HStack(spacing: 8) {
+      Notched(n: 2).fill(heatColor(s.w)).frame(width: 10, height: 10).overlay(Notched(n: 2).stroke(T.ink, lineWidth: 1.5))
+      Text(s.n).font(.system(size: 11, weight: .heavy)).foregroundStyle(.white).lineLimit(1)
+      Spacer(minLength: 4)
+      Image(systemName: "location.north.fill").font(.system(size: 8, weight: .bold)).rotationEffect(.degrees(Double(s.b))).foregroundStyle(T.dim)
+      Text(s.d < 1000 ? "\(s.d) m" : String(format: "%.1f km", Double(s.d) / 1000)).font(.system(size: 10, weight: .bold)).foregroundStyle(T.dim).monospacedDigit()
+      Caps(text: heatLabel(s.w), color: heatColor(s.w), size: 7)
+    }
+  }
+}
+
+/// Header strip shared by the home-screen families: wordmark, tag, streak.
+struct HeaderStrip: View {
+  let entry: CanEntry
+  var body: some View {
+    HStack(spacing: 6) {
+      Caps(text: "COSPRAY", size: 10)
+      Text(entry.tag).font(.system(size: 9, weight: .bold)).foregroundStyle(T.dim).lineLimit(1)
+      Spacer()
+      Caps(text: "\(entry.streak) DAY STREAK", color: T.dim, size: 8)
+    }
+  }
+}
+
 struct PaintCanView: View {
   var entry: CanEntry
   @Environment(\.widgetFamily) var family
@@ -103,55 +131,86 @@ struct PaintCanView: View {
     entry.shake < 12 ? "shake the can" : (min(entry.paintA, entry.paintB) < 18 ? "running low…" : "ready to spray")
   }
   var nearest: HeatSpot? { entry.heat?.nearest }
+  var top: [HeatSpot] { Array((entry.heat?.spots ?? []).sorted { $0.d < $1.d }.prefix(3)) }
 
   var body: some View {
     Group {
       switch family {
       case .systemMedium: medium
+      case .systemLarge: large
       case .accessoryRectangular: lockRect
       case .accessoryCircular: lockCircle
       case .accessoryInline: Text("🎨 \(Int(entry.paintA))% · \(Int(entry.paintB))% · 🔥\(entry.streak)")
       default: small
       }
     }
-    .containerBackground(for: .widget) { T.bg }
+    .containerBackground(for: .widget) { Bands() }
   }
 
-  /// Small: the nearest hotspot, then your two colours.
+  /// Small: the radar edge to edge, the nearest spot on a plate at the bottom.
   var small: some View {
-    VStack(alignment: .leading, spacing: 5) {
-      HStack { Caps(text: "NEAREST"); Spacer(); Text("🔥\(entry.streak)").font(.system(size: 9, weight: .bold)).foregroundStyle(.white) }
-      NearestView(spot: nearest)
-      Spacer(minLength: 0)
-      HStack(spacing: 8) {
-        Swatch(color: entry.colorA, label: "A · \(Int(entry.paintA))%", name: entry.nameA, size: 18)
-        Swatch(color: entry.colorB, label: "B · \(Int(entry.paintB))%", name: entry.nameB, size: 18)
+    ZStack(alignment: .bottom) {
+      RadarView(heat: entry.heat, density: 22, showScale: false)
+      VStack(alignment: .leading, spacing: 2) {
+        if let n = nearest {
+          HStack(spacing: 4) {
+            Notched(n: 2).fill(heatColor(n.w)).frame(width: 8, height: 8)
+            Text(n.n).font(.system(size: 11, weight: .heavy)).foregroundStyle(.white).lineLimit(1)
+          }
+          HStack(spacing: 4) {
+            Image(systemName: "location.north.fill").font(.system(size: 8, weight: .bold)).rotationEffect(.degrees(Double(n.b))).foregroundStyle(heatColor(n.w))
+            Text("\(n.d) m \(compass(n.b))").font(.system(size: 10, weight: .bold)).foregroundStyle(T.dim).monospacedDigit()
+            Spacer()
+            Caps(text: heatLabel(n.w), color: heatColor(n.w), size: 7)
+          }
+        } else {
+          Caps(text: "COSPRAY", size: 9)
+          Text("no pieces nearby yet").font(.system(size: 10, weight: .semibold)).foregroundStyle(T.dim)
+        }
+      }
+      .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+      .background(Notched(n: 3).fill(T.ink.opacity(0.92)))
+      .padding(6)
+    }
+    .padding(-4) // let the radar bleed to the container edge
+  }
+
+  /// Medium: radar hero on the left, can status on the right.
+  var medium: some View {
+    HStack(spacing: 10) {
+      RadarView(heat: entry.heat, density: 24).aspectRatio(1, contentMode: .fit)
+      VStack(alignment: .leading, spacing: 6) {
+        HeaderStrip(entry: entry)
+        Gauge(value: entry.paintA, color: entry.colorA, label: entry.nameA.uppercased(), refillAt: entry.refillAtA)
+        Gauge(value: entry.paintB, color: entry.colorB, label: entry.nameB.uppercased(), refillAt: entry.refillAtB)
+        Spacer(minLength: 0)
+        if let n = nearest { SpotRow(s: n) } else { Caps(text: status, color: T.dim, size: 8) }
       }
     }
   }
 
-  /// Medium: the radar is the hero on the left; can status on the right.
-  var medium: some View {
-    HStack(spacing: 10) {
-      RadarView(heat: entry.heat)
-      VStack(alignment: .leading, spacing: 5) {
-        HStack { Caps(text: "COSPRAY"); Spacer(); Text("🔥\(entry.streak)").font(.system(size: 9, weight: .bold)).foregroundStyle(.white) }
-        HStack(spacing: 8) {
-          Swatch(color: entry.colorA, label: "A", name: entry.nameA, size: 16)
-          Swatch(color: entry.colorB, label: "B", name: entry.nameB, size: 16)
+  /// Large: a wide radar across the top, then cans and the closest three spots.
+  var large: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HeaderStrip(entry: entry)
+      RadarView(heat: entry.heat, density: 30).frame(height: 168)
+      HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
+          Gauge(value: entry.paintA, color: entry.colorA, label: entry.nameA.uppercased(), refillAt: entry.refillAtA)
+          Gauge(value: entry.paintB, color: entry.colorB, label: entry.nameB.uppercased(), refillAt: entry.refillAtB)
         }
-        Gauge(value: entry.paintA, color: entry.colorA, label: entry.nameA.uppercased(), refillAt: entry.refillAtA)
-        Gauge(value: entry.paintB, color: entry.colorB, label: entry.nameB.uppercased(), refillAt: entry.refillAtB)
-        Spacer(minLength: 0)
-        if let n = nearest {
-          HStack(spacing: 4) {
-            Image(systemName: "location.north.fill").font(.system(size: 8, weight: .bold)).rotationEffect(.degrees(Double(n.b))).foregroundStyle(heatColor(n.w))
-            Text("\(n.n.uppercased()) · \(n.d) M").font(.system(size: 8, weight: .heavy)).foregroundStyle(T.dim).lineLimit(1)
-          }
-        } else {
-          Text(status.uppercased()).font(.system(size: 8, weight: .heavy)).foregroundStyle(T.dim).lineLimit(1)
-        }
+        VStack(alignment: .leading, spacing: 2) {
+          Caps(text: "CAN", color: T.dim, size: 8)
+          SegBar(value: entry.shake, color: entry.shake < 12 ? T.purpleHi : T.green, segs: 8, height: 7)
+          Text(status.uppercased()).font(.system(size: 8, weight: .heavy)).tracking(0.5).foregroundStyle(T.dim).lineLimit(1)
+        }.frame(width: 96)
       }
+      VStack(alignment: .leading, spacing: 5) {
+        Caps(text: "NEAREST PIECES", size: 8)
+        if top.isEmpty { Text("nothing painted near you yet — go first").font(.system(size: 10, weight: .semibold)).foregroundStyle(T.dim) }
+        ForEach(top) { SpotRow(s: $0) }
+      }
+      Spacer(minLength: 0)
     }
   }
 
@@ -191,7 +250,7 @@ struct PaintCanWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: kind, provider: CanProvider()) { entry in PaintCanView(entry: entry) }
       .configurationDisplayName("Cospray radar")
-      .description("Painting activity near you, your colours, paint left and streak.")
-      .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular, .accessoryCircular, .accessoryInline])
+      .description("Painting activity near you as a pixel radar, the nearest pieces, your cans and streak.")
+      .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryRectangular, .accessoryCircular, .accessoryInline])
   }
 }

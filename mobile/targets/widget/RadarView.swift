@@ -26,73 +26,73 @@ func heatColor(_ w: Double) -> Color { T.heat[max(1, heatLevel(w))] }
 func compass(_ b: Int) -> String { ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][(((b % 360) + 360 + 22) % 360) / 45] }
 
 /**
- * Pixel radar: a coarse cell grid where each cell's heat is the sum of the spots' gaussian falloff,
- * quantised to the theme's four-step ramp. Range rings are dotted cells, the user is a green block,
- * north is up. No blur, no gradients — it is drawn once per timeline entry with SwiftUI Canvas.
+ * Pixel radar: a coarse cell grid filling whatever frame it gets (square or wide). Each cell's heat is
+ * the sum of the spots' gaussian falloff, quantised to the theme's four-step purple→green ramp with
+ * an ordered dither on the boundaries. Range rings are dotted cells, the user is a green block with an
+ * ink outline, north is up, and a faint grid keeps it reading as a scanner even when nothing is hot.
  */
 struct RadarView: View {
   let heat: HeatPayload?
-  var cells: Int = 27
+  /// cell size as a fraction of the shorter side
+  var density: Int = 27
+  var showScale = true
 
   var body: some View {
     GeometryReader { g in
-      let side = min(g.size.width, g.size.height)
-      let cell = side / CGFloat(cells)
-      let ox = (g.size.width - side) / 2, oy = (g.size.height - side) / 2
+      let cell = min(g.size.width, g.size.height) / CGFloat(density)
+      let cols = Int(g.size.width / cell), rows = Int(g.size.height / cell)
+      let ox = (g.size.width - CGFloat(cols) * cell) / 2, oy = (g.size.height - CGFloat(rows) * cell) / 2
       ZStack {
         Canvas { ctx, _ in
-          let mid = CGFloat(cells - 1) / 2
-          let R = mid // in cells
+          let mx = CGFloat(cols - 1) / 2, my = CGFloat(rows - 1) / 2
+          let R = min(mx, my) // ring radius in cells
           let radius = heat?.radiusM ?? 500
           let spots = heat?.spots ?? []
-          // per-spot position in cells + falloff width scaling with heat
           let pts = spots.map { s -> (x: CGFloat, y: CGFloat, w: Double, sig: Double) in
-            (mid + CGFloat(s.dx / radius) * R, mid - CGFloat(s.dy / radius) * R, s.w, 1.2 + 2.2 * s.w)
+            (mx + CGFloat(s.dx / radius) * R, my - CGFloat(s.dy / radius) * R, s.w, 1.2 + 2.2 * s.w)
           }
-          for cy in 0..<cells {
-            for cx in 0..<cells {
-              let dxm = CGFloat(cx) - mid, dym = CGFloat(cy) - mid
+          for cy in 0..<rows {
+            for cx in 0..<cols {
+              let dxm = CGFloat(cx) - mx, dym = CGFloat(cy) - my
               let rr = sqrt(dxm * dxm + dym * dym)
-              if rr > R + 0.5 { continue }
               var h = 0.0
               for p in pts {
                 let ddx = Double(CGFloat(cx) - p.x), ddy = Double(CGFloat(cy) - p.y)
                 h += p.w * exp(-(ddx * ddx + ddy * ddy) / (2 * p.sig * p.sig))
               }
               var lvl = h < 0.10 ? 0 : h < 0.32 ? 1 : h < 0.66 ? 2 : 3
-              // ordered dither on the boundaries so the blobs read as spray, not stamps
               let checker = (cx + cy) % 2 == 0
               if lvl < 3 && h > [0.10, 0.32, 0.66][lvl] * 0.72 && checker { lvl = min(3, lvl + (h >= [0.10, 0.32, 0.66][lvl] * 0.85 ? 1 : 0)) }
               var color = T.heat[lvl]
-              // range rings at 1/3, 2/3, 1 as dotted cells under the heat
-              let ring = abs(rr - R) < 0.5 || abs(rr - R * 2 / 3) < 0.45 || abs(rr - R / 3) < 0.45
-              if lvl == 0 && ring && checker { color = T.panelHi.opacity(0.7) }
-              else if lvl == 0 && (cx == Int(mid) || cy == Int(mid)) && (cx + cy) % 3 == 0 { color = T.panel }
+              if lvl == 0 {
+                let ring = abs(rr - R) < 0.5 || abs(rr - R * 2 / 3) < 0.45 || abs(rr - R / 3) < 0.45
+                if ring && checker { color = T.panelHi.opacity(0.75) }
+                else if (cx == Int(mx) || cy == Int(my)) && (cx + cy) % 3 == 0 { color = T.panel }
+                else if cx % 6 == 0 && cy % 6 == 0 { color = T.panel.opacity(0.6) } // faint scanner grid
+              }
               let rect = CGRect(x: ox + CGFloat(cx) * cell, y: oy + CGFloat(cy) * cell, width: cell + 0.5, height: cell + 0.5)
               ctx.fill(Path(rect), with: .color(color))
             }
           }
-          // hot cores: a white pixel at the centre of blazing spots
           for (p, s) in zip(pts, spots) where s.w >= 0.7 {
             let rect = CGRect(x: ox + (p.x.rounded()) * cell, y: oy + (p.y.rounded()) * cell, width: cell, height: cell)
             ctx.fill(Path(rect), with: .color(.white))
           }
-          // you: a 3x3 green block with an ink outline
-          let you = CGRect(x: ox + (mid - 1) * cell, y: oy + (mid - 1) * cell, width: cell * 3, height: cell * 3)
+          let you = CGRect(x: ox + (mx - 1) * cell, y: oy + (my - 1) * cell, width: cell * 3, height: cell * 3)
           ctx.fill(Path(you.insetBy(dx: -1, dy: -1)), with: .color(T.ink))
           ctx.fill(Path(you), with: .color(T.green))
         }
-        VStack {
-          HStack { Caps(text: "N", color: .white.opacity(0.7), size: 8); Spacer(); if heat?.seeded == true { Caps(text: "SAMPLE", color: T.faint, size: 7) } }
-          Spacer()
-          HStack { Spacer(); Text("\(Int(heat?.radiusM ?? 500)) m").font(.system(size: 8, weight: .bold)).foregroundStyle(T.dim) }
-        }.padding(5)
+        if showScale {
+          VStack {
+            HStack { Caps(text: "N", color: .white.opacity(0.7), size: 8); Spacer(); if heat?.seeded == true { Caps(text: "SAMPLE", color: T.faint, size: 7) } }
+            Spacer()
+            HStack { Spacer(); Text("\(Int(heat?.radiusM ?? 500)) m").font(.system(size: 8, weight: .bold)).foregroundStyle(T.dim) }
+          }.padding(5)
+        }
       }
-      .frame(width: side, height: side).position(x: g.size.width / 2, y: g.size.height / 2)
       .background(Notched(n: 3).fill(T.ink))
       .clipShape(Notched(n: 3))
     }
-    .aspectRatio(1, contentMode: .fit)
   }
 }
 
