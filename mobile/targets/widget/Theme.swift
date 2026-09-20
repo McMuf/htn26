@@ -100,3 +100,35 @@ struct Bands: View {
     }
   }
 }
+
+/// A spray can as pixel art: grey cap, purple-outlined body, filled with the paint colour up to `level` (0..100).
+struct CanIcon: View {
+  let color: Color
+  let level: Double
+  var cell: CGFloat = 3
+  static let rows: [String] = [
+    "...###...", "...###...", "..#####..", ".#######.", ".#######.",
+    ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.", ".#.....#.",
+    ".#######.",
+  ]
+  var body: some View {
+    let rows = CanIcon.rows, cols = 9
+    let bodyTop = 5, bodyBottom = 15
+    let filledRows = Int((max(0, min(100, level)) / 100 * Double(bodyBottom - bodyTop + 1)).rounded())
+    Canvas { ctx, _ in
+      for (y, row) in rows.enumerated() {
+        for (x, ch) in row.enumerated() {
+          let r = CGRect(x: CGFloat(x) * cell, y: CGFloat(y) * cell, width: cell, height: cell)
+          if ch == "#" { ctx.fill(Path(r), with: .color(y < 5 ? T.dim : T.ink)) }
+          else if y >= bodyTop && y <= bodyBottom && x > 1 && x < cols - 2 {
+            let fromBottom = bodyBottom - y
+            ctx.fill(Path(r), with: .color(fromBottom < filledRows ? color : T.well))
+          } else if y >= bodyTop && y <= bodyBottom && (x == 1 || x == cols - 2) {
+            ctx.fill(Path(r), with: .color(T.purple))
+          }
+        }
+      }
+    }
+    .frame(width: CGFloat(cols) * cell, height: CGFloat(rows.count) * cell)
+  }
+}

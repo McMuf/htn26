@@ -97,7 +97,7 @@ struct CanProvider: TimelineProvider {
     let opts = MKMapSnapshotter.Options()
     let aspect = size.width / max(1, size.height)
     // tight: a few blocks around you, whatever the payload's search radius was
-    let span = min(h.radiusM, 220) * 2
+    let span = min(h.radiusM, 150) * 2
     opts.region = MKCoordinateRegion(center: center, latitudinalMeters: span, longitudinalMeters: span * Double(max(1, aspect)))
     opts.size = size
     opts.scale = 1
@@ -160,7 +160,7 @@ struct MapPlate: View {
           RadarView(heat: entry.heat, density: 24, showScale: false)
         }
         if showScale {
-          VStack { Spacer(); HStack { if entry.heat?.seeded == true { Caps(text: "SAMPLE", color: T.faint, size: 9) }; Spacer(); Text("\(Int(min(entry.heat?.radiusM ?? 220, 220)) * 2) M").font(PF.display(10)).foregroundStyle(T.dim) } }.padding(5)
+          VStack { Spacer(); HStack { if entry.heat?.seeded == true { Caps(text: "SAMPLE", color: T.faint, size: 9) }; Spacer(); Text("\(Int(min(entry.heat?.radiusM ?? 150, 150)) * 2) M").font(PF.display(10)).foregroundStyle(T.dim) } }.padding(5)
         }
       }
       .background(Notched(n: 3).fill(T.ink))
@@ -205,6 +205,18 @@ struct Swatch: View {
         Text(label).font(PF.display(10)).foregroundStyle(.white)
         Text(name).font(PF.body(10)).foregroundStyle(T.dim).lineLimit(1)
       }
+    }
+  }
+}
+
+/// The two cans with their colour and level, names underneath.
+struct Cans: View {
+  let entry: CanEntry
+  var cell: CGFloat = 3
+  var body: some View {
+    HStack(alignment: .top, spacing: 8) {
+      VStack(spacing: 2) { CanIcon(color: entry.colorA, level: entry.paintA, cell: cell); Text("\(Int(entry.paintA))%").font(PF.display(10)).foregroundStyle(.white) }
+      VStack(spacing: 2) { CanIcon(color: entry.colorB, level: entry.paintB, cell: cell); Text("\(Int(entry.paintB))%").font(PF.display(10)).foregroundStyle(.white) }
     }
   }
 }
@@ -273,25 +285,25 @@ struct PaintCanView: View {
     .containerBackground(for: .widget) { Bands() }
   }
 
-  /// Small: today's numbers and the daily quests as filling bars.
+  /// Small: today's numbers and two quests; the arrow says there's more in the app.
   var small: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack { Caps(text: "TODAY", size: 11); Spacer(); Caps(text: "\(entry.today?.streak ?? entry.streak)d streak", color: T.dim, size: 9) }
+    VStack(alignment: .leading, spacing: 5) {
+      HStack { Caps(text: "TODAY", size: 11); Spacer(); Caps(text: "\(entry.today?.streak ?? entry.streak)d", color: T.dim, size: 10) }
       HStack(spacing: 4) {
         Stat(n: entry.today?.strokes ?? 0, label: "strokes")
         Stat(n: entry.today?.pieces ?? 0, label: "walls")
         Stat(n: entry.today?.paint ?? 0, label: "paint")
       }
-      Caps(text: "QUESTS", size: 11)
       if let qs = entry.today?.quests, !qs.isEmpty {
-        ForEach(qs) { q in
-          VStack(alignment: .leading, spacing: 2) {
-            HStack { Text(q.title).font(PF.body(11)).foregroundStyle(.white).lineLimit(1); Spacer(); Text(q.claimed ? "✓" : "\(q.got)/\(q.goal)").font(PF.display(10)).foregroundStyle(q.claimed || q.got >= q.goal ? T.greenHi : T.dim) }
-            SegBar(value: q.claimed ? 100 : Double(q.got) / Double(max(1, q.goal)) * 100, color: q.claimed ? T.greenHi : T.green, segs: 12, height: 5)
+        ForEach(qs.prefix(2)) { q in
+          VStack(alignment: .leading, spacing: 1) {
+            HStack { Text(q.title).font(PF.body(10)).foregroundStyle(.white).lineLimit(1); Spacer(); Text(q.claimed ? "✓" : "\(q.got)/\(q.goal)").font(PF.display(10)).foregroundStyle(q.claimed || q.got >= q.goal ? T.greenHi : T.dim) }
+            SegBar(value: q.claimed ? 100 : Double(q.got) / Double(max(1, q.goal)) * 100, color: q.claimed ? T.greenHi : T.green, segs: 12, height: 4)
           }
         }
+        HStack { Spacer(); Text("MORE QUESTS ▸").font(PF.display(9)).foregroundStyle(T.green) }
       } else {
-        Text("open the app to start today's quests").font(PF.body(11)).foregroundStyle(T.dim)
+        Text("open the app to start today's quests").font(PF.body(10)).foregroundStyle(T.dim)
       }
       Spacer(minLength: 0)
     }
@@ -303,10 +315,18 @@ struct PaintCanView: View {
       MapPlate(entry: entry).aspectRatio(1, contentMode: .fit)
       VStack(alignment: .leading, spacing: 6) {
         HeaderStrip(entry: entry)
-        Gauge(value: entry.paintA, color: entry.colorA, label: entry.nameA.uppercased(), refillAt: entry.refillAtA)
-        Gauge(value: entry.paintB, color: entry.colorB, label: entry.nameB.uppercased(), refillAt: entry.refillAtB)
+        HStack(alignment: .top, spacing: 10) {
+          Cans(entry: entry)
+          VStack(alignment: .leading, spacing: 3) {
+            Caps(text: "nearest", size: 9)
+            if top.isEmpty { Text("nothing near you yet").font(PF.body(10)).foregroundStyle(T.dim) }
+            ForEach(top.prefix(2)) { sp in
+              Text(sp.n).font(PF.display(11)).foregroundStyle(.white).lineLimit(1)
+              Text("\(sp.d) m \(compass(sp.b)) · \(heatLabel(sp.w).lowercased())").font(PF.body(9)).foregroundStyle(T.dim).lineLimit(1)
+            }
+          }
+        }
         Spacer(minLength: 0)
-        if let n = nearest { SpotRow(s: n) } else { Caps(text: "no pieces nearby yet", color: T.dim, size: 9) }
       }
     }
   }
@@ -315,15 +335,20 @@ struct PaintCanView: View {
   var large: some View {
     VStack(alignment: .leading, spacing: 10) {
       HeaderStrip(entry: entry)
-      MapPlate(entry: entry).frame(height: 190)
-      HStack(spacing: 12) {
-        Gauge(value: entry.paintA, color: entry.colorA, label: entry.nameA.uppercased(), refillAt: entry.refillAtA)
-        Gauge(value: entry.paintB, color: entry.colorB, label: entry.nameB.uppercased(), refillAt: entry.refillAtB)
-      }
-      VStack(alignment: .leading, spacing: 5) {
-        Caps(text: "NEAREST PIECES", size: 8)
-        if top.isEmpty { Text("nothing painted near you yet — go first").font(PF.body(11)).foregroundStyle(T.dim) }
-        ForEach(top) { SpotRow(s: $0) }
+      MapPlate(entry: entry).frame(height: 196)
+      HStack(alignment: .top, spacing: 14) {
+        Cans(entry: entry, cell: 4)
+        VStack(alignment: .leading, spacing: 4) {
+          Caps(text: "nearest pieces", size: 10)
+          if top.isEmpty { Text("nothing painted near you yet — go first").font(PF.body(11)).foregroundStyle(T.dim) }
+          ForEach(top) { sp in
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+              Text(sp.n).font(PF.display(13)).foregroundStyle(.white).lineLimit(1)
+              Spacer(minLength: 4)
+              Text("\(sp.d) M \(compass(sp.b))").font(PF.display(11)).foregroundStyle(T.dim)
+            }
+          }
+        }
       }
       Spacer(minLength: 0)
     }
