@@ -101,6 +101,13 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
     /** Depth-from-motion is only trustworthy in this band. */
     const val DEPTH_NEAR_M = 0.4f
     const val DEPTH_FAR_M = 4f
+    /**
+     * How far past a plane's edge still counts as "on it" rather than a guess. This is the width
+     * of ARCore's polygon noise, not a design choice: inside it the near surface keeps the
+     * reticle, outside it a real surface behind is allowed to take over, which is what makes a
+     * line drawn off a table edge drop onto the floor promptly instead of hanging in the air.
+     */
+    const val EDGE_SLOP_M = 0.05f
     val CROSS_X = intArrayOf(0, -1, 1, 0, 0)
     val CROSS_Y = intArrayOf(0, 0, 0, -1, 1)
 
@@ -963,31 +970,43 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
       p.trackingState == TrackingState.TRACKING && p.subsumedBy == null && paintable(p) &&
         ((cameraPos - hitPos) dot planeNormal(p)) > -0.03f
 
-    // One pass, in ARCore's order, which is nearest first. Two passes (every polygon hit, then
-    // every extension) meant a far plane always beat a near one: aim at a chair seat whose ragged
-    // polygon just misses, and the ray carries on to the floor two metres behind it, so the
-    // reticle jumps to a floor you cannot see and the stroke is chopped in two as the quad
-    // changes under it.
+    // One pass, in ARCore's order, which is nearest first — two passes (every polygon hit, then
+    // every extension) meant a far plane always beat a near one, so aiming at a chair seat whose
+    // ragged polygon just missed sent the reticle to the floor two metres behind it.
+    //
+    // But "nearest wins" alone is too greedy in the other direction: draw a line off a table edge
+    // and down onto the floor, and the table's extension — which is nearer than the floor — keeps
+    // winning for as long as it is in range, so the line hangs at table height before dropping.
+    //
+    // So the extension is split in two. A few centimetres past the edge is polygon raggedness, and
+    // that beats anything behind it. Further out is a guess, held only as a fallback: if some
+    // farther plane reports a real polygon hit, that is a surface actually there and it wins. The
+    // guess is what keeps a whole wall paintable from one detected patch, and it now yields the
+    // moment a genuine surface is underneath.
+    var guess: Hit? = null
     for (h in hits) {
       val p = h.trackable as? Plane ?: continue
       val t = M.fromPose(h.hitPose)
       if (!usable(p, M.pos(t))) continue
       val sticky = p === stickyPlane
-      val kind = when {
-        p.isPoseInPolygon(h.hitPose) -> HitKind.PLANE
-        else -> {
-          // only trust the extension close to the part of the plane ARCore has actually seen
-          val l = M.transformPoint(M.invert(M.fromPose(p.centerPose)), M.pos(t))
-          val dx = max(0f, abs(l.x) - p.extentX / 2) / allowance(p.extentX, sticky)
-          val dz = max(0f, abs(l.z) - p.extentZ / 2) / allowance(p.extentZ, sticky)
-          if (dx * dx + dz * dz < 1f) HitKind.EXTENDED else null
-        }
-      } ?: continue
-      stickyPlane = p
-      return Hit(t, p, kind, p.type == Plane.Type.VERTICAL || M.isVertical(t))
+      if (p.isPoseInPolygon(h.hitPose)) {
+        stickyPlane = p
+        return Hit(t, p, HitKind.PLANE, p.type == Plane.Type.VERTICAL || M.isVertical(t))
+      }
+      val l = M.transformPoint(M.invert(M.fromPose(p.centerPose)), M.pos(t))
+      val dx = max(0f, abs(l.x) - p.extentX / 2)
+      val dz = max(0f, abs(l.z) - p.extentZ / 2)
+      if (hypot(dx, dz) < EDGE_SLOP_M * (if (sticky) 1.5f else 1f)) {
+        stickyPlane = p
+        return Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
+      }
+      if (guess == null && (dx / allowance(p.extentX, sticky)).let { it * it } +
+          (dz / allowance(p.extentZ, sticky)).let { it * it } < 1f) {
+        guess = Hit(t, p, HitKind.EXTENDED, p.type == Plane.Type.VERTICAL || M.isVertical(t))
+      }
     }
-    stickyPlane = null
-    return null
+    stickyPlane = guess?.plane
+    return guess
   }
 
   // ---- paint loop --------------------------------------------------------------------------
