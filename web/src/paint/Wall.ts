@@ -152,6 +152,10 @@ export class Wall {
   /** One spray tick at (yaw, pitch) canvas degrees. radiusDeg = nozzle spread, alpha = flow. */
   dab(yaw: number, pitch: number, radiusDeg: number, alpha: number, color: string, rng: () => number) {
     if (!this.ctx) return;
+    // Off the surface: draw nothing. Clamping to the edge instead would pile every stray point
+    // along the rim and draw a visible rectangle around the piece — which is what pieces painted
+    // before the wall became finite used to do.
+    if (!onWall(yaw, pitch)) return;
     const { x, y } = Wall.toPx(yaw, pitch);
     const r = radiusDeg * Wall.pxPerDeg(yaw, pitch);
     const rgb = parseColor(color);
@@ -176,6 +180,7 @@ export class Wall {
 
   /** A run of paint downward from (yaw, pitch), lengthDeg long. */
   drip(yaw: number, pitch: number, lengthDeg: number, alpha: number, color: string, rng: () => number) {
+    if (!onWall(yaw, pitch)) return;
     if (!this.ctx) return;
     const { x, y } = Wall.toPx(yaw, pitch);
     const scale = Wall.pxPerDeg(yaw, pitch);

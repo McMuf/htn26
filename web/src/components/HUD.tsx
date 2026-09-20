@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PAINT_EMPTY_THRESHOLD, PAINT_MAX, PAINT_REGEN_PER_SEC, SHAKE_MIN_TO_SPRAY } from '../config';
+import { PALETTE, PAINT_EMPTY_THRESHOLD, PAINT_MAX, PAINT_REGEN_PER_SEC, SHAKE_MIN_TO_SPRAY, type Cap } from '../config';
 import { useStore } from '../store';
 import type { Blocker, Side } from '../types';
 
@@ -70,6 +70,55 @@ export function BlockerBanner({ blocker }: { blocker: Blocker }) {
 }
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+/**
+ * Where the wall you're painting on actually is. Walls stand at the place they were painted, so
+ * "3 m ahead" and "walk 12 m" are the difference between spraying onto a piece and spraying into
+ * the air — the phone gets this from AR tracking, here it comes from GPS.
+ */
+export function WallChip({ state }: { state: { kind: 'on' | 'walk' | 'new'; metres?: number; who?: string } }) {
+  const m = state.metres == null ? null : `${Math.round(state.metres)} M`;
+  if (state.kind === 'on') return <Line title={`ON ${(state.who ?? 'THIS').toUpperCase()}${state.who ? "'S" : ''} WALL`} sub={m ? `${m} AHEAD` : undefined} />;
+  if (state.kind === 'walk') return <Line title={`A PIECE IS ${m ?? 'NEARBY'} AWAY`} sub="WALK TO IT — IT STAYS WHERE IT WAS PAINTED" />;
+  return <Line title="NO WALL HERE YET" sub="SPRAY TO START ONE WHERE YOU STAND" />;
+}
+
+/** The in-camera tools: a colour for each hold button and the cap, as on the phone's Create tab. */
+export function ToolsTray({ onClose }: { onClose: () => void }) {
+  const settings = useStore((s) => s.settings);
+  const setSettings = useStore((s) => s.setSettings);
+  const row = (key: 'optionA' | 'optionB') => (
+    <div className="tools-row" key={key}>
+      <div className="tools-label">{key === 'optionA' ? 'HOLD A' : 'HOLD B'}</div>
+      <div className="tools-swatches">
+        {PALETTE.map((c) => (
+          <button
+            key={c} type="button" aria-label={c} aria-pressed={settings[key].color === c}
+            className={`tools-swatch${settings[key].color === c ? ' on' : ''}`}
+            style={{ backgroundColor: c }}
+            onClick={() => setSettings({ [key]: { ...settings[key], color: c } })}
+          />
+        ))}
+      </div>
+      <div className="tools-caps">
+        {(['fat', 'skinny'] as Cap[]).map((cap) => (
+          <button
+            key={cap} type="button" aria-pressed={settings[key].cap === cap}
+            className={`tools-cap${settings[key].cap === cap ? ' on' : ''}`}
+            onClick={() => setSettings({ [key]: { ...settings[key], cap } })}
+          >{cap.toUpperCase()}</button>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div className="tools-tray px-box">
+      {row('optionA')}
+      {row('optionB')}
+      <button type="button" className="tools-done" onClick={onClose}>DONE</button>
+    </div>
+  );
+}
 
 /**
  * Two big hold-to-spray buttons and the tools button, as on the phone: each carries its colour

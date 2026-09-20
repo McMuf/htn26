@@ -6,8 +6,10 @@ import { useDiscovery } from '../hooks/useDiscovery';
 import { sfx } from '../audio/sfx';
 import { reportCanvas } from '../data/sync';
 import { useStore } from '../store';
-import { BlockerBanner, CanMeter, HoldButtons, Line, Reticle } from '../components/HUD';
+import { BlockerBanner, CanMeter, HoldButtons, Line, Reticle, ToolsTray, WallChip } from '../components/HUD';
 import { DiscoveryOverlay } from '../components/DiscoveryOverlay';
+import { CANVAS_JOIN_RADIUS_M, CANVAS_VISIBLE_RADIUS_M } from '../config';
+import { haversineM } from '../lib/geo';
 import type { Blocker } from '../types';
 
 /**
@@ -64,6 +66,7 @@ export function PaintScreen({ active, locationStatus }: Props) {
   const [starting, setStarting] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [notices, setNotices] = useState<string[]>([]);
+  const [tools, setTools] = useState(false);
   const [ui, setUi] = useState<Ui>({ spraying: false, blocker: null, yaw: 0, offWall: false });
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -232,6 +235,22 @@ export function PaintScreen({ active, locationStatus }: Props) {
       .catch((e: unknown) => { window.alert(`Could not send the report — ${e instanceof Error ? e.message : 'check your connection'}.`); });
   }, []);
 
+  // Which wall you're standing at, and how far off it is. Walls are pinned to the spot they were
+  // painted, so this is the difference between spraying onto a piece and spraying into the air.
+  const canvases = useStore((s) => s.canvases);
+  const wallState = ((): { kind: 'on' | 'walk' | 'new'; metres?: number; who?: string } => {
+    if (!location) return { kind: 'new' };
+    let best: { d: number; who: string } | null = null;
+    for (const c of Object.values(canvases)) {
+      if (c.flagged) continue;
+      const d = haversineM(location.lat, location.lng, c.lat, c.lng);
+      if (!best || d < best.d) best = { d, who: c.author_name };
+    }
+    if (!best || best.d > CANVAS_VISIBLE_RADIUS_M) return { kind: 'new' };
+    if (best.d <= CANVAS_JOIN_RADIUS_M) return { kind: 'on', metres: 3, who: best.who };
+    return { kind: 'walk', metres: best.d };
+  })();
+
   const allNotices = locationStatus === 'denied' ? [...notices, LOCATION_DENIED_MSG] : notices;
   const gps = location ? `±${Math.round(location.accuracy)}m` : locationStatus === 'denied' ? 'denied' : '…';
 
@@ -256,9 +275,10 @@ export function PaintScreen({ active, locationStatus }: Props) {
           <div className="hud-stack">
             {ui.blocker ? <BlockerBanner blocker={ui.blocker} />
               : ui.offWall ? <Line title="AIM AT THE WALL" sub="THE PIECE IS THE FLAT SURFACE IN FRONT OF YOU" />
-              : null}
+              : <WallChip state={wallState} />}
           </div>
-          <HoldButtons onStart={engine.start} onEnd={engine.end} keyboard={active} onTools={() => setSettingsOpen(true)} />
+          {tools && <ToolsTray onClose={() => setTools(false)} />}
+          <HoldButtons onStart={engine.start} onEnd={engine.end} keyboard={active} onTools={() => setTools((v) => !v)} />
 
           <div className="topbar">
             <div className="topbar-brand">FRESCO</div>

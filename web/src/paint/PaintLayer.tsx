@@ -1,5 +1,5 @@
 import { useEffect, useRef, type CSSProperties, type JSX } from 'react';
-import { clamp, wrapDiff } from '../lib/geo';
+import { clamp } from '../lib/geo';
 import { getPose } from '../hooks/usePose';
 import { useStore } from '../store';
 import { WALL_HALF_X, WALL_HALF_Y, getWall, hasWall } from './Wall';
@@ -11,8 +11,14 @@ export type WallView = {
 };
 
 const D2R = Math.PI / 180;
-/** Where the wall stands, in CSS px. Arbitrary: the perspective divide only cares about ratios. */
-const WALL_DISTANCE = 1200;
+/** How far in front of the painter their wall stands. A canvas is "the wall I was facing". */
+const WALL_STANDOFF_M = 3;
+/** World scale. Only the ratio to the viewport matters; this keeps the numbers CSS-friendly. */
+const PX_PER_M = 240;
+/** Metres per degree of latitude; longitude shrinks by cos(lat). */
+const M_PER_DEG = 111_320;
+/** GPS jitters by metres, so the position the walls are pinned to is eased rather than followed. */
+const POS_SMOOTHING = 0.12;
 
 // fixed, under the HUD (which should sit at z-index ≥ 10), over the camera <video> (z-index ≤ 1)
 const STYLE: CSSProperties = {
@@ -22,12 +28,16 @@ const STYLE: CSSProperties = {
 };
 
 /**
- * Draws every nearby wall as what it is: a flat surface standing in front of the spot its author
- * painted from. Each wall's raster is parked in a 3D-transformed element, so the browser gives it
- * a real perspective divide — look along the wall and the paint foreshortens, tilt and it keeps
- * its horizon, exactly like paint on a wall. (It used to be blitted with a 2D translate + rotate,
- * which never foreshortens: paint slid around the screen like a sticker on a sphere, which is the
- * "it doesn't sit on surfaces" feeling.)
+ * Draws every nearby wall as what it is: a flat surface standing at a *place*, three metres in
+ * front of the spot its author painted from, facing back at them. Each wall is a 3D-transformed
+ * element, so the browser gives it a real perspective divide — look along it and the paint
+ * foreshortens, walk past it and it slides by as a wall does.
+ *
+ * Two bugs this replaces, in order of how wrong they felt:
+ *  - walls used to be pinned a fixed distance in front of the *camera*, in the direction of their
+ *    heading, so they followed you down the street instead of staying where they were painted;
+ *  - before that they were blitted with a 2D translate + rotate, which never foreshortens, so
+ *    paint slid about like a sticker on a sphere.
  *
  * The wall element holds the Wall's own offscreen canvas, so painting shows up with no per-frame
  * blit; a frame only rewrites transforms, which stay on the compositor. Runs its own rAF loop off
@@ -47,18 +57,21 @@ export function PaintLayer({ walls }: { walls: WallView[] }): JSX.Element {
     if (!host) return;
     /** one positioned element per canvas, holding that Wall's raster */
     const mounted = new Map<string, HTMLDivElement>();
+    /** eased copy of our own GPS fix, so a noisy reading doesn't fling the walls about */
+    let me: { lat: number; lng: number } | null = null;
 
     const surfaceFor = (id: string) => {
       let el = mounted.get(id);
       if (el) return el;
       const wall = getWall(id);
+      // the wall's real size: what ±WALL_YAW_RANGE covers at the standoff distance
+      const w = 2 * WALL_HALF_X * WALL_STANDOFF_M * PX_PER_M;
+      const h = 2 * WALL_HALF_Y * WALL_STANDOFF_M * PX_PER_M;
       el = document.createElement('div');
       el.style.cssText = [
         'position:absolute', 'left:50%', 'top:50%',
-        `width:${2 * WALL_HALF_X * WALL_DISTANCE}px`,
-        `height:${2 * WALL_HALF_Y * WALL_DISTANCE}px`,
-        'margin-left:' + -WALL_HALF_X * WALL_DISTANCE + 'px',
-        'margin-top:' + -WALL_HALF_Y * WALL_DISTANCE + 'px',
+        `width:${w}px`, `height:${h}px`,
+        `margin-left:${-w / 2}px`, `margin-top:${-h / 2}px`,
         'transform-origin:50% 50%', 'will-change:transform', 'backface-visibility:hidden',
       ].join(';');
       const c = wall.canvas;
@@ -88,19 +101,47 @@ export function PaintLayer({ walls }: { walls: WallView[] }): JSX.Element {
       // checked against focal·tan(angle) in the browser.
       const eye = focal.toFixed(1);
 
+      // our own position, eased — walls are pinned to the world through it
+      const fix = st.location;
+      if (fix) {
+        me = me
+          ? { lat: me.lat + (fix.lat - me.lat) * POS_SMOOTHING, lng: me.lng + (fix.lng - me.lng) * POS_SMOOTHING }
+          : { lat: fix.lat, lng: fix.lng };
+      }
+      const mPerLng = me ? M_PER_DEG * Math.cos(me.lat * D2R) : M_PER_DEG;
+
       const live = new Set<string>();
       for (const wv of wallsRef.current) {
         if (!hasWall(wv.canvasId)) continue; // nothing painted there yet — don't allocate a blank raster
+        const canvas = st.canvases[wv.canvasId];
         live.add(wv.canvasId);
         const el = surfaceFor(wv.canvasId);
         const resolve = clamp(wv.resolve, 0, 1);
-        // where this wall's centre sits relative to where we are looking
-        const dYaw = wrapDiff(wv.heading, pose.yaw);
-        // roll levels it, pitch swings it up/down, yaw swings it left/right, then it stands off
-        // at WALL_DISTANCE along that direction — so it always faces its own spot, like a wall.
+
+        // Where the wall stands, in metres north/east of us: its author's spot, plus the standoff
+        // along the way they were facing. With no GPS yet, fall back to straight ahead of us.
+        const head = wv.heading * D2R;
+        let north = WALL_STANDOFF_M * Math.cos(head);
+        let east = WALL_STANDOFF_M * Math.sin(head);
+        if (me && canvas) {
+          north += (canvas.lat - me.lat) * M_PER_DEG;
+          east += (canvas.lng - me.lng) * mPerLng;
+        }
+
+        // behind us: CSS would still paint it through the camera plane, so take it off screen
+        const depth = -Math.sin(pose.yaw * D2R) * east - Math.cos(pose.yaw * D2R) * north;
+        if (depth > -0.5) { el.style.display = 'none'; continue; }
+        el.style.display = 'block';
+
+        // Step out to the eye, take the camera's orientation, walk to where the wall is in the
+        // world, then turn the surface to face back the way its author was looking. The yaw term
+        // is +yaw, not -yaw, because the walk that follows is expressed in world north/east:
+        // checked against p·x/z for a wall seen from off to one side.
         el.style.transform =
           `translateZ(${eye}px) rotateZ(${(-pose.roll).toFixed(2)}deg) rotateX(${pose.pitch.toFixed(2)}deg) ` +
-          `rotateY(${(-dYaw).toFixed(2)}deg) translateZ(${-WALL_DISTANCE}px)`;
+          `rotateY(${pose.yaw.toFixed(2)}deg) ` +
+          `translate3d(${(east * PX_PER_M).toFixed(1)}px, 0px, ${(-north * PX_PER_M).toFixed(1)}px) ` +
+          `rotateY(${(-wv.heading).toFixed(2)}deg)`;
         el.style.opacity = (0.15 + 0.85 * resolve).toFixed(3);
         // resolves from a smear into a piece as you walk up to it
         const blur = (1 - resolve) * 26;
