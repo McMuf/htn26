@@ -612,6 +612,11 @@ class ArPaintView(context: Context, appContext: AppContext) : ExpoView(context, 
         if (p.trackingState != TrackingState.TRACKING || p.subsumedBy != null) continue
         // don't draw a grid on something the reticle refuses to paint — a ceiling reads as a target
         if (p.type == Plane.Type.HORIZONTAL_DOWNWARD_FACING) continue
+        // Nor on a surface you are behind. Nothing here writes depth, so a grid cannot be occluded
+        // by the thing in front of it: the far face of a pillar would draw straight over the near
+        // one, reading as a grid hovering off the surface rather than lying on it. The hit test
+        // has always rejected these planes; the overlay was still drawing them.
+        if (((cameraPos - planeCenter(p)) dot planeNormal(p)) <= 0f) continue
         val fade = min(1f, (now - seen) / 350f)
         val opacity = (if (p == aimedPlane) 0.55f else 0.16f) * fade
         planeRenderer.draw(viewProj, M.fromPose(p.centerPose), p.polygon, p.type == Plane.Type.VERTICAL, opacity)
