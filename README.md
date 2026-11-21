@@ -289,14 +289,5 @@ src/audio/sfx.ts         expo-audio players
 supabase/schema.sql, seed.sql;  scripts/gen_sfx.py, gen_seed.mjs
 ```
 
-## What I'd harden next
 
-1. **Relocalisation UX**: guide the viewer to the painter's original viewpoint (store a thumbnail
-   of the first frame), and merge world maps instead of last-writer-wins.
-2. **Texture tiling**: 5 m quads per surface are simple; real walls want a tiled atlas so long
-   murals don't create seams or overlapping quads.
-3. **Volume trigger robustness**: handle the 0/100 % edge cases, Control Center changes, and
-   audio-session interruptions; consider a screen-edge squeeze fallback.
-4. **Abuse controls**: rate limits per user, stroke size caps, and an admin unflag path.
-5. **Stroke compaction**: batch points, delta-encode, and paginate strokes for busy walls.
 6. **Battery**: drop sensor rate when idle, pause the camera on other tabs.
